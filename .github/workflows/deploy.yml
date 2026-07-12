@@ -1,0 +1,30 @@
+name: Deploy to VM
+
+# Manual trigger from the Actions tab. Requires these repository secrets:
+#   DEPLOY_HOST  - VM address (e.g. 192.168.1.50 or a domain)
+#   DEPLOY_USER  - SSH user on the VM
+#   DEPLOY_KEY   - private SSH key whose public half is in the VM's authorized_keys
+# The VM must have /opt/fnts/compose.prod.yml and /opt/fnts/.env in place.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Image tag to deploy
+        default: latest
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull new images and restart the stack
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            cd /opt/fnts
+            export IMAGE_TAG=${{ inputs.tag }}
+            docker compose -f compose.prod.yml pull
+            docker compose -f compose.prod.yml up -d
+            docker image prune -f

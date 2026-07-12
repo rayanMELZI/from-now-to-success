@@ -5,7 +5,6 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || "fromNowToSuccess", {
       body: data.body || "Time for your daily check-in.",
-      icon: "/icon.png",
       data: { url: data.url || "/checkin" },
     }),
   );
