@@ -1,0 +1,21 @@
+# Secrets — never commit these
+.env
+.env.*
+!.env.example
+
+# Java / Maven
+target/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# IDE / OS noise
+.idea/
+*.iml
+.DS_Store
+
+# Logs
+*.log
+hs_err_pid*
