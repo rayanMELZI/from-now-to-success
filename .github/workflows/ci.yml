@@ -99,6 +99,11 @@ jobs:
     permissions:
       contents: read
       packages: read
+    env:
+      # cloudflared reads these to authenticate through Cloudflare Access
+      # (the CI equivalent of your interactive browser login).
+      TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+      TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@v4
 
@@ -118,30 +123,40 @@ jobs:
           VAPID_SUBJECT=${{ secrets.VAPID_SUBJECT }}
           EOF
 
+      - name: Install cloudflared
+        run: |
+          curl -fsSL -o /tmp/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          sudo install /tmp/cloudflared /usr/local/bin/cloudflared
+
+      - name: Configure SSH through the Cloudflare tunnel
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          cat > ~/.ssh/config <<EOF
+          Host vm
+            HostName ${{ secrets.DEPLOY_HOST }}
+            User ${{ secrets.DEPLOY_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking accept-new
+            ProxyCommand cloudflared access ssh --hostname %h
+          EOF
+
       - name: Copy compose file and .env to the VM
-        uses: appleboy/scp-action@v1
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_KEY }}
-          source: "compose.prod.yml,.env"
-          target: /opt/fnts
+        run: scp compose.prod.yml .env vm:/opt/fnts/
 
       - name: Pull the new images and restart the stack
-        uses: appleboy/ssh-action@v1
         env:
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_KEY }}
-          envs: GHCR_USER,GHCR_TOKEN
-          script: |
-            set -e
-            cd /opt/fnts
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-            docker compose -f compose.prod.yml pull
-            docker compose -f compose.prod.yml up -d
-            docker image prune -f
-            docker logout ghcr.io
+        run: |
+          ssh vm "GHCR_USER='$GHCR_USER' GHCR_TOKEN='$GHCR_TOKEN' bash -s" <<'EOF'
+          set -e
+          cd /opt/fnts
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+          docker compose -f compose.prod.yml pull
+          docker compose -f compose.prod.yml up -d
+          docker image prune -f
+          docker logout ghcr.io
+          EOF
