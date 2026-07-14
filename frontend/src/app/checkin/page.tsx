@@ -13,9 +13,12 @@ function CheckinPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const reload = useCallback(async () => {
-    setToday(await api<TodayResponse>("/api/checkins/today"));
-  }, []);
+  // setState happens in the promise callback, never in the effect body itself
+  // (react-hooks/set-state-in-effect).
+  const reload = useCallback(
+    () => api<TodayResponse>("/api/checkins/today").then(setToday),
+    [],
+  );
 
   useEffect(() => {
     reload();

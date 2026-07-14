@@ -21,11 +21,10 @@ function SettingsPage() {
   const [pushBusy, setPushBusy] = useState(false);
 
   useEffect(() => {
-    if (!pushSupported()) {
-      setPushOn(false);
-      return;
-    }
-    getSubscription().then((sub) => setPushOn(!!sub));
+    // getSubscription resolves to null when push is unsupported.
+    getSubscription()
+      .then((sub) => setPushOn(!!sub))
+      .catch(() => setPushOn(false));
   }, []);
 
   const timezones =

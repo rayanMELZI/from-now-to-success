@@ -88,3 +88,60 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,scope=${{ matrix.name }},mode=max
+
+  # After images are published: render config from GitHub secrets, ship it to
+  # the VM, and restart the stack on the exact build published above.
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: publish-images
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Render .env from repository secrets
+        run: |
+          cp deploy/compose.prod.yml compose.prod.yml
+          cat > .env <<EOF
+          IMAGE_OWNER=${GITHUB_REPOSITORY_OWNER@L}
+          IMAGE_TAG=sha-${GITHUB_SHA::7}
+          POSTGRES_DB=fnts
+          POSTGRES_USER=fnts
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          SECURE_COOKIES=${{ vars.SECURE_COOKIES || 'false' }}
+          VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT=${{ secrets.VAPID_SUBJECT }}
+          EOF
+
+      - name: Copy compose file and .env to the VM
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          source: "compose.prod.yml,.env"
+          target: /opt/fnts
+
+      - name: Pull the new images and restart the stack
+        uses: appleboy/ssh-action@v1
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          envs: GHCR_USER,GHCR_TOKEN
+          script: |
+            set -e
+            cd /opt/fnts
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            docker compose -f compose.prod.yml pull
+            docker compose -f compose.prod.yml up -d
+            docker image prune -f
+            docker logout ghcr.io

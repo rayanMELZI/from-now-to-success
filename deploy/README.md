@@ -1,88 +1,81 @@
 # Deploying to the Proxmox VM
 
-One-time VM setup, then every deploy is one click in GitHub Actions.
+Everything is driven by the CI/CD pipeline (`.github/workflows/ci.yml`):
+every merge to `main` tests → publishes images → deploys to the VM.
+The pipeline writes `/opt/fnts/.env` (from GitHub secrets) and
+`/opt/fnts/compose.prod.yml` on every deploy — you never edit files on the VM.
 
-## 1. One-time VM setup
+## One-time VM setup (the part no pipeline can do)
 
-On a Debian/Ubuntu VM:
+The pipeline needs a machine that runs Docker and accepts SSH. That's all:
 
 ```bash
-# Docker (official convenience script)
+# 1. Docker
 curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER   # log out/in afterwards
+sudo usermod -aG docker $USER    # log out/in afterwards
 
-# App directory
+# 2. App directory owned by the SSH user
 sudo mkdir -p /opt/fnts && sudo chown $USER /opt/fnts
+
+# 3. A deploy SSH key (generate anywhere, e.g. on your PC):
+#    ssh-keygen -t ed25519 -f fnts_deploy -N ""
+# put fnts_deploy.pub into ~/.ssh/authorized_keys on the VM;
+# the PRIVATE file becomes the DEPLOY_KEY secret below.
 ```
 
-Copy `compose.prod.yml` to `/opt/fnts/`, and create `/opt/fnts/.env` based on
-`.env.example` from the repo root, plus these two extra variables:
+## GitHub configuration (Settings → Secrets and variables → Actions)
 
-```bash
-IMAGE_OWNER=<your-github-username>   # lowercase
-IMAGE_TAG=latest
+Secrets:
+
+| Secret              | Value |
+|---------------------|-------|
+| `DEPLOY_HOST`       | VM address (IP or domain, reachable on port 22) |
+| `DEPLOY_USER`       | SSH user on the VM |
+| `DEPLOY_KEY`        | contents of the private key file (`fnts_deploy`) |
+| `POSTGRES_PASSWORD` | any strong password (`openssl rand -base64 24`) |
+| `JWT_SECRET`        | `openssl rand -base64 48` |
+| `VAPID_PUBLIC_KEY`  | from `npx web-push generate-vapid-keys` |
+| `VAPID_PRIVATE_KEY` | from the same command |
+| `VAPID_SUBJECT`     | `mailto:you@example.com` |
+
+Variables (not secret):
+
+| Variable         | Value |
+|------------------|-------|
+| `SECURE_COOKIES` | `false` until HTTPS is set up, then `true` |
+
+Then push to `main` — the pipeline does the rest. The app appears on
+`http://<vm-ip>:3000`.
+
+## HTTPS (required for web push)
+
+Browsers only allow service workers / push on HTTPS (or localhost).
+Simplest: Caddy on the VM with automatic certificates:
+
+```
+# /etc/caddy/Caddyfile
+yourdomain.example {
+    reverse_proxy localhost:3000
+}
 ```
 
-Generate real secrets on the VM:
+Then set the `SECURE_COOKIES` variable to `true` and re-run the deploy
+(Actions → CI → Re-run → deploy, or just push again).
 
-```bash
-openssl rand -base64 48          # -> JWT_SECRET
-npx web-push generate-vapid-keys # -> VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY
-```
+## Rollback
 
-If the GHCR packages are private, log the VM into GHCR once:
+Actions → CI → pick the last good run → "Re-run" the deploy job: it redeploys
+that run's exact `sha-…` image tag.
 
-```bash
-docker login ghcr.io -u <github-username>   # password = a PAT with read:packages
-```
+## Database backups
 
-First start:
-
-```bash
-cd /opt/fnts
-docker compose -f compose.prod.yml up -d
-```
-
-The app is now on `http://<vm-ip>:3000`.
-
-## 2. HTTPS (required for web push)
-
-Browsers only allow service workers / push on HTTPS (or localhost). Put a
-reverse proxy with TLS in front of port 3000 — pick one:
-
-- **Caddy** (simplest, automatic certificates):
-  ```
-  # /etc/caddy/Caddyfile
-  yourdomain.example {
-      reverse_proxy localhost:3000
-  }
-  ```
-- Nginx + certbot, or a Proxmox-level proxy if you already run one.
-
-Then set `SECURE_COOKIES=true` in `/opt/fnts/.env` and
-`docker compose -f compose.prod.yml up -d` again.
-
-## 3. Deploys after that
-
-GitHub → Actions → **Deploy to VM** → Run workflow. It SSHes into the VM,
-pulls the images CI published, and restarts the stack.
-
-Required repository secrets (Settings → Secrets and variables → Actions):
-
-| Secret        | Value |
-|---------------|-------|
-| `DEPLOY_HOST` | VM IP or domain |
-| `DEPLOY_USER` | SSH user on the VM |
-| `DEPLOY_KEY`  | Private SSH key; its `.pub` goes in the VM's `~/.ssh/authorized_keys` |
-
-## 4. Database backups
-
-The data lives in the `db-data` Docker volume. Simple nightly dump:
+Data lives in the `db-data` Docker volume. Simple nightly dump on the VM:
 
 ```bash
 # /etc/cron.daily/fnts-backup (chmod +x)
 #!/bin/sh
-docker compose -f /opt/fnts/compose.prod.yml exec -T db \
-  pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" | gzip > /opt/fnts/backups/fnts-$(date +%F).sql.gz
+cd /opt/fnts
+docker compose -f compose.prod.yml exec -T db \
+  sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' | gzip > /opt/fnts/backups/fnts-$(date +%F).sql.gz
 find /opt/fnts/backups -mtime +14 -delete
 ```

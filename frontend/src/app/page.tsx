@@ -12,11 +12,16 @@ function RoadmapPage() {
   const [selected, setSelected] = useState<Habit | null>(null);
   const [mode, setMode] = useState<"view" | "create" | "edit">("view");
 
-  const reload = useCallback(async () => {
-    const data = await api<Habit[]>("/api/habits");
-    setHabits(data);
-    setSelected((current) => data.find((h) => h.id === current?.id) ?? null);
-  }, []);
+  // setState happens in the promise callback, never in the effect body itself
+  // (react-hooks/set-state-in-effect).
+  const reload = useCallback(
+    () =>
+      api<Habit[]>("/api/habits").then((data) => {
+        setHabits(data);
+        setSelected((current) => data.find((h) => h.id === current?.id) ?? null);
+      }),
+    [],
+  );
 
   useEffect(() => {
     reload();
