@@ -113,6 +113,7 @@ jobs:
           cat > .env <<EOF
           IMAGE_OWNER=${GITHUB_REPOSITORY_OWNER@L}
           IMAGE_TAG=sha-${GITHUB_SHA::7}
+          FRONTEND_PORT=${{ vars.FRONTEND_PORT || '3004' }}
           POSTGRES_DB=fnts
           POSTGRES_USER=fnts
           POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}

@@ -46,7 +46,8 @@ services:
     environment:
       BACKEND_URL: http://backend:8080
     ports:
-      - "3000:3000"
+      # localhost-only: reachable through the Cloudflare tunnel, not the network
+      - "127.0.0.1:${FRONTEND_PORT:-3004}:3000"
     depends_on:
       backend:
         condition: service_healthy
