@@ -113,7 +113,6 @@ jobs:
           cat > .env <<EOF
           IMAGE_OWNER=${GITHUB_REPOSITORY_OWNER@L}
           IMAGE_TAG=sha-${GITHUB_SHA::7}
-          FRONTEND_PORT=${{ vars.FRONTEND_PORT || '3004' }}
           POSTGRES_DB=fnts
           POSTGRES_USER=fnts
           POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
@@ -143,9 +142,6 @@ jobs:
             StrictHostKeyChecking accept-new
             ProxyCommand cloudflared access ssh --hostname %h
           EOF
-
-      - name: Show deploy target identity
-        run: ssh vm 'echo "user=$(id -un) host=$(hostname)"; ls -ld /opt/fnts'
 
       - name: Copy compose file and .env to the VM
         run: scp compose.prod.yml .env vm:/opt/fnts/
