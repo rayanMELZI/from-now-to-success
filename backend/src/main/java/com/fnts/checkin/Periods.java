@@ -21,8 +21,11 @@ import com.fnts.user.User;
 public final class Periods {
 
     public static LocalDate logicalToday(User user) {
-        return ZonedDateTime.now(ZoneId.of(user.getTimezone()))
-                .minusHours(user.getDayEndHour())
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of(user.getTimezone()));
+        int boundary = user.getDayEndHour();
+        // 0..12  = night owl: the small hours still belong to yesterday.
+        // 13..23 = early ender: past this hour it already counts as tomorrow.
+        return (boundary <= 12 ? now.minusHours(boundary) : now.plusHours(24 - boundary))
                 .toLocalDate();
     }
 

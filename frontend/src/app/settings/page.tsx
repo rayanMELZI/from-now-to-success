@@ -124,9 +124,11 @@ function SettingsPage() {
             onChange={(e) => setDayEndHour(Number(e.target.value))}
             className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:border-amber-500 focus:outline-none"
           >
-            {Array.from({ length: 13 }, (_, h) => (
+            {Array.from({ length: 24 }, (_, h) => (
               <option key={h} value={h}>
-                {h === 0 ? "midnight" : `${String(h).padStart(2, "0")}:00 (night owl)`}
+                {h === 0
+                  ? "midnight"
+                  : `${String(h).padStart(2, "0")}:00 ${h <= 12 ? "(night owl)" : "(early bird)"}`}
               </option>
             ))}
           </select>

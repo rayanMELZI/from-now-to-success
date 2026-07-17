@@ -22,7 +22,7 @@ public class UserController {
 
     public record SettingsRequest(String timezone,
                                   @Min(0) @Max(23) Integer reminderHour,
-                                  @Min(0) @Max(12) Integer dayEndHour,
+                                  @Min(0) @Max(23) Integer dayEndHour,
                                   @Min(1) @Max(7) Integer weekStartDay) {}
 
     private final UserRepository userRepository;
