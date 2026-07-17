@@ -123,9 +123,8 @@ public class CheckinService {
         }
         user.setTotalPoints(user.getTotalPoints() + earned);
 
-        List<String> unlocked = becameValid.isEmpty()
-                ? List.of()
-                : habitService.unlockNewlyEligible(userId, today);
+        // Validations unlock dependents; demotions can re-lock them.
+        List<String> unlocked = habitService.syncLockStates(userId, today);
 
         return new CheckinResult(earned, user.getTotalPoints(),
                 Levels.levelFor(user.getTotalPoints()), becameValid, unlocked);

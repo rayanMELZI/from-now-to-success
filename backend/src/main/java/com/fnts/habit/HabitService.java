@@ -58,13 +58,7 @@ public class HabitService {
         Habit habit = getOwned(userId, habitId);
         applyRequest(habit, request, userId);
         assertNoCycle(habit);
-
-        // A locked habit may become unlockable if its prerequisites changed.
-        if (habit.getStatus() == HabitStatus.LOCKED
-                && habit.getPrerequisites().stream()
-                        .allMatch(p -> p.getStatus() == HabitStatus.VALID)) {
-            unlock(habit, today(habit.getUser()));
-        }
+        syncLockStates(userId, today(habit.getUser()));
         return HabitDtos.toResponse(habit);
     }
 
@@ -76,27 +70,30 @@ public class HabitService {
             other.getPrerequisites().remove(habit);
         }
         habitRepository.delete(habit);
-        unlockNewlyEligible(userId, today(habit.getUser()));
+        syncLockStates(userId, today(habit.getUser()));
     }
 
-    /** Unlocks every LOCKED habit whose prerequisites are now all VALID. Returns their names. */
+    /**
+     * Enforces the lock invariant over ALL of the user's habits, in both
+     * directions: a non-VALID habit is LOCKED if and only if any of its
+     * prerequisites is not VALID. Returns the names of habits that unlocked.
+     * (VALID habits never lock; validation is earned and only the gauge/miss
+     * rules can take it away.)
+     */
     @Transactional
-    public List<String> unlockNewlyEligible(Long userId, LocalDate today) {
+    public List<String> syncLockStates(Long userId, LocalDate today) {
         List<String> unlockedNames = new ArrayList<>();
-        boolean changed = true;
-        // Loop because one unlock never makes another eligible (unlock != valid),
-        // but deletes can cascade; the loop keeps the logic obviously correct.
-        while (changed) {
-            changed = false;
-            for (Habit habit : habitRepository.findByUserIdAndStatusInOrderByIdAsc(
-                    userId, List.of(HabitStatus.LOCKED))) {
-                boolean eligible = habit.getPrerequisites().stream()
-                        .allMatch(p -> p.getStatus() == HabitStatus.VALID);
-                if (eligible) {
-                    unlock(habit, today);
-                    unlockedNames.add(habit.getName());
-                    changed = true;
-                }
+        for (Habit habit : habitRepository.findByUserIdOrderByIdAsc(userId)) {
+            if (habit.getStatus() == HabitStatus.VALID) {
+                continue;
+            }
+            boolean eligible = habit.getPrerequisites().stream()
+                    .allMatch(p -> p.getStatus() == HabitStatus.VALID);
+            if (eligible && habit.getStatus() == HabitStatus.LOCKED) {
+                unlock(habit, today);
+                unlockedNames.add(habit.getName());
+            } else if (!eligible && habit.getStatus() == HabitStatus.ACTIVE) {
+                habit.setStatus(HabitStatus.LOCKED);
             }
         }
         return unlockedNames;
