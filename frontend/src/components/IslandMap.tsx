@@ -1,81 +1,27 @@
 "use client";
 
 import { useMemo } from "react";
+import {
+  Background,
+  BackgroundVariant,
+  Controls,
+  Handle,
+  Position,
+  ReactFlow,
+  type Edge,
+  type Node,
+  type NodeProps,
+  type NodeTypes,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 import type { Habit } from "@/lib/types";
-
-/* ------------------------------------------------------------------ */
-/* Deterministic randomness: same seed -> same shape, so the map is    */
-/* stable across renders instead of wobbling.                          */
-/* ------------------------------------------------------------------ */
-
-function mulberry32(seed: number) {
-  let a = seed;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/* ------------------------------------------------------------------ */
-/* Organic cell shape: jittered points around the cell's center,       */
-/* joined with smooth quadratic curves through midpoints.              */
-/* ------------------------------------------------------------------ */
-
-function organicCellPath(
-  cx: number,
-  cy: number,
-  w: number,
-  h: number,
-  seed: number,
-): string {
-  const rand = mulberry32(seed);
-  const pointCount = 8;
-  const points: [number, number][] = [];
-
-  for (let i = 0; i < pointCount; i++) {
-    const angle = (i / pointCount) * Math.PI * 2 + rand() * 0.35;
-    // Radius of a rectangle-ish blob, jittered between 82% and 105%.
-    const jitter = 0.82 + rand() * 0.23;
-    points.push([
-      cx + Math.cos(angle) * (w / 2) * jitter,
-      cy + Math.sin(angle) * (h / 2) * jitter,
-    ]);
-  }
-
-  // Smooth closed curve: quadratic beziers through segment midpoints.
-  let d = "";
-  for (let i = 0; i < pointCount; i++) {
-    const [x1, y1] = points[i];
-    const [x2, y2] = points[(i + 1) % pointCount];
-    const mx = (x1 + x2) / 2;
-    const my = (y1 + y2) / 2;
-    if (i === 0) d = `M ${mx.toFixed(1)} ${my.toFixed(1)} `;
-    else {
-      // handled by Q below
-    }
-    const [x3, y3] = points[(i + 1) % pointCount];
-    const [x4, y4] = points[(i + 2) % pointCount];
-    d += `Q ${x3.toFixed(1)} ${y3.toFixed(1)}, ${((x3 + x4) / 2).toFixed(1)} ${((y3 + y4) / 2).toFixed(1)} `;
-  }
-  return d + "Z";
-}
 
 /* ------------------------------------------------------------------ */
 /* Layout: column = prerequisite depth, rows spread middle-out.        */
 /* ------------------------------------------------------------------ */
 
-const CELL_W = 168;
-const CELL_H = 118;
-const PAD = 24;
-
-interface PlacedHabit {
-  habit: Habit;
-  col: number;
-  row: number;
-}
+const COL_W = 240;
+const ROW_H = 150;
 
 function computeDepths(habits: Habit[]): Map<number, number> {
   const byId = new Map(habits.map((h) => [h.id, h]));
@@ -86,8 +32,7 @@ function computeDepths(habits: Habit[]): Map<number, number> {
     if (cached !== undefined) return cached;
     if (visiting.has(id)) return 0; // cycle guard (backend forbids cycles anyway)
     visiting.add(id);
-    const habit = byId.get(id);
-    const prereqs = habit?.prerequisiteIds ?? [];
+    const prereqs = byId.get(id)?.prerequisiteIds ?? [];
     const depth = prereqs.length
       ? 1 + Math.max(...prereqs.map((p) => depthOf(p, visiting)))
       : 0;
@@ -99,29 +44,95 @@ function computeDepths(habits: Habit[]): Map<number, number> {
   return depths;
 }
 
-function middleOutRows(count: number, totalRows: number): number[] {
-  // 1 habit -> middle row; 2 -> rows around middle; etc.
-  const mid = Math.floor(totalRows / 2);
+function middleOutRows(count: number): number[] {
   const rows: number[] = [];
   for (let i = 0; i < count; i++) {
-    const offset = Math.ceil(i / 2) * (i % 2 === 0 ? 1 : -1);
-    rows.push(Math.max(0, Math.min(totalRows - 1, mid + offset)));
+    rows.push(Math.ceil(i / 2) * (i % 2 === 0 ? 1 : -1));
   }
   return rows;
 }
 
+/* Stable organic blob per habit: varied border-radius from the id. */
+function blobRadius(seed: number): string {
+  const r = (n: number) => 38 + ((seed * (n * 13 + 7)) % 25);
+  return `${r(1)}% ${100 - r(1)}% ${r(2)}% ${100 - r(2)}% / ${r(3)}% ${r(4)}% ${100 - r(4)}% ${100 - r(3)}%`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Custom nodes                                                        */
 /* ------------------------------------------------------------------ */
 
-const statusStyle: Record<
-  Habit["status"] | "mystery" | "anchor",
-  { fill: string; stroke: string; text: string }
-> = {
-  LOCKED: { fill: "#e7e5e4", stroke: "#a8a29e", text: "#78716c" },
-  ACTIVE: { fill: "#fffbeb", stroke: "#92400e", text: "#44403c" },
-  VALID: { fill: "#dcfce7", stroke: "#166534", text: "#14532d" },
-  mystery: { fill: "#f5f5f4", stroke: "#d6d3d1", text: "#a8a29e" },
-  anchor: { fill: "#fef3c7", stroke: "#92400e", text: "#78350f" },
-};
+type HabitNodeData = { habit: Habit; selected: boolean };
+type AnchorNodeData = { label: string; icon: string };
+
+function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
+  const { habit, selected } = data;
+  const locked = habit.status === "LOCKED";
+  const valid = habit.status === "VALID";
+  const pct = habit.requiredStreak > 0
+    ? Math.min(100, (habit.gauge / habit.requiredStreak) * 100)
+    : 0;
+
+  return (
+    <div
+      className={`relative h-26 w-47.5 overflow-hidden border-2 shadow-sm transition-shadow ${
+        selected
+          ? "border-amber-500 shadow-lg shadow-amber-200/60"
+          : locked
+            ? "border-stone-300"
+            : valid
+              ? "border-emerald-700/60"
+              : "border-amber-800/50"
+      } ${locked ? "bg-stone-200" : "bg-amber-50"}`}
+      style={{ borderRadius: blobRadius(habit.id) }}
+    >
+      {/* gauge liquid */}
+      {!locked && pct > 0 && (
+        <div
+          className={`absolute inset-x-0 bottom-0 transition-all duration-700 ${
+            valid ? "bg-emerald-300/60" : "bg-amber-300/60"
+          }`}
+          style={{ height: `${pct}%` }}
+        />
+      )}
+      <div className="relative flex h-full flex-col items-center justify-center gap-1 px-3 text-center">
+        <p
+          className={`max-w-full truncate text-sm font-semibold ${
+            locked ? "text-stone-500" : "text-stone-800"
+          }`}
+        >
+          {locked ? "🔒 " : habit.habitType === "QUIT" ? "🚫 " : ""}
+          {habit.name}
+        </p>
+        <p className={`text-xs ${locked ? "text-stone-400" : "text-stone-600"}`}>
+          {locked
+            ? "locked"
+            : `${valid ? "✓ " : ""}⚡ ${habit.gauge}/${habit.requiredStreak} · 🔥 ${habit.currentStreak}`}
+        </p>
+      </div>
+      <Handle type="target" position={Position.Left} className="invisible!" />
+      <Handle type="source" position={Position.Right} className="invisible!" />
+    </div>
+  );
+}
+
+function AnchorNode({ data }: NodeProps<Node<AnchorNodeData>>) {
+  return (
+    <div
+      className="flex h-26 w-37.5 flex-col items-center justify-center border-2 border-amber-800/60 bg-amber-100 shadow-sm"
+      style={{ borderRadius: blobRadius(data.label === "now" ? 5 : 9) }}
+    >
+      <span className="text-2xl">{data.icon}</span>
+      <span className="text-sm font-semibold text-amber-900">{data.label}</span>
+      <Handle type="target" position={Position.Left} className="invisible!" />
+      <Handle type="source" position={Position.Right} className="invisible!" />
+    </div>
+  );
+}
+
+const nodeTypes: NodeTypes = { habit: HabitNode, anchor: AnchorNode };
+
+/* ------------------------------------------------------------------ */
 
 interface IslandMapProps {
   habits: Habit[];
@@ -130,9 +141,10 @@ interface IslandMapProps {
 }
 
 export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
-  const { placed, cols, rows } = useMemo(() => {
+  const { nodes, edges } = useMemo(() => {
     const depths = computeDepths(habits);
     const maxDepth = habits.length ? Math.max(...depths.values()) : 0;
+
     const byDepth = new Map<number, Habit[]>();
     habits.forEach((h) => {
       const d = depths.get(h.id) ?? 0;
@@ -140,194 +152,82 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
       byDepth.get(d)!.push(h);
     });
 
-    const maxPerCol = Math.max(1, ...[...byDepth.values()].map((v) => v.length));
-    const rows = Math.max(3, maxPerCol);
-    // col 0 = "now" anchor, cols 1..maxDepth+1 = habits, last col = "success"
-    const cols = maxDepth + 3;
+    const nodes: Node[] = [
+      {
+        id: "now",
+        type: "anchor",
+        position: { x: 0, y: -52 },
+        data: { label: "now", icon: "🚶" },
+        draggable: false,
+        selectable: false,
+      },
+      {
+        id: "success",
+        type: "anchor",
+        position: { x: (maxDepth + 2) * COL_W, y: -52 },
+        data: { label: "success", icon: "✨" },
+        draggable: false,
+        selectable: false,
+      },
+    ];
 
-    const placed: PlacedHabit[] = [];
     byDepth.forEach((group, depth) => {
       const sorted = [...group].sort((a, b) => a.id - b.id);
-      const rowsFor = middleOutRows(sorted.length, rows);
-      sorted.forEach((habit, i) =>
-        placed.push({ habit, col: depth + 1, row: rowsFor[i] }),
-      );
+      const rows = middleOutRows(sorted.length);
+      sorted.forEach((habit, i) => {
+        nodes.push({
+          id: String(habit.id),
+          type: "habit",
+          position: { x: (depth + 1) * COL_W, y: rows[i] * ROW_H - 52 },
+          data: { habit, selected: habit.id === selectedId },
+          draggable: false,
+        });
+      });
     });
 
-    return { placed, cols, rows };
-  }, [habits]);
+    const edges: Edge[] = habits.flatMap((habit) =>
+      habit.prerequisiteIds.map((prereqId) => {
+        const prereq = habits.find((h) => h.id === prereqId);
+        const flowing = prereq?.status === "VALID";
+        return {
+          id: `${prereqId}-${habit.id}`,
+          source: String(prereqId),
+          target: String(habit.id),
+          animated: flowing,
+          style: {
+            stroke: flowing ? "#d97706" : "#a8a29e",
+            strokeWidth: 1.5,
+            strokeDasharray: flowing ? undefined : "6 6",
+          },
+        };
+      }),
+    );
 
-  const width = cols * CELL_W + PAD * 2;
-  const height = rows * CELL_H + PAD * 2;
-  const center = (col: number, row: number): [number, number] => [
-    PAD + col * CELL_W + CELL_W / 2,
-    PAD + row * CELL_H + CELL_H / 2,
-  ];
-
-  const posById = new Map(placed.map((p) => [p.habit.id, center(p.col, p.row)]));
-  const occupied = new Set(placed.map((p) => `${p.col}:${p.row}`));
-  const midRow = Math.floor(rows / 2);
-
-  /* Mystery filler cells: every free grid slot, like the sketch's "..." */
-  const fillers: [number, number][] = [];
-  for (let c = 0; c < cols; c++) {
-    for (let r = 0; r < rows; r++) {
-      const isNow = c === 0 && r === midRow;
-      const isSuccess = c === cols - 1 && r === midRow;
-      if (!occupied.has(`${c}:${r}`) && !isNow && !isSuccess) fillers.push([c, r]);
-    }
-  }
+    return { nodes, edges };
+  }, [habits, selectedId]);
 
   return (
-    <div className="overflow-auto rounded-xl border border-stone-300 bg-stone-50">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        width={width}
-        height={height}
-        onClick={() => onSelect(null)}
+    // React Flow needs a concrete height, not just min/flex sizing.
+    <div className="h-[calc(100dvh-220px)] min-h-105 overflow-hidden rounded-xl border border-stone-300 bg-stone-50">
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        fitView
+        fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
+        minZoom={0.3}
+        maxZoom={1.6}
+        nodesConnectable={false}
+        onNodeClick={(_, node) => {
+          const habit = habits.find((h) => String(h.id) === node.id);
+          if (habit) onSelect(habit);
+        }}
+        onPaneClick={() => onSelect(null)}
+        proOptions={{ hideAttribution: false }}
       >
-        {/* dependency lines, under the cells */}
-        {placed.map(({ habit }) =>
-          habit.prerequisiteIds.map((prereqId) => {
-            const from = posById.get(prereqId);
-            const to = posById.get(habit.id);
-            if (!from || !to) return null;
-            return (
-              <path
-                key={`${prereqId}-${habit.id}`}
-                d={`M ${from[0]} ${from[1]} C ${(from[0] + to[0]) / 2} ${from[1]}, ${(from[0] + to[0]) / 2} ${to[1]}, ${to[0]} ${to[1]}`}
-                fill="none"
-                stroke="#a8a29e"
-                strokeWidth={1.5}
-                strokeDasharray="5 5"
-              />
-            );
-          }),
-        )}
-
-        {/* mystery cells */}
-        {fillers.map(([c, r]) => {
-          const [cx, cy] = center(c, r);
-          const style = statusStyle.mystery;
-          return (
-            <g key={`f-${c}-${r}`}>
-              <path
-                d={organicCellPath(cx, cy, CELL_W - 14, CELL_H - 14, c * 31 + r * 7 + 1)}
-                fill={style.fill}
-                stroke={style.stroke}
-                strokeWidth={1.5}
-              />
-              <text
-                x={cx}
-                y={cy + 5}
-                textAnchor="middle"
-                fontSize={16}
-                fill={style.text}
-              >
-                · · ·
-              </text>
-            </g>
-          );
-        })}
-
-        {/* now + success anchors */}
-        {(
-          [
-            [0, midRow, "now", "🚶", "anchor"],
-            [cols - 1, midRow, "success", "✨", "anchor"],
-          ] as const
-        ).map(([c, r, label, icon]) => {
-          const [cx, cy] = center(c, r);
-          const style = statusStyle.anchor;
-          return (
-            <g key={label}>
-              <path
-                d={organicCellPath(cx, cy, CELL_W - 14, CELL_H - 14, c * 31 + r * 7 + 5)}
-                fill={style.fill}
-                stroke={style.stroke}
-                strokeWidth={2}
-              />
-              <text x={cx} y={cy - 4} textAnchor="middle" fontSize={22}>
-                {icon}
-              </text>
-              <text
-                x={cx}
-                y={cy + 22}
-                textAnchor="middle"
-                fontSize={14}
-                fontWeight={600}
-                fill={style.text}
-              >
-                {label}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* habit cells — the gauge fills the stone like liquid */}
-        {placed.map(({ habit, col, row }) => {
-          const [cx, cy] = center(col, row);
-          const style = statusStyle[habit.status];
-          const selected = habit.id === selectedId;
-          const locked = habit.status === "LOCKED";
-          const cellW = CELL_W - 14;
-          const cellH = CELL_H - 14;
-          const pathD = organicCellPath(cx, cy, cellW, cellH, habit.id * 131 + 17);
-          const pct = habit.requiredStreak > 0
-            ? Math.min(1, habit.gauge / habit.requiredStreak)
-            : 0;
-          const fillColor = habit.status === "VALID" ? "#6ee7b7" : "#fcd34d";
-          return (
-            <g
-              key={habit.id}
-              className="cursor-pointer"
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelect(habit);
-              }}
-            >
-              <clipPath id={`cell-${habit.id}`}>
-                <path d={pathD} />
-              </clipPath>
-              <path d={pathD} fill={style.fill} />
-              {!locked && pct > 0 && (
-                <rect
-                  clipPath={`url(#cell-${habit.id})`}
-                  x={cx - cellW * 0.6}
-                  y={cy + cellH * 0.6 - cellH * 1.2 * pct}
-                  width={cellW * 1.2}
-                  height={cellH * 1.2 * pct}
-                  fill={fillColor}
-                  opacity={0.55}
-                  style={{ transition: "y 0.7s ease, height 0.7s ease" }}
-                />
-              )}
-              <path
-                d={pathD}
-                fill="none"
-                stroke={selected ? "#d97706" : style.stroke}
-                strokeWidth={selected ? 3 : 1.8}
-              />
-              <text
-                x={cx}
-                y={cy - 6}
-                textAnchor="middle"
-                fontSize={14}
-                fontWeight={600}
-                fill={style.text}
-              >
-                {locked ? "🔒 " : habit.habitType === "QUIT" ? "🚫 " : ""}
-                {habit.name.length > 18 ? habit.name.slice(0, 17) + "…" : habit.name}
-              </text>
-              <text x={cx} y={cy + 16} textAnchor="middle" fontSize={12} fill={style.text}>
-                {locked
-                  ? "locked"
-                  : `${habit.status === "VALID" ? "✓ " : ""}⚡ ${habit.gauge}/${habit.requiredStreak} · 🔥 ${habit.currentStreak}`}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+        <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} />
+        <Controls showInteractive={false} position="bottom-right" />
+      </ReactFlow>
     </div>
   );
 }
