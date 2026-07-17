@@ -30,4 +30,11 @@ public interface HabitLogRepository extends JpaRepository<HabitLog, Long> {
               AND log.logDate >= :monthStart
             """)
     int countFrozenSince(Long userId, LocalDate monthStart);
+
+    @Query("""
+            SELECT COUNT(log) FROM HabitLog log
+            WHERE log.habit.id = :habitId AND log.status = 'DONE'
+              AND log.logDate >= :from AND log.logDate < :toExclusive
+            """)
+    int countDoneInPeriod(Long habitId, LocalDate from, LocalDate toExclusive);
 }

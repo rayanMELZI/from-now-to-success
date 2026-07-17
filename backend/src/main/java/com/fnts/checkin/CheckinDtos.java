@@ -35,7 +35,9 @@ public class CheckinDtos {
             int basePoints,
             float multiplier,
             int daysLeftInPeriod,
-            String todayStatus /* DONE | MISSED | PENDING */) {}
+            int timesPerPeriod,
+            int doneThisPeriod,
+            String todayStatus /* DONE | MISSED | PENDING | DONE_TODAY */) {}
 
     public record TodayResponse(
             LocalDate date,

@@ -159,14 +159,16 @@ function CheckinPage() {
                 </span>
                 <span
                   className={
-                    entry.todayStatus === "DONE" ? "text-emerald-600" : "text-stone-400"
+                    entry.todayStatus === "MISSED" ? "text-stone-400" : "text-emerald-600"
                   }
                 >
-                  {entry.todayStatus === "DONE"
-                    ? entry.habitType === "QUIT"
-                      ? "avoided ✓"
-                      : "done ✓"
-                    : "missed"}
+                  {entry.todayStatus === "MISSED"
+                    ? "missed"
+                    : entry.todayStatus === "DONE_TODAY"
+                      ? `done today · ${entry.doneThisPeriod}/${entry.timesPerPeriod} this ${entry.schedule === "WEEKLY" ? "week" : "month"}`
+                      : entry.habitType === "QUIT"
+                        ? "avoided ✓"
+                        : "done ✓"}
                 </span>
               </li>
             ))}
@@ -209,9 +211,16 @@ function PendingRow({
             {entry.habitType === "QUIT" ? "🚫 " : ""}
             {entry.name}
             {periodic && (
-              <span className="ml-2 rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-500">
-                {entry.schedule === "WEEKLY" ? "weekly" : "monthly"} ·{" "}
-                {entry.daysLeftInPeriod} day{entry.daysLeftInPeriod === 1 ? "" : "s"} left
+              <span
+                className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
+                  entry.daysLeftInPeriod <= entry.timesPerPeriod - entry.doneThisPeriod
+                    ? "bg-amber-100 font-medium text-amber-800"
+                    : "bg-stone-100 text-stone-500"
+                }`}
+              >
+                {entry.doneThisPeriod}/{entry.timesPerPeriod} this{" "}
+                {entry.schedule === "WEEKLY" ? "week" : "month"} · {entry.daysLeftInPeriod}{" "}
+                day{entry.daysLeftInPeriod === 1 ? "" : "s"} left
               </span>
             )}
           </p>
@@ -235,7 +244,7 @@ function PendingRow({
           <button
             onClick={onDone}
             disabled={busy}
-            className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
+            className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-500 active:scale-95 disabled:opacity-50"
           >
             {busy ? "…" : verbs.did}
           </button>
@@ -243,7 +252,7 @@ function PendingRow({
             <button
               onClick={onMissClick}
               disabled={busy}
-              className="rounded-md border border-stone-300 px-4 py-2 text-sm transition-colors hover:bg-stone-100 disabled:opacity-50"
+              className="rounded-lg border border-stone-300 px-4 py-2.5 text-sm transition-all hover:bg-stone-100 active:scale-95 disabled:opacity-50"
             >
               {verbs.missed}
             </button>

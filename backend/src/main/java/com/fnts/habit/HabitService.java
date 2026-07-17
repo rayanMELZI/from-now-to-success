@@ -125,6 +125,13 @@ public class HabitService {
         if (request.habitType() != null) {
             habit.setHabitType(request.habitType());
         }
+        if (request.timesPerPeriod() != null) {
+            habit.setTimesPerPeriod(request.timesPerPeriod());
+        }
+        // A daily habit is by definition once per day.
+        if (habit.getSchedule() == HabitSchedule.DAILY) {
+            habit.setTimesPerPeriod(1);
+        }
         if (request.prerequisiteIds() != null) {
             Set<Habit> prerequisites = new HashSet<>();
             for (Long prereqId : request.prerequisiteIds()) {

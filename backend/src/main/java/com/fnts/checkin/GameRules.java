@@ -48,6 +48,20 @@ public final class GameRules {
     }
 
     /**
+     * One completion of a weekly/monthly habit. Every completion pays points
+     * immediately; gauge/streak/validation only move when this completion
+     * reaches the period's target (timesPerPeriod).
+     */
+    public static DayResult applyPeriodicDone(Habit habit, boolean targetReached) {
+        if (!targetReached) {
+            int points = Math.round(
+                    habit.getBasePoints() * multiplier(habit.getCurrentStreak() + 1));
+            return new DayResult(points, false);
+        }
+        return applyDone(habit);
+    }
+
+    /**
      * A miss costs the habit's base points; giving a reason (excused) halves
      * the cost. A streak freeze fully protects gauge, streak and miss counter
      * (points are still lost — freezes buy protection, not absolution).

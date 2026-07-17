@@ -17,6 +17,7 @@ public class HabitDtos {
             @Min(2) @Max(90) Integer requiredStreak,
             HabitSchedule schedule,
             HabitType habitType,
+            @Min(1) @Max(30) Integer timesPerPeriod,
             List<Long> prerequisiteIds) {}
 
     public record HabitResponse(
@@ -27,6 +28,7 @@ public class HabitDtos {
             int requiredStreak,
             HabitSchedule schedule,
             HabitType habitType,
+            int timesPerPeriod,
             HabitStatus status,
             int gauge,
             int currentStreak,
@@ -44,6 +46,7 @@ public class HabitDtos {
                 habit.getRequiredStreak(),
                 habit.getSchedule(),
                 habit.getHabitType(),
+                habit.getTimesPerPeriod(),
                 habit.getStatus(),
                 habit.getGauge(),
                 habit.getCurrentStreak(),

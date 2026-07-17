@@ -22,6 +22,7 @@ export interface Habit {
   requiredStreak: number;
   schedule: HabitSchedule;
   habitType: HabitType;
+  timesPerPeriod: number;
   status: HabitStatus;
   gauge: number;
   currentStreak: number;
@@ -38,6 +39,7 @@ export interface HabitRequest {
   requiredStreak?: number;
   schedule?: HabitSchedule;
   habitType?: HabitType;
+  timesPerPeriod?: number;
   prerequisiteIds?: number[];
 }
 
@@ -54,7 +56,9 @@ export interface TodayEntry {
   basePoints: number;
   multiplier: number;
   daysLeftInPeriod: number;
-  todayStatus: "DONE" | "MISSED" | "PENDING";
+  timesPerPeriod: number;
+  doneThisPeriod: number;
+  todayStatus: "DONE" | "MISSED" | "PENDING" | "DONE_TODAY";
 }
 
 export interface TodayResponse {

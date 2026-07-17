@@ -163,6 +163,30 @@ class GameRulesTest {
         assertEquals(15, result.points()); // 10 * 1.5
     }
 
+    /* ---------- periodic (N times per week/month) ---------- */
+
+    @Test
+    void periodicCompletionBelowTargetPaysPointsButLeavesGauge() {
+        Habit habit = habit(HabitStatus.ACTIVE, 2, 2, 0);
+        var result = GameRules.applyPeriodicDone(habit, false);
+
+        assertEquals(10, result.points()); // base x multiplier(streak+1=3 -> x1)
+        assertEquals(2, habit.getGauge());
+        assertEquals(2, habit.getCurrentStreak());
+        assertFalse(result.becameValid());
+    }
+
+    @Test
+    void periodicTargetReachedActsLikeADoneDay() {
+        Habit habit = habit(HabitStatus.ACTIVE, 4, 4, 0);
+        var result = GameRules.applyPeriodicDone(habit, true);
+
+        assertEquals(5, habit.getGauge());
+        assertEquals(5, habit.getCurrentStreak());
+        assertTrue(result.becameValid());
+        assertEquals(10 + GameRules.VALIDATION_BONUS, result.points());
+    }
+
     /* ---------- miss penalties, excuses, freezes ---------- */
 
     @Test

@@ -60,6 +60,14 @@ public class Habit {
     @Column(name = "habit_type", nullable = false)
     private HabitType habitType = HabitType.BUILD;
 
+    /** Completions needed per week/month (always 1 for daily habits). */
+    @Column(name = "times_per_period", nullable = false)
+    private int timesPerPeriod = 1;
+
+    /** Period-start of the last week/month whose outcome hit gauge/streak. */
+    @Column(name = "last_evaluated_period")
+    private LocalDate lastEvaluatedPeriod;
+
     /** Validation progress: fills to requiredStreak, drops 1 per miss. */
     @Column(nullable = false)
     private int gauge = 0;
