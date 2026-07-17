@@ -16,7 +16,8 @@ public class AuthDtos {
             @NotBlank String password) {}
 
     public record UserInfo(Long id, String username, String email,
-                           int totalPoints, int level, String timezone, int reminderHour) {}
+                           int totalPoints, int level, String timezone, int reminderHour,
+                           int dayEndHour, int weekStartDay) {}
 
     public record AuthResponse(String accessToken, UserInfo user) {}
 

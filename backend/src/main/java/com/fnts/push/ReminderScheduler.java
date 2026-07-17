@@ -47,7 +47,7 @@ public class ReminderScheduler {
         for (User user : subscriptionRepository.findUsersWithSubscriptions()) {
             try {
                 ZonedDateTime now = ZonedDateTime.now(ZoneId.of(user.getTimezone()));
-                LocalDate today = now.toLocalDate();
+                LocalDate today = com.fnts.checkin.Periods.logicalToday(user);
 
                 boolean itsTime = now.getHour() >= user.getReminderHour();
                 boolean alreadyReminded = today.equals(user.getLastReminderDate());

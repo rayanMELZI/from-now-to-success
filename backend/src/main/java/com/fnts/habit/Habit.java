@@ -52,6 +52,10 @@ public class Habit {
     @Column(nullable = false)
     private HabitStatus status = HabitStatus.ACTIVE;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private HabitSchedule schedule = HabitSchedule.DAILY;
+
     /** Validation progress: fills to requiredStreak, drops 1 per miss. */
     @Column(nullable = false)
     private int gauge = 0;

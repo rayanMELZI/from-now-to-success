@@ -20,7 +20,10 @@ import jakarta.validation.constraints.Min;
 @RequestMapping("/api/users")
 public class UserController {
 
-    public record SettingsRequest(String timezone, @Min(0) @Max(23) Integer reminderHour) {}
+    public record SettingsRequest(String timezone,
+                                  @Min(0) @Max(23) Integer reminderHour,
+                                  @Min(0) @Max(12) Integer dayEndHour,
+                                  @Min(1) @Max(7) Integer weekStartDay) {}
 
     private final UserRepository userRepository;
 
@@ -47,6 +50,12 @@ public class UserController {
         }
         if (request.reminderHour() != null) {
             user.setReminderHour(request.reminderHour());
+        }
+        if (request.dayEndHour() != null) {
+            user.setDayEndHour(request.dayEndHour());
+        }
+        if (request.weekStartDay() != null) {
+            user.setWeekStartDay(request.weekStartDay());
         }
         return AuthService.toUserInfo(userRepository.save(user));
     }

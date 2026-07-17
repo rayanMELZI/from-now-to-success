@@ -3,6 +3,7 @@ package com.fnts.checkin;
 import java.time.LocalDate;
 import java.util.List;
 
+import com.fnts.habit.HabitSchedule;
 import com.fnts.habit.HabitStatus;
 
 import jakarta.validation.constraints.NotEmpty;
@@ -25,11 +26,13 @@ public class CheckinDtos {
             String name,
             String description,
             HabitStatus status,
+            HabitSchedule schedule,
             int gauge,
             int currentStreak,
             int requiredStreak,
             int basePoints,
             float multiplier,
+            int daysLeftInPeriod,
             String todayStatus /* DONE | MISSED | PENDING */) {}
 
     public record TodayResponse(

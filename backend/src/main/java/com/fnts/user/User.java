@@ -43,6 +43,14 @@ public class User {
     @Column(name = "reminder_hour", nullable = false)
     private int reminderHour = 21;
 
+    /** "My day ends at this hour": 3 means 01:00 still counts as yesterday. */
+    @Column(name = "day_end_hour", nullable = false)
+    private int dayEndHour = 0;
+
+    /** ISO day-of-week: 1 = Monday ... 7 = Sunday. */
+    @Column(name = "week_start_day", nullable = false)
+    private int weekStartDay = 1;
+
     @Column(name = "last_reminder_date")
     private LocalDate lastReminderDate;
 

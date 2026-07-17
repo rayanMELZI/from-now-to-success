@@ -119,6 +119,9 @@ public class HabitService {
         if (request.requiredStreak() != null) {
             habit.setRequiredStreak(request.requiredStreak());
         }
+        if (request.schedule() != null) {
+            habit.setSchedule(request.schedule());
+        }
         if (request.prerequisiteIds() != null) {
             Set<Habit> prerequisites = new HashSet<>();
             for (Long prereqId : request.prerequisiteIds()) {
@@ -147,6 +150,6 @@ public class HabitService {
     }
 
     private LocalDate today(User user) {
-        return LocalDate.now(ZoneId.of(user.getTimezone()));
+        return com.fnts.checkin.Periods.logicalToday(user);
     }
 }
