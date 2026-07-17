@@ -44,14 +44,14 @@ class GameRulesTest {
     @Test
     void missDropsGaugeByOne() {
         Habit habit = habit(HabitStatus.ACTIVE, 3, 3, 0);
-        GameRules.applyMiss(habit);
+        GameRules.applyMiss(habit, false, false);
         assertEquals(2, habit.getGauge());
     }
 
     @Test
     void gaugeNeverGoesBelowZero() {
         Habit habit = habit(HabitStatus.ACTIVE, 0, 0, 5);
-        GameRules.applyMiss(habit);
+        GameRules.applyMiss(habit, false, false);
         assertEquals(0, habit.getGauge());
     }
 
@@ -83,15 +83,15 @@ class GameRulesTest {
     void validSurvivesSmallGaugeDips() {
         // floor for requiredStreak 5 is ceil(5 * 0.6) = 3
         Habit habit = habit(HabitStatus.VALID, 5, 10, 0);
-        GameRules.applyMiss(habit); // gauge 4
-        GameRules.applyMiss(habit); // gauge 3, still >= floor
+        GameRules.applyMiss(habit, false, false); // gauge 4
+        GameRules.applyMiss(habit, false, false); // gauge 3, still >= floor
         assertEquals(HabitStatus.VALID, habit.getStatus());
     }
 
     @Test
     void validDemotedWhenGaugeSinksBelowFloor() {
         Habit habit = habit(HabitStatus.VALID, 3, 0, 2);
-        GameRules.applyMiss(habit); // gauge 2 < floor 3
+        GameRules.applyMiss(habit, false, false); // gauge 2 < floor 3
         assertEquals(HabitStatus.ACTIVE, habit.getStatus());
     }
 
@@ -117,7 +117,7 @@ class GameRulesTest {
     @Test
     void singleMissForgivesStreak() {
         Habit habit = habit(HabitStatus.ACTIVE, 3, 3, 0);
-        GameRules.applyMiss(habit);
+        GameRules.applyMiss(habit, false, false);
         assertEquals(3, habit.getCurrentStreak());
         assertEquals(1, habit.getConsecutiveMisses());
     }
@@ -125,7 +125,7 @@ class GameRulesTest {
     @Test
     void twoConsecutiveMissesResetTheStreak() {
         Habit habit = habit(HabitStatus.ACTIVE, 3, 3, 1);
-        GameRules.applyMiss(habit);
+        GameRules.applyMiss(habit, false, false);
         assertEquals(0, habit.getCurrentStreak());
     }
 
@@ -142,8 +142,8 @@ class GameRulesTest {
         GameRules.applyDone(habit);
         assertEquals(10, habit.getBestStreak());
 
-        GameRules.applyMiss(habit);
-        GameRules.applyMiss(habit);
+        GameRules.applyMiss(habit, false, false);
+        GameRules.applyMiss(habit, false, false);
         assertEquals(0, habit.getCurrentStreak());
         assertEquals(10, habit.getBestStreak());
     }
@@ -161,5 +161,34 @@ class GameRulesTest {
         Habit habit = habit(HabitStatus.VALID, 5, 6, 0);
         var result = GameRules.applyDone(habit); // streak becomes 7
         assertEquals(15, result.points()); // 10 * 1.5
+    }
+
+    /* ---------- miss penalties, excuses, freezes ---------- */
+
+    @Test
+    void plainMissCostsBasePoints() {
+        Habit habit = habit(HabitStatus.ACTIVE, 3, 3, 0);
+        var result = GameRules.applyMiss(habit, false, false);
+        assertEquals(-10, result.points());
+    }
+
+    @Test
+    void excusedMissCostsHalf() {
+        Habit habit = habit(HabitStatus.ACTIVE, 3, 3, 0);
+        var result = GameRules.applyMiss(habit, true, false);
+        assertEquals(-5, result.points());
+        assertEquals(2, habit.getGauge()); // excuse softens points, not the gauge
+    }
+
+    @Test
+    void frozenMissProtectsGaugeStreakAndMissCounter() {
+        Habit habit = habit(HabitStatus.VALID, 5, 12, 0);
+        var result = GameRules.applyMiss(habit, true, true);
+
+        assertEquals(5, habit.getGauge());
+        assertEquals(12, habit.getCurrentStreak());
+        assertEquals(0, habit.getConsecutiveMisses());
+        assertEquals(HabitStatus.VALID, habit.getStatus());
+        assertEquals(-5, result.points()); // freeze protects progress, not points
     }
 }

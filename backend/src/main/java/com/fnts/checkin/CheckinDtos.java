@@ -7,10 +7,15 @@ import com.fnts.habit.HabitStatus;
 
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 public class CheckinDtos {
 
-    public record Entry(@NotNull Long habitId, @NotNull Boolean done) {}
+    public record Entry(
+            @NotNull Long habitId,
+            @NotNull Boolean done,
+            @Size(max = 500) String reason,
+            Boolean freeze) {}
 
     public record CheckinRequest(@NotEmpty List<Entry> entries) {}
 
@@ -31,12 +36,14 @@ public class CheckinDtos {
             LocalDate date,
             boolean allChecked,
             int pointsToday,
+            int freezesLeft,
             List<TodayEntry> entries) {}
 
     public record CheckinResult(
             int earnedPoints,
             int totalPoints,
             int level,
+            int freezesLeft,
             List<String> becameValid,
             List<String> unlocked) {}
 

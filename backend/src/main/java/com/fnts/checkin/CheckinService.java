@@ -70,7 +70,7 @@ public class CheckinService {
                 && entries.stream().noneMatch(e -> e.todayStatus().equals("PENDING"));
         int pointsToday = todayLogs.values().stream().mapToInt(HabitLog::getPointsAwarded).sum();
 
-        return new TodayResponse(today, allChecked, pointsToday, entries);
+        return new TodayResponse(today, allChecked, pointsToday, freezesLeft(userId, today), entries);
     }
 
     @Transactional
@@ -81,7 +81,11 @@ public class CheckinService {
 
         List<Habit> habits = habitRepository.findByUserIdAndStatusInOrderByIdAsc(userId, TRACKABLE);
         Map<Long, HabitLog> todayLogs = logsFor(habits, today);
-        boolean firstCheckinToday = todayLogs.isEmpty();
+        // The engagement bonus goes to the day's FIRST done answer, so
+        // answering habits one by one through the day still earns it once.
+        boolean noDoneYet = todayLogs.values().stream()
+                .noneMatch(l -> l.getStatus() == HabitLog.Status.DONE);
+        int freezesLeft = freezesLeft(userId, today);
 
         int earned = 0;
         List<String> becameValid = new ArrayList<>();
@@ -97,15 +101,27 @@ public class CheckinService {
                 continue; // already answered today; first answer wins
             }
 
+            boolean excused = !entry.done()
+                    && entry.reason() != null && !entry.reason().isBlank();
+            boolean freeze = !entry.done() && Boolean.TRUE.equals(entry.freeze());
+            if (freeze) {
+                if (freezesLeft <= 0) {
+                    throw ApiException.badRequest("No streak freezes left this month");
+                }
+                freezesLeft--;
+            }
+
             GameRules.DayResult result = entry.done()
                     ? GameRules.applyDone(habit)
-                    : GameRules.applyMiss(habit);
+                    : GameRules.applyMiss(habit, excused, freeze);
 
             HabitLog log = new HabitLog();
             log.setHabit(habit);
             log.setLogDate(today);
             log.setStatus(entry.done() ? HabitLog.Status.DONE : HabitLog.Status.MISSED);
             log.setPointsAwarded(result.points());
+            log.setReason(excused ? entry.reason().trim() : null);
+            log.setFrozen(freeze);
             logRepository.save(log);
 
             earned += result.points();
@@ -117,17 +133,17 @@ public class CheckinService {
             }
         }
 
-        // The engagement bonus rewards doing, not just reporting misses.
-        if (firstCheckinToday && doneCount > 0) {
+        if (noDoneYet && doneCount > 0) {
             earned += GameRules.CHECKIN_BONUS;
         }
-        user.setTotalPoints(user.getTotalPoints() + earned);
+        // Points can be lost on misses, but the total never goes negative.
+        user.setTotalPoints(Math.max(0, user.getTotalPoints() + earned));
 
         // Validations unlock dependents; demotions can re-lock them.
         List<String> unlocked = habitService.syncLockStates(userId, today);
 
         return new CheckinResult(earned, user.getTotalPoints(),
-                Levels.levelFor(user.getTotalPoints()), becameValid, unlocked);
+                Levels.levelFor(user.getTotalPoints()), freezesLeft, becameValid, unlocked);
     }
 
     @Transactional
@@ -155,19 +171,26 @@ public class CheckinService {
      * was away — without needing a scheduled midnight job.
      */
     private void catchUpMissedDays(Long userId, LocalDate today) {
+        int penalties = 0;
         for (Habit habit : habitRepository.findByUserIdAndStatusInOrderByIdAsc(userId, TRACKABLE)) {
             Optional<HabitLog> last = logRepository.findTopByHabitIdOrderByLogDateDesc(habit.getId());
             LocalDate cursor = last.map(l -> l.getLogDate().plusDays(1))
                     .orElse(habit.getStartDate());
             while (cursor.isBefore(today)) {
-                GameRules.applyMiss(habit);
+                GameRules.DayResult result = GameRules.applyMiss(habit, false, false);
                 HabitLog log = new HabitLog();
                 log.setHabit(habit);
                 log.setLogDate(cursor);
                 log.setStatus(HabitLog.Status.MISSED);
+                log.setPointsAwarded(result.points());
                 logRepository.save(log);
+                penalties += result.points();
                 cursor = cursor.plusDays(1);
             }
+        }
+        if (penalties != 0) {
+            User user = loadUser(userId);
+            user.setTotalPoints(Math.max(0, user.getTotalPoints() + penalties));
         }
     }
 
@@ -180,6 +203,11 @@ public class CheckinService {
             }
         }
         return map;
+    }
+
+    private int freezesLeft(Long userId, LocalDate today) {
+        int used = logRepository.countFrozenSince(userId, today.withDayOfMonth(1));
+        return Math.max(0, GameRules.FREEZES_PER_MONTH - used);
     }
 
     private User loadUser(Long userId) {

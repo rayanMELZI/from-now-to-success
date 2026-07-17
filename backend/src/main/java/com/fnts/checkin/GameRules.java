@@ -24,6 +24,8 @@ public final class GameRules {
     public static final int MISSES_TO_RESET_STREAK = 2;
     /** A VALID habit is demoted when gauge < ceil(requiredStreak * ratio). */
     public static final float DEMOTION_RATIO = 0.6f;
+    /** Streak freezes available per user per calendar month. */
+    public static final int FREEZES_PER_MONTH = 3;
 
     public record DayResult(int points, boolean becameValid) {}
 
@@ -45,19 +47,29 @@ public final class GameRules {
         return new DayResult(points, becameValid);
     }
 
-    public static DayResult applyMiss(Habit habit) {
-        habit.setConsecutiveMisses(habit.getConsecutiveMisses() + 1);
+    /**
+     * A miss costs the habit's base points; giving a reason (excused) halves
+     * the cost. A streak freeze fully protects gauge, streak and miss counter
+     * (points are still lost — freezes buy protection, not absolution).
+     */
+    public static DayResult applyMiss(Habit habit, boolean excused, boolean frozen) {
+        int penalty = excused
+                ? -Math.round(habit.getBasePoints() / 2f)
+                : -habit.getBasePoints();
 
-        if (habit.getConsecutiveMisses() >= MISSES_TO_RESET_STREAK) {
-            habit.setCurrentStreak(0);
-        }
-        habit.setGauge(Math.max(habit.getGauge() - 1, 0));
+        if (!frozen) {
+            habit.setConsecutiveMisses(habit.getConsecutiveMisses() + 1);
+            if (habit.getConsecutiveMisses() >= MISSES_TO_RESET_STREAK) {
+                habit.setCurrentStreak(0);
+            }
+            habit.setGauge(Math.max(habit.getGauge() - 1, 0));
 
-        if (habit.getStatus() == HabitStatus.VALID
-                && habit.getGauge() < demotionFloor(habit.getRequiredStreak())) {
-            habit.setStatus(HabitStatus.ACTIVE);
+            if (habit.getStatus() == HabitStatus.VALID
+                    && habit.getGauge() < demotionFloor(habit.getRequiredStreak())) {
+                habit.setStatus(HabitStatus.ACTIVE);
+            }
         }
-        return new DayResult(0, false);
+        return new DayResult(penalty, false);
     }
 
     public static int demotionFloor(int requiredStreak) {

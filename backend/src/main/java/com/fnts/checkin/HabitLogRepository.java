@@ -23,4 +23,11 @@ public interface HabitLogRepository extends JpaRepository<HabitLog, Long> {
             ORDER BY log.logDate ASC
             """)
     List<HabitLog> findRecentForUser(Long userId, LocalDate from);
+
+    @Query("""
+            SELECT COUNT(log) FROM HabitLog log
+            WHERE log.habit.user.id = :userId AND log.frozen = true
+              AND log.logDate >= :monthStart
+            """)
+    int countFrozenSince(Long userId, LocalDate monthStart);
 }

@@ -47,6 +47,13 @@ public class HabitLog {
     @Column(name = "points_awarded", nullable = false)
     private int pointsAwarded = 0;
 
+    /** User-provided excuse for a miss; halves the point penalty. */
+    private String reason;
+
+    /** A streak freeze was spent on this miss: gauge and streak untouched. */
+    @Column(nullable = false)
+    private boolean frozen = false;
+
     @Column(name = "created_at", nullable = false, updatable = false, insertable = false)
     private Instant createdAt;
 }
