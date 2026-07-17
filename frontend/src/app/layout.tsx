@@ -39,7 +39,8 @@ export default function RootLayout({
         <AuthProvider>
           <RegisterSW />
           <Nav />
-          <main className="flex flex-1 flex-col">{children}</main>
+          {/* bottom padding clears the mobile tab bar */}
+          <main className="flex flex-1 flex-col pb-16 sm:pb-0">{children}</main>
         </AuthProvider>
       </body>
     </html>

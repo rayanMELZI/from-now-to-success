@@ -49,11 +49,13 @@ function HistoryChart({ history }: { history: HistoryDay[] }) {
           No history yet — check in for a few days and your progress shows up here.
         </p>
       ) : (
-        <div className="relative overflow-x-auto">
+        <div className="relative">
+          {/* viewBox + w-full: the chart scales to any screen width */}
           <svg
             viewBox={`0 0 ${width} ${chartHeight + 18}`}
-            width={width}
-            height={chartHeight + 18}
+            className="h-auto w-full"
+            preserveAspectRatio="none"
+            style={{ maxHeight: 180 }}
           >
             {days.map((day, i) => {
               const x = i * (barWidth + gap);
