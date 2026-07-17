@@ -51,8 +51,17 @@ public class WebPushSender {
         List<PushSubscription> subscriptions = subscriptionRepository.findByUserId(userId);
         for (PushSubscription sub : subscriptions) {
             try {
-                var response = pushService.send(new Notification(
-                        sub.getEndpoint(), sub.getP256dh(), sub.getAuth(), jsonPayload));
+                // TTL keeps the message queued while the phone dozes; HIGH
+                // urgency asks the push service to deliver without delay.
+                var notification = Notification.builder()
+                        .endpoint(sub.getEndpoint())
+                        .userPublicKey(sub.getP256dh())
+                        .userAuth(sub.getAuth())
+                        .payload(jsonPayload.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                        .ttl(6 * 60 * 60)
+                        .urgency(nl.martijndwars.webpush.Urgency.HIGH)
+                        .build();
+                var response = pushService.send(notification);
                 int status = response.getStatusLine().getStatusCode();
                 if (status == 404 || status == 410) {
                     // The browser unsubscribed or the endpoint expired.

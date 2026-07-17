@@ -35,10 +35,10 @@ public class ReminderScheduler {
     }
 
     /**
-     * Every 15 minutes: remind each subscribed user once per (their) day, at or
+     * Every 5 minutes: remind each subscribed user once per (their) day, at or
      * after their chosen reminder hour, and only while habits are still unchecked.
      */
-    @Scheduled(cron = "0 */15 * * * *")
+    @Scheduled(cron = "0 */5 * * * *")
     @Transactional
     public void sendDailyReminders() {
         if (!pushSender.isEnabled()) {

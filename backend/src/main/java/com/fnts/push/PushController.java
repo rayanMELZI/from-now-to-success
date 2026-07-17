@@ -32,13 +32,16 @@ public class PushController {
     private final PushSubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
     private final AppProperties props;
+    private final WebPushSender pushSender;
 
     public PushController(PushSubscriptionRepository subscriptionRepository,
                           UserRepository userRepository,
-                          AppProperties props) {
+                          AppProperties props,
+                          WebPushSender pushSender) {
         this.subscriptionRepository = subscriptionRepository;
         this.userRepository = userRepository;
         this.props = props;
+        this.pushSender = pushSender;
     }
 
     /** The frontend needs this key to ask the browser for a push subscription. */
@@ -70,5 +73,13 @@ public class PushController {
     public void unsubscribe(@AuthenticationPrincipal CurrentUser user,
                             @Valid @RequestBody SubscribeRequest request) {
         subscriptionRepository.deleteByEndpointAndUserId(request.endpoint(), user.id());
+    }
+
+    /** Sends a real push to this user's devices right now — for verifying setup. */
+    @PostMapping("/test")
+    public Map<String, String> test(@AuthenticationPrincipal CurrentUser user) {
+        pushSender.sendToUser(user.id(), """
+                {"title":"fromNowToSuccess","body":"Test notification — your device is set up! 🎉","url":"/settings"}""");
+        return Map.of("status", "sent");
     }
 }
