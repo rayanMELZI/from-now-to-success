@@ -30,6 +30,8 @@ export default function LoginPage() {
         onSubmit={onSubmit}
         className="w-full max-w-sm space-y-4 rounded-xl border border-stone-200 bg-white p-8 shadow-sm"
       >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icons/icon-192.png" alt="fromNowToSuccess logo" className="mx-auto h-16 w-16" />
         <h1 className="text-center text-xl font-semibold">
           fromNow<span className="text-amber-600">To</span>Success
         </h1>

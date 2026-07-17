@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import { Nav } from "@/components/Nav";
+import { RegisterSW } from "@/components/RegisterSW";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,6 +18,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "fromNowToSuccess",
   description: "Your habit roadmap, from now to success",
+  appleWebApp: { capable: true, title: "FNTS", statusBarStyle: "default" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#fffbeb",
 };
 
 export default function RootLayout({
@@ -31,6 +37,7 @@ export default function RootLayout({
     >
       <body className="min-h-screen flex flex-col bg-stone-100 text-stone-800">
         <AuthProvider>
+          <RegisterSW />
           <Nav />
           <main className="flex flex-1 flex-col">{children}</main>
         </AuthProvider>

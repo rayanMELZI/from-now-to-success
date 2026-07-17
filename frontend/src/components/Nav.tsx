@@ -19,12 +19,19 @@ export function Nav() {
 
   return (
     <header className="border-b border-stone-300 bg-white">
-      <div className="mx-auto flex max-w-5xl items-center gap-6 px-4 py-3">
-        <Link href="/" className="font-semibold tracking-tight">
-          fromNow<span className="text-amber-600">To</span>Success
+      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+        <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icons/icon-192.png" alt="" className="h-7 w-7" />
+          <span className="hidden sm:inline">
+            fromNow<span className="text-amber-600">To</span>Success
+          </span>
+          <span className="sm:hidden">
+            FN<span className="text-amber-600">T</span>S
+          </span>
         </Link>
 
-        <nav className="flex gap-1 text-sm">
+        <nav className="order-last flex w-full gap-1 text-sm sm:order-0 sm:w-auto">
           {links.map((link) => (
             <Link
               key={link.href}
@@ -40,14 +47,14 @@ export function Nav() {
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-4 text-sm">
+        <div className="ml-auto flex items-center gap-3 text-sm">
           <span
             className="rounded-full bg-amber-100 px-3 py-1 font-medium text-amber-800"
             title={`${user.totalPoints} total points`}
           >
             ⭐ {user.totalPoints} · Lv {user.level}
           </span>
-          <span className="hidden text-stone-500 sm:inline">{user.username}</span>
+          <span className="hidden text-stone-500 md:inline">{user.username}</span>
           <button
             onClick={logout}
             className="text-stone-400 transition-colors hover:text-stone-700"

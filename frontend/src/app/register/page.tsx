@@ -31,6 +31,8 @@ export default function RegisterPage() {
         onSubmit={onSubmit}
         className="w-full max-w-sm space-y-4 rounded-xl border border-stone-200 bg-white p-8 shadow-sm"
       >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icons/icon-192.png" alt="fromNowToSuccess logo" className="mx-auto h-16 w-16" />
         <h1 className="text-center text-xl font-semibold">Start your roadmap</h1>
         <p className="text-center text-sm text-stone-500">
           From now to success, one habit at a time.
