@@ -122,6 +122,9 @@ public class HabitService {
         if (request.schedule() != null) {
             habit.setSchedule(request.schedule());
         }
+        if (request.habitType() != null) {
+            habit.setHabitType(request.habitType());
+        }
         if (request.prerequisiteIds() != null) {
             Set<Habit> prerequisites = new HashSet<>();
             for (Long prereqId : request.prerequisiteIds()) {

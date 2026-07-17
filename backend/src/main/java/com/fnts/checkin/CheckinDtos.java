@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.fnts.habit.HabitSchedule;
 import com.fnts.habit.HabitStatus;
+import com.fnts.habit.HabitType;
 
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -27,6 +28,7 @@ public class CheckinDtos {
             String description,
             HabitStatus status,
             HabitSchedule schedule,
+            HabitType habitType,
             int gauge,
             int currentStreak,
             int requiredStreak,

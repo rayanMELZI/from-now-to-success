@@ -65,8 +65,8 @@ public class CheckinService {
             float multiplier = GameRules.multiplier(habit.getCurrentStreak() + 1);
             int daysLeft = Periods.daysLeftInPeriod(habit.getSchedule(), today, weekStart);
             return new TodayEntry(habit.getId(), habit.getName(), habit.getDescription(),
-                    habit.getStatus(), habit.getSchedule(), habit.getGauge(),
-                    habit.getCurrentStreak(), habit.getRequiredStreak(),
+                    habit.getStatus(), habit.getSchedule(), habit.getHabitType(),
+                    habit.getGauge(), habit.getCurrentStreak(), habit.getRequiredStreak(),
                     habit.getBasePoints(), multiplier, daysLeft, todayStatus);
         }).toList();
 
