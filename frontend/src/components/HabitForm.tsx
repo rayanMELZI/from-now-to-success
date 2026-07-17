@@ -1,7 +1,78 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import type { Habit, HabitRequest, HabitSchedule, HabitType } from "@/lib/types";
+
+/* ---------- small polished controls ---------- */
+
+function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: { value: T; label: ReactNode }[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="flex rounded-lg bg-stone-100 p-1">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => onChange(option.value)}
+          className={`flex-1 rounded-md px-2 py-1.5 text-sm font-medium transition-all ${
+            value === option.value
+              ? "bg-white text-stone-800 shadow-sm"
+              : "text-stone-500 hover:text-stone-700"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Stepper({
+  value,
+  min,
+  max,
+  onChange,
+  suffix,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+  suffix?: string;
+}) {
+  const clamp = (v: number) => Math.min(max, Math.max(min, v));
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => onChange(clamp(value - 1))}
+        className="h-9 w-9 rounded-lg border border-stone-300 text-lg leading-none text-stone-600 transition-colors hover:bg-stone-100 active:scale-95"
+      >
+        −
+      </button>
+      <div className="flex h-9 min-w-16 items-center justify-center rounded-lg bg-stone-100 px-2 text-sm font-semibold tabular-nums">
+        {value}
+        {suffix && <span className="ml-1 font-normal text-stone-500">{suffix}</span>}
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange(clamp(value + 1))}
+        className="h-9 w-9 rounded-lg border border-stone-300 text-lg leading-none text-stone-600 transition-colors hover:bg-stone-100 active:scale-95"
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
+/* ---------- the form ---------- */
 
 interface HabitFormProps {
   allHabits: Habit[];
@@ -17,11 +88,15 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
   const [requiredStreak, setRequiredStreak] = useState(initial?.requiredStreak ?? 7);
   const [schedule, setSchedule] = useState<HabitSchedule>(initial?.schedule ?? "DAILY");
   const [habitType, setHabitType] = useState<HabitType>(initial?.habitType ?? "BUILD");
+  const [timesPerPeriod, setTimesPerPeriod] = useState(initial?.timesPerPeriod ?? 1);
   const [prereqIds, setPrereqIds] = useState<number[]>(initial?.prerequisiteIds ?? []);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const candidates = allHabits.filter((h) => h.id !== initial?.id);
+  const periodNoun = schedule === "WEEKLY" ? "week" : "month";
+  const streakNoun =
+    schedule === "DAILY" ? "days" : schedule === "WEEKLY" ? "weeks" : "months";
 
   function togglePrereq(id: number) {
     setPrereqIds((current) =>
@@ -41,6 +116,7 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
         requiredStreak,
         schedule,
         habitType,
+        timesPerPeriod: schedule === "DAILY" ? 1 : timesPerPeriod,
         prerequisiteIds: prereqIds,
       });
     } catch (err) {
@@ -50,123 +126,133 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
+    <form onSubmit={handleSubmit} className="space-y-4">
       <h2 className="font-semibold">{initial ? "Edit habit" : "New habit"}</h2>
 
       {error && (
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
 
-      <label className="block text-sm">
-        <span className="text-stone-600">Name</span>
+      <label className="block">
         <input
           required
           maxLength={100}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:border-amber-500 focus:outline-none"
-          placeholder="e.g. 5 prayers"
+          className="w-full rounded-lg border border-stone-300 px-3 py-2.5 text-base focus:border-amber-500 focus:ring-2 focus:ring-amber-200 focus:outline-none"
+          placeholder={habitType === "QUIT" ? "e.g. doomscrolling at night" : "e.g. 5 prayers"}
         />
       </label>
 
-      <label className="block text-sm">
-        <span className="text-stone-600">Description (optional)</span>
+      <div className="space-y-1">
+        <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
+          Goal
+        </span>
+        <Segmented
+          value={habitType}
+          onChange={setHabitType}
+          options={[
+            { value: "BUILD", label: "🌱 Build it" },
+            { value: "QUIT", label: "🚫 Quit it" },
+          ]}
+        />
+      </div>
+
+      <div className="space-y-1">
+        <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
+          Rhythm
+        </span>
+        <Segmented
+          value={schedule}
+          onChange={setSchedule}
+          options={[
+            { value: "DAILY", label: "Daily" },
+            { value: "WEEKLY", label: "Weekly" },
+            { value: "MONTHLY", label: "Monthly" },
+          ]}
+        />
+        {schedule !== "DAILY" && (
+          <div className="flex items-center justify-between rounded-lg bg-amber-50 px-3 py-2">
+            <span className="text-sm text-stone-600">Times per {periodNoun}</span>
+            <Stepper
+              value={timesPerPeriod}
+              min={1}
+              max={30}
+              onChange={setTimesPerPeriod}
+              suffix="×"
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between gap-3">
+        <div className="space-y-1">
+          <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
+            Points
+          </span>
+          <Stepper value={basePoints} min={1} max={100} onChange={setBasePoints} />
+        </div>
+        <div className="space-y-1">
+          <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
+            {streakNoun} to validate
+          </span>
+          <Stepper value={requiredStreak} min={2} max={90} onChange={setRequiredStreak} />
+        </div>
+      </div>
+
+      <label className="block">
+        <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
+          Notes (optional)
+        </span>
         <textarea
           maxLength={500}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
-          className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:border-amber-500 focus:outline-none"
+          className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200 focus:outline-none"
+          placeholder="Why this habit matters to you…"
         />
       </label>
 
-      <div className="grid grid-cols-2 gap-3">
-        <label className="block text-sm">
-          <span className="text-stone-600">Goal</span>
-          <select
-            value={habitType}
-            onChange={(e) => setHabitType(e.target.value as HabitType)}
-            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:border-amber-500 focus:outline-none"
-          >
-            <option value="BUILD">Build a good habit</option>
-            <option value="QUIT">Quit a bad habit</option>
-          </select>
-        </label>
-        <label className="block text-sm">
-          <span className="text-stone-600">Rhythm</span>
-          <select
-            value={schedule}
-            onChange={(e) => setSchedule(e.target.value as HabitSchedule)}
-            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:border-amber-500 focus:outline-none"
-          >
-            <option value="DAILY">Every day</option>
-            <option value="WEEKLY">Once a week</option>
-            <option value="MONTHLY">Once a month</option>
-          </select>
-        </label>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <label className="block text-sm">
-          <span className="text-stone-600">Points per {schedule === "DAILY" ? "day" : schedule === "WEEKLY" ? "week" : "month"}</span>
-          <input
-            type="number"
-            min={1}
-            max={100}
-            value={basePoints}
-            onChange={(e) => setBasePoints(Number(e.target.value))}
-            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:border-amber-500 focus:outline-none"
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="text-stone-600">
-            {schedule === "DAILY" ? "Days" : schedule === "WEEKLY" ? "Weeks" : "Months"} to validate
-          </span>
-          <input
-            type="number"
-            min={2}
-            max={90}
-            value={requiredStreak}
-            onChange={(e) => setRequiredStreak(Number(e.target.value))}
-            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:border-amber-500 focus:outline-none"
-          />
-        </label>
-      </div>
-
       {candidates.length > 0 && (
-        <fieldset className="text-sm">
-          <legend className="text-stone-600">
-            Prerequisites (must be valid before this unlocks)
-          </legend>
-          <div className="mt-1 max-h-32 space-y-1 overflow-y-auto rounded-md border border-stone-200 p-2">
-            {candidates.map((habit) => (
-              <label key={habit.id} className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={prereqIds.includes(habit.id)}
-                  onChange={() => togglePrereq(habit.id)}
-                />
-                <span>
+        <div className="space-y-1">
+          <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
+            Unlocks after (prerequisites)
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {candidates.map((habit) => {
+              const on = prereqIds.includes(habit.id);
+              return (
+                <button
+                  key={habit.id}
+                  type="button"
+                  onClick={() => togglePrereq(habit.id)}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
+                    on
+                      ? "border-amber-500 bg-amber-100 text-amber-900"
+                      : "border-stone-300 text-stone-500 hover:border-stone-400"
+                  }`}
+                >
+                  {on ? "✓ " : ""}
                   {habit.name}
-                  <span className="ml-1 text-xs text-stone-400">({habit.status.toLowerCase()})</span>
-                </span>
-              </label>
-            ))}
+                </button>
+              );
+            })}
           </div>
-        </fieldset>
+        </div>
       )}
 
       <div className="flex gap-2 pt-1">
         <button
           disabled={busy}
-          className="flex-1 rounded-md bg-stone-800 py-2 text-sm font-medium text-white hover:bg-stone-700 disabled:opacity-50"
+          className="flex-1 rounded-lg bg-amber-600 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-amber-500 active:scale-[0.99] disabled:opacity-50"
         >
           {busy ? "Saving…" : initial ? "Save changes" : "Add to roadmap"}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-md border border-stone-300 px-4 py-2 text-sm hover:bg-stone-100"
+          className="rounded-lg border border-stone-300 px-4 py-2.5 text-sm transition-colors hover:bg-stone-100"
         >
           Cancel
         </button>
