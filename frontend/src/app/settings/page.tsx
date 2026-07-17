@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
 import {
-  getSubscription,
   pushSupported,
+  sendTestNotification,
   subscribeToPush,
+  syncSubscription,
   unsubscribeFromPush,
 } from "@/lib/push";
 
@@ -23,9 +24,9 @@ function SettingsPage() {
   const [pushBusy, setPushBusy] = useState(false);
 
   useEffect(() => {
-    // getSubscription resolves to null when push is unsupported.
-    getSubscription()
-      .then((sub) => setPushOn(!!sub))
+    // Also re-saves the browser subscription to the backend (self-healing).
+    syncSubscription()
+      .then(setPushOn)
       .catch(() => setPushOn(false));
   }, []);
 
@@ -88,7 +89,18 @@ function SettingsPage() {
         <h2 className="font-medium">Daily reminder</h2>
 
         <label className="block text-sm">
-          <span className="text-stone-600">Your timezone</span>
+          <span className="flex items-center justify-between text-stone-600">
+            Your timezone
+            <button
+              type="button"
+              onClick={() =>
+                setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone)
+              }
+              className="rounded-full bg-amber-100 px-3 py-0.5 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-200"
+            >
+              📍 Detect automatically
+            </button>
+          </span>
           <select
             value={timezone}
             onChange={(e) => setTimezone(e.target.value)}
@@ -176,21 +188,38 @@ function SettingsPage() {
             This browser doesn&apos;t support push notifications.
           </p>
         ) : (
-          <button
-            onClick={togglePush}
-            disabled={pushBusy || pushOn === null}
-            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
-              pushOn
-                ? "border border-stone-300 hover:bg-stone-100"
-                : "bg-amber-600 text-white hover:bg-amber-500"
-            }`}
-          >
-            {pushBusy
-              ? "Working…"
-              : pushOn
-                ? "Disable notifications on this device"
-                : "Enable notifications on this device"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={togglePush}
+              disabled={pushBusy || pushOn === null}
+              className={`rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
+                pushOn
+                  ? "border border-stone-300 hover:bg-stone-100"
+                  : "bg-amber-600 text-white hover:bg-amber-500"
+              }`}
+            >
+              {pushBusy
+                ? "Working…"
+                : pushOn
+                  ? "Disable on this device"
+                  : "Enable notifications on this device"}
+            </button>
+            {pushOn && (
+              <button
+                onClick={async () => {
+                  setError(null);
+                  try {
+                    await sendTestNotification();
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "Test failed");
+                  }
+                }}
+                className="rounded-md border border-stone-300 px-4 py-2 text-sm transition-colors hover:bg-stone-100"
+              >
+                Send a test notification
+              </button>
+            )}
+          </div>
         )}
       </section>
     </div>
