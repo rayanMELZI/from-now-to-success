@@ -62,8 +62,8 @@ public class CheckinService {
             // Show the multiplier the user WOULD get by doing it today.
             float multiplier = GameRules.multiplier(habit.getCurrentStreak() + 1);
             return new TodayEntry(habit.getId(), habit.getName(), habit.getDescription(),
-                    habit.getStatus(), habit.getCurrentStreak(), habit.getRequiredStreak(),
-                    habit.getBasePoints(), multiplier, todayStatus);
+                    habit.getStatus(), habit.getGauge(), habit.getCurrentStreak(),
+                    habit.getRequiredStreak(), habit.getBasePoints(), multiplier, todayStatus);
         }).toList();
 
         boolean allChecked = !entries.isEmpty()

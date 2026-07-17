@@ -4,21 +4,26 @@ import com.fnts.habit.Habit;
 import com.fnts.habit.HabitStatus;
 
 /**
- * The rules of the game, in one place:
+ * The rules of the game, in one place.
  *
- * - Doing a habit grows its streak and earns basePoints x a streak multiplier.
- * - One missed day is forgiven (streak survives).
- * - Two consecutive misses reset the streak to zero.
- * - Three consecutive misses demote a VALID habit back to ACTIVE.
- * - Reaching requiredStreak consecutive days makes an ACTIVE habit VALID
- *   (which is what unlocks dependent habits) and pays a one-time bonus.
+ * The GAUGE is the heart of it: it fills by 1 per done day up to
+ * requiredStreak (its max), and drops by 1 per missed day. A full gauge
+ * makes an ACTIVE habit VALID (which unlocks dependents). A VALID habit
+ * survives small dips; it is demoted back to ACTIVE only when the gauge
+ * sinks below DEMOTION_RATIO of its max. Re-validation needs a full
+ * gauge again.
+ *
+ * The STREAK exists for points: basePoints x a multiplier that grows with
+ * consecutive done days. One missed day is forgiven; two consecutive
+ * misses reset the streak (but only dent the gauge by one each).
  */
 public final class GameRules {
 
     public static final int CHECKIN_BONUS = 5;
     public static final int VALIDATION_BONUS = 50;
     public static final int MISSES_TO_RESET_STREAK = 2;
-    public static final int MISSES_TO_DEMOTE = 3;
+    /** A VALID habit is demoted when gauge < ceil(requiredStreak * ratio). */
+    public static final float DEMOTION_RATIO = 0.6f;
 
     public record DayResult(int points, boolean becameValid) {}
 
@@ -26,12 +31,13 @@ public final class GameRules {
         habit.setConsecutiveMisses(0);
         habit.setCurrentStreak(habit.getCurrentStreak() + 1);
         habit.setBestStreak(Math.max(habit.getBestStreak(), habit.getCurrentStreak()));
+        habit.setGauge(Math.min(habit.getGauge() + 1, habit.getRequiredStreak()));
 
         int points = Math.round(habit.getBasePoints() * multiplier(habit.getCurrentStreak()));
 
         boolean becameValid = false;
         if (habit.getStatus() == HabitStatus.ACTIVE
-                && habit.getCurrentStreak() >= habit.getRequiredStreak()) {
+                && habit.getGauge() >= habit.getRequiredStreak()) {
             habit.setStatus(HabitStatus.VALID);
             points += VALIDATION_BONUS;
             becameValid = true;
@@ -45,11 +51,17 @@ public final class GameRules {
         if (habit.getConsecutiveMisses() >= MISSES_TO_RESET_STREAK) {
             habit.setCurrentStreak(0);
         }
+        habit.setGauge(Math.max(habit.getGauge() - 1, 0));
+
         if (habit.getStatus() == HabitStatus.VALID
-                && habit.getConsecutiveMisses() >= MISSES_TO_DEMOTE) {
+                && habit.getGauge() < demotionFloor(habit.getRequiredStreak())) {
             habit.setStatus(HabitStatus.ACTIVE);
         }
         return new DayResult(0, false);
+    }
+
+    public static int demotionFloor(int requiredStreak) {
+        return (int) Math.ceil(requiredStreak * DEMOTION_RATIO);
     }
 
     public static float multiplier(int streak) {

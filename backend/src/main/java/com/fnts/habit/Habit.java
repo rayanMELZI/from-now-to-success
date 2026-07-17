@@ -52,6 +52,10 @@ public class Habit {
     @Column(nullable = false)
     private HabitStatus status = HabitStatus.ACTIVE;
 
+    /** Validation progress: fills to requiredStreak, drops 1 per miss. */
+    @Column(nullable = false)
+    private int gauge = 0;
+
     @Column(name = "current_streak", nullable = false)
     private int currentStreak = 0;
 

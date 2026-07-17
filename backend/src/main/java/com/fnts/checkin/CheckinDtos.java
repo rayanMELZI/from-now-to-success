@@ -20,6 +20,7 @@ public class CheckinDtos {
             String name,
             String description,
             HabitStatus status,
+            int gauge,
             int currentStreak,
             int requiredStreak,
             int basePoints,
