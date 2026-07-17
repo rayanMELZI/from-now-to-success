@@ -85,7 +85,7 @@ public class CheckinService {
 
         int earned = 0;
         List<String> becameValid = new ArrayList<>();
-        int processed = 0;
+        int doneCount = 0;
 
         for (Entry entry : request.entries()) {
             Habit habit = habits.stream()
@@ -109,13 +109,16 @@ public class CheckinService {
             logRepository.save(log);
 
             earned += result.points();
-            processed++;
+            if (entry.done()) {
+                doneCount++;
+            }
             if (result.becameValid()) {
                 becameValid.add(habit.getName());
             }
         }
 
-        if (firstCheckinToday && processed > 0) {
+        // The engagement bonus rewards doing, not just reporting misses.
+        if (firstCheckinToday && doneCount > 0) {
             earned += GameRules.CHECKIN_BONUS;
         }
         user.setTotalPoints(user.getTotalPoints() + earned);
