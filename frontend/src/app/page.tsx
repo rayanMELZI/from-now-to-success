@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { RequireAuth } from "@/lib/auth";
-import type { Habit, HabitRequest } from "@/lib/types";
+import { scheduleLabel, type Habit, type HabitRequest } from "@/lib/types";
 import { IslandMap } from "@/components/IslandMap";
 import { HabitForm } from "@/components/HabitForm";
+import { GaugeBar } from "@/components/GaugeBar";
 
 function RoadmapPage() {
   const [habits, setHabits] = useState<Habit[] | null>(null);
@@ -115,26 +116,40 @@ function RoadmapPage() {
             {mode === "view" && selected && (
               <div className="space-y-3">
                 <div>
-                  <h2 className="font-semibold">{selected.name}</h2>
+                  <h2 className="font-semibold">
+                    {selected.habitType === "QUIT" ? "🚫 " : ""}
+                    {selected.name}
+                  </h2>
                   {selected.description && (
                     <p className="mt-1 text-sm text-stone-500">{selected.description}</p>
                   )}
                 </div>
 
+                <div>
+                  <p className="mb-1 text-xs uppercase tracking-wide text-stone-400">
+                    Validation gauge
+                  </p>
+                  <GaugeBar
+                    gauge={selected.gauge}
+                    max={selected.requiredStreak}
+                    valid={selected.status === "VALID"}
+                  />
+                </div>
+
                 <dl className="grid grid-cols-2 gap-2 text-sm">
                   <dt className="text-stone-500">Status</dt>
                   <dd className="font-medium">{selected.status.toLowerCase()}</dd>
+                  <dt className="text-stone-500">Rhythm</dt>
+                  <dd>{scheduleLabel[selected.schedule]}</dd>
                   <dt className="text-stone-500">Streak</dt>
                   <dd>
-                    🔥 {selected.currentStreak}/{selected.requiredStreak}
+                    🔥 {selected.currentStreak}
                     <span className="ml-1 text-xs text-stone-400">
                       (best {selected.bestStreak})
                     </span>
                   </dd>
-                  <dt className="text-stone-500">Points/day</dt>
+                  <dt className="text-stone-500">Points</dt>
                   <dd>{selected.basePoints}</dd>
-                  <dt className="text-stone-500">Misses in a row</dt>
-                  <dd>{selected.consecutiveMisses}</dd>
                 </dl>
 
                 {selected.status === "LOCKED" && (

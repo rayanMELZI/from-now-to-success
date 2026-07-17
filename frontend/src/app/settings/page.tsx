@@ -14,6 +14,8 @@ function SettingsPage() {
   const { user, refreshUser } = useAuth();
   const [timezone, setTimezone] = useState(user?.timezone ?? "UTC");
   const [reminderHour, setReminderHour] = useState(user?.reminderHour ?? 21);
+  const [dayEndHour, setDayEndHour] = useState(user?.dayEndHour ?? 0);
+  const [weekStartDay, setWeekStartDay] = useState(user?.weekStartDay ?? 1);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,7 +40,7 @@ function SettingsPage() {
     try {
       await api("/api/users/me/settings", {
         method: "PATCH",
-        body: { timezone, reminderHour },
+        body: { timezone, reminderHour, dayEndHour, weekStartDay },
       });
       await refreshUser();
       setSaved(true);
@@ -113,6 +115,44 @@ function SettingsPage() {
               </option>
             ))}
           </select>
+        </label>
+
+        <label className="block text-sm">
+          <span className="text-stone-600">My day ends at</span>
+          <select
+            value={dayEndHour}
+            onChange={(e) => setDayEndHour(Number(e.target.value))}
+            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:border-amber-500 focus:outline-none"
+          >
+            {Array.from({ length: 13 }, (_, h) => (
+              <option key={h} value={h}>
+                {h === 0 ? "midnight" : `${String(h).padStart(2, "0")}:00 (night owl)`}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-xs text-stone-400">
+            Checking in before this hour still counts for the previous day.
+          </span>
+        </label>
+
+        <label className="block text-sm">
+          <span className="text-stone-600">My week starts on</span>
+          <select
+            value={weekStartDay}
+            onChange={(e) => setWeekStartDay(Number(e.target.value))}
+            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:border-amber-500 focus:outline-none"
+          >
+            {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map(
+              (day, i) => (
+                <option key={day} value={i + 1}>
+                  {day}
+                </option>
+              ),
+            )}
+          </select>
+          <span className="mt-1 block text-xs text-stone-400">
+            Weekly habits reset on this day.
+          </span>
         </label>
 
         <button

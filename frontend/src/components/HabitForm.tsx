@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import type { Habit, HabitRequest } from "@/lib/types";
+import type { Habit, HabitRequest, HabitSchedule, HabitType } from "@/lib/types";
 
 interface HabitFormProps {
   allHabits: Habit[];
@@ -15,6 +15,8 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
   const [description, setDescription] = useState(initial?.description ?? "");
   const [basePoints, setBasePoints] = useState(initial?.basePoints ?? 10);
   const [requiredStreak, setRequiredStreak] = useState(initial?.requiredStreak ?? 7);
+  const [schedule, setSchedule] = useState<HabitSchedule>(initial?.schedule ?? "DAILY");
+  const [habitType, setHabitType] = useState<HabitType>(initial?.habitType ?? "BUILD");
   const [prereqIds, setPrereqIds] = useState<number[]>(initial?.prerequisiteIds ?? []);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -37,6 +39,8 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
         description: description || undefined,
         basePoints,
         requiredStreak,
+        schedule,
+        habitType,
         prerequisiteIds: prereqIds,
       });
     } catch (err) {
@@ -78,7 +82,33 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
 
       <div className="grid grid-cols-2 gap-3">
         <label className="block text-sm">
-          <span className="text-stone-600">Points per day</span>
+          <span className="text-stone-600">Goal</span>
+          <select
+            value={habitType}
+            onChange={(e) => setHabitType(e.target.value as HabitType)}
+            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:border-amber-500 focus:outline-none"
+          >
+            <option value="BUILD">Build a good habit</option>
+            <option value="QUIT">Quit a bad habit</option>
+          </select>
+        </label>
+        <label className="block text-sm">
+          <span className="text-stone-600">Rhythm</span>
+          <select
+            value={schedule}
+            onChange={(e) => setSchedule(e.target.value as HabitSchedule)}
+            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:border-amber-500 focus:outline-none"
+          >
+            <option value="DAILY">Every day</option>
+            <option value="WEEKLY">Once a week</option>
+            <option value="MONTHLY">Once a month</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block text-sm">
+          <span className="text-stone-600">Points per {schedule === "DAILY" ? "day" : schedule === "WEEKLY" ? "week" : "month"}</span>
           <input
             type="number"
             min={1}
@@ -89,7 +119,9 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
           />
         </label>
         <label className="block text-sm">
-          <span className="text-stone-600">Days to validate</span>
+          <span className="text-stone-600">
+            {schedule === "DAILY" ? "Days" : schedule === "WEEKLY" ? "Weeks" : "Months"} to validate
+          </span>
           <input
             type="number"
             min={2}

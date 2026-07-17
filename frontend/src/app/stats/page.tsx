@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
 import type { Habit, HistoryDay } from "@/lib/types";
+import { GaugeBar } from "@/components/GaugeBar";
 
 const POINTS_PER_LEVEL = 500;
 
@@ -170,8 +171,9 @@ function StatsPage() {
             {habits
               .filter((h) => h.status !== "LOCKED")
               .map((habit) => (
-                <li key={habit.id} className="flex items-center justify-between py-2">
-                  <span>
+                <li key={habit.id} className="flex items-center justify-between gap-4 py-2">
+                  <span className="min-w-0 flex-1">
+                    {habit.habitType === "QUIT" ? "🚫 " : ""}
                     {habit.name}
                     {habit.status === "VALID" && (
                       <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
@@ -179,8 +181,14 @@ function StatsPage() {
                       </span>
                     )}
                   </span>
-                  <span className="text-stone-500">
-                    🔥 {habit.currentStreak}/{habit.requiredStreak}
+                  <GaugeBar
+                    gauge={habit.gauge}
+                    max={habit.requiredStreak}
+                    valid={habit.status === "VALID"}
+                    className="w-36"
+                  />
+                  <span className="shrink-0 text-stone-500">
+                    🔥 {habit.currentStreak}
                     <span className="ml-2 text-xs text-stone-400">best {habit.bestStreak}</span>
                   </span>
                 </li>

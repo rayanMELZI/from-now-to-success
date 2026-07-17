@@ -264,12 +264,19 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
           );
         })}
 
-        {/* habit cells */}
+        {/* habit cells — the gauge fills the stone like liquid */}
         {placed.map(({ habit, col, row }) => {
           const [cx, cy] = center(col, row);
           const style = statusStyle[habit.status];
           const selected = habit.id === selectedId;
           const locked = habit.status === "LOCKED";
+          const cellW = CELL_W - 14;
+          const cellH = CELL_H - 14;
+          const pathD = organicCellPath(cx, cy, cellW, cellH, habit.id * 131 + 17);
+          const pct = habit.requiredStreak > 0
+            ? Math.min(1, habit.gauge / habit.requiredStreak)
+            : 0;
+          const fillColor = habit.status === "VALID" ? "#6ee7b7" : "#fcd34d";
           return (
             <g
               key={habit.id}
@@ -279,9 +286,25 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
                 onSelect(habit);
               }}
             >
+              <clipPath id={`cell-${habit.id}`}>
+                <path d={pathD} />
+              </clipPath>
+              <path d={pathD} fill={style.fill} />
+              {!locked && pct > 0 && (
+                <rect
+                  clipPath={`url(#cell-${habit.id})`}
+                  x={cx - cellW * 0.6}
+                  y={cy + cellH * 0.6 - cellH * 1.2 * pct}
+                  width={cellW * 1.2}
+                  height={cellH * 1.2 * pct}
+                  fill={fillColor}
+                  opacity={0.55}
+                  style={{ transition: "y 0.7s ease, height 0.7s ease" }}
+                />
+              )}
               <path
-                d={organicCellPath(cx, cy, CELL_W - 14, CELL_H - 14, habit.id * 131 + 17)}
-                fill={style.fill}
+                d={pathD}
+                fill="none"
                 stroke={selected ? "#d97706" : style.stroke}
                 strokeWidth={selected ? 3 : 1.8}
               />
@@ -293,15 +316,13 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
                 fontWeight={600}
                 fill={style.text}
               >
-                {locked ? "🔒 " : ""}
+                {locked ? "🔒 " : habit.habitType === "QUIT" ? "🚫 " : ""}
                 {habit.name.length > 18 ? habit.name.slice(0, 17) + "…" : habit.name}
               </text>
               <text x={cx} y={cy + 16} textAnchor="middle" fontSize={12} fill={style.text}>
-                {habit.status === "VALID"
-                  ? `✓ valid · 🔥 ${habit.currentStreak}`
-                  : locked
-                    ? "locked"
-                    : `🔥 ${habit.currentStreak}/${habit.requiredStreak}`}
+                {locked
+                  ? "locked"
+                  : `${habit.status === "VALID" ? "✓ " : ""}⚡ ${habit.gauge}/${habit.requiredStreak} · 🔥 ${habit.currentStreak}`}
               </text>
             </g>
           );
