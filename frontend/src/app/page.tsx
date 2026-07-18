@@ -62,7 +62,7 @@ function RoadmapPage() {
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold">Your roadmap</h1>
-          <p className="hidden text-sm text-stone-500 sm:block">
+          <p className="hidden text-sm text-stone-500 dark:text-stone-400 sm:block">
             Validate habits to unlock the next ones on the path to success.
           </p>
         </div>
@@ -78,7 +78,7 @@ function RoadmapPage() {
       </div>
 
       {habits.length === 0 ? (
-        <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-stone-300 text-center text-stone-500">
+        <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-stone-300 dark:border-stone-700 text-center text-stone-500 dark:text-stone-400">
           <p>Your map is empty. Add your first basic habit —</p>
           <p className="text-sm">start small: “5 prayers”, “make my bed”, “read 10 minutes”.</p>
         </div>
@@ -124,7 +124,7 @@ function RoadmapPage() {
                 {selected.name}
               </h2>
               {selected.description && (
-                <p className="mt-1 text-sm text-stone-500">{selected.description}</p>
+                <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">{selected.description}</p>
               )}
             </div>
 
@@ -140,26 +140,26 @@ function RoadmapPage() {
             </div>
 
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <dt className="text-stone-500">Status</dt>
+              <dt className="text-stone-500 dark:text-stone-400">Status</dt>
               <dd className="font-medium">{selected.status.toLowerCase()}</dd>
-              <dt className="text-stone-500">Rhythm</dt>
+              <dt className="text-stone-500 dark:text-stone-400">Rhythm</dt>
               <dd>
                 {scheduleLabel[selected.schedule]}
                 {selected.schedule !== "DAILY" && ` · ${selected.timesPerPeriod}×`}
               </dd>
-              <dt className="text-stone-500">Streak</dt>
+              <dt className="text-stone-500 dark:text-stone-400">Streak</dt>
               <dd>
                 🔥 {selected.currentStreak}
                 <span className="ml-1 text-xs text-stone-400">
                   (best {selected.bestStreak})
                 </span>
               </dd>
-              <dt className="text-stone-500">Points</dt>
+              <dt className="text-stone-500 dark:text-stone-400">Points</dt>
               <dd>{selected.basePoints}</dd>
             </dl>
 
             {selected.status === "LOCKED" && (
-              <p className="rounded-lg bg-stone-100 px-3 py-2 text-xs text-stone-500">
+              <p className="rounded-lg bg-stone-100 dark:bg-stone-800 px-3 py-2 text-xs text-stone-500 dark:text-stone-400">
                 🔒 Unlocks when all its prerequisite habits are valid.
               </p>
             )}
@@ -167,13 +167,13 @@ function RoadmapPage() {
             <div className="flex gap-2">
               <button
                 onClick={() => setMode("edit")}
-                className="flex-1 rounded-lg border border-stone-300 py-2.5 text-sm font-medium transition-colors hover:bg-stone-100"
+                className="flex-1 rounded-lg border border-stone-300 dark:border-stone-700 py-2.5 text-sm font-medium transition-colors hover:bg-stone-100 dark:hover:bg-stone-800"
               >
                 Edit
               </button>
               <button
                 onClick={deleteHabit}
-                className="rounded-lg border border-red-200 px-4 py-2.5 text-sm text-red-600 transition-colors hover:bg-red-50"
+                className="rounded-lg border border-red-200 dark:border-red-900 px-4 py-2.5 text-sm text-red-600 dark:text-red-400 transition-colors hover:bg-red-50 dark:hover:bg-red-950/50"
               >
                 Delete
               </button>

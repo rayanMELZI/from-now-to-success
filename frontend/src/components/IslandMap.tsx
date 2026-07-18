@@ -15,6 +15,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { Habit } from "@/lib/types";
+import { useTheme } from "@/lib/theme";
 
 /* ------------------------------------------------------------------ */
 /* Layout: column = prerequisite depth, rows spread middle-out.        */
@@ -79,11 +80,11 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
         selected
           ? "border-amber-500 shadow-lg shadow-amber-200/60"
           : locked
-            ? "border-stone-300"
+            ? "border-stone-300 dark:border-stone-700"
             : valid
               ? "border-emerald-700/60"
               : "border-amber-800/50"
-      } ${locked ? "bg-stone-200" : "bg-amber-50"}`}
+      } ${locked ? "bg-stone-200 dark:bg-stone-800" : "bg-amber-50 dark:bg-amber-400/10"}`}
       style={{ borderRadius: blobRadius(habit.id) }}
     >
       {/* gauge liquid */}
@@ -98,13 +99,13 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
       <div className="relative flex h-full flex-col items-center justify-center gap-1 px-3 text-center">
         <p
           className={`max-w-full truncate text-sm font-semibold ${
-            locked ? "text-stone-500" : "text-stone-800"
+            locked ? "text-stone-500 dark:text-stone-400" : "text-stone-800 dark:text-stone-100"
           }`}
         >
           {locked ? "🔒 " : habit.habitType === "QUIT" ? "🚫 " : ""}
           {habit.name}
         </p>
-        <p className={`text-xs ${locked ? "text-stone-400" : "text-stone-600"}`}>
+        <p className={`text-xs ${locked ? "text-stone-400" : "text-stone-600 dark:text-stone-300"}`}>
           {locked
             ? "locked"
             : `${valid ? "✓ " : ""}⚡ ${habit.gauge}/${habit.requiredStreak} · 🔥 ${habit.currentStreak}`}
@@ -119,11 +120,11 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
 function AnchorNode({ data }: NodeProps<Node<AnchorNodeData>>) {
   return (
     <div
-      className="flex h-26 w-37.5 flex-col items-center justify-center border-2 border-amber-800/60 bg-amber-100 shadow-sm"
+      className="flex h-26 w-37.5 flex-col items-center justify-center border-2 border-amber-800/60 bg-amber-100 dark:bg-amber-400/15 shadow-sm"
       style={{ borderRadius: blobRadius(data.label === "now" ? 5 : 9) }}
     >
       <span className="text-2xl">{data.icon}</span>
-      <span className="text-sm font-semibold text-amber-900">{data.label}</span>
+      <span className="text-sm font-semibold text-amber-900 dark:text-amber-200">{data.label}</span>
       <Handle type="target" position={Position.Left} className="invisible!" />
       <Handle type="source" position={Position.Right} className="invisible!" />
     </div>
@@ -141,6 +142,7 @@ interface IslandMapProps {
 }
 
 export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
+  const { resolved } = useTheme();
   const { nodes, edges } = useMemo(() => {
     const depths = computeDepths(habits);
     const maxDepth = habits.length ? Math.max(...depths.values()) : 0;
@@ -208,11 +210,12 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
 
   return (
     // React Flow needs a concrete height, not just min/flex sizing.
-    <div className="h-[calc(100dvh-220px)] min-h-105 overflow-hidden rounded-xl border border-stone-300 bg-stone-50">
+    <div className="h-[calc(100dvh-220px)] min-h-105 overflow-hidden rounded-xl border border-stone-300 dark:border-stone-700 bg-stone-50 dark:bg-stone-900">
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        colorMode={resolved}
         fitView
         fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
         minZoom={0.3}

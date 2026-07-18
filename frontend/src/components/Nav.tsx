@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { useTheme } from "@/lib/theme";
 
 const links = [
   { href: "/", label: "Roadmap", icon: "🗺️" },
@@ -13,13 +14,14 @@ const links = [
 
 export function Nav() {
   const { user, logout } = useAuth();
+  const { resolved, setTheme } = useTheme();
   const pathname = usePathname();
 
   if (!user) return null;
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-stone-300 bg-white/90 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-stone-300 dark:border-stone-700 bg-white/90 dark:bg-stone-900/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-3">
           <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -40,8 +42,8 @@ export function Nav() {
                 href={link.href}
                 className={`rounded-md px-3 py-1.5 transition-colors ${
                   pathname === link.href
-                    ? "bg-stone-800 text-white"
-                    : "text-stone-600 hover:bg-stone-100"
+                    ? "bg-stone-800 dark:bg-stone-600 text-white"
+                    : "text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
                 }`}
               >
                 {link.label}
@@ -50,16 +52,23 @@ export function Nav() {
           </nav>
 
           <div className="ml-auto flex items-center gap-3 text-sm">
+            <button
+              onClick={() => setTheme(resolved === "dark" ? "light" : "dark")}
+              title="Toggle dark mode"
+              className="rounded-full p-1.5 text-lg leading-none transition-colors hover:bg-stone-100 dark:hover:bg-stone-800"
+            >
+              {resolved === "dark" ? "☀️" : "🌙"}
+            </button>
             <span
-              className="rounded-full bg-amber-100 px-3 py-1 font-medium text-amber-800"
+              className="rounded-full bg-amber-100 dark:bg-amber-400/15 px-3 py-1 font-medium text-amber-800 dark:text-amber-300"
               title={`${user.totalPoints} total points`}
             >
               ⭐ {user.totalPoints} · Lv {user.level}
             </span>
-            <span className="hidden text-stone-500 md:inline">{user.username}</span>
+            <span className="hidden text-stone-500 dark:text-stone-400 md:inline">{user.username}</span>
             <button
               onClick={logout}
-              className="text-stone-400 transition-colors hover:text-stone-700"
+              className="text-stone-400 transition-colors hover:text-stone-700 dark:text-stone-200"
             >
               Log out
             </button>
@@ -68,7 +77,7 @@ export function Nav() {
       </header>
 
       {/* mobile bottom tab bar — the app-like navigation */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-stone-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-stone-200 dark:border-stone-800 bg-white/95 dark:bg-stone-900/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden">
         {links.map((link) => {
           const active = pathname === link.href;
           return (

@@ -68,11 +68,11 @@ function CheckinPage() {
     <div className="mx-auto w-full max-w-2xl flex-1 p-4">
       <div className="flex items-baseline justify-between">
         <h1 className="text-lg font-semibold">Daily check-in</h1>
-        <span className="text-xs text-stone-500">
+        <span className="text-xs text-stone-500 dark:text-stone-400">
           🧊 {today.freezesLeft} freeze{today.freezesLeft === 1 ? "" : "s"} left this month
         </span>
       </div>
-      <p className="mb-4 text-sm text-stone-500">
+      <p className="mb-4 text-sm text-stone-500 dark:text-stone-400">
         {today.date} — answer any habit as soon as you know. Honesty builds the gauge
         that counts.
       </p>
@@ -81,25 +81,25 @@ function CheckinPage() {
         <div
           className={`mb-4 rounded-xl border p-4 ${
             result.earnedPoints >= 0
-              ? "border-emerald-200 bg-emerald-50"
-              : "border-amber-200 bg-amber-50"
+              ? "border-emerald-200 dark:border-emerald-900 bg-emerald-50"
+              : "border-amber-200 bg-amber-50 dark:bg-amber-400/10"
           }`}
         >
           <p
             className={`font-medium ${
-              result.earnedPoints >= 0 ? "text-emerald-800" : "text-amber-800"
+              result.earnedPoints >= 0 ? "text-emerald-800 dark:text-emerald-300" : "text-amber-800 dark:text-amber-300"
             }`}
           >
             {result.earnedPoints >= 0 ? "+" : ""}
             {result.earnedPoints} points · Total: {result.totalPoints} (level {result.level})
           </p>
           {result.becameValid.length > 0 && (
-            <p className="mt-1 text-sm text-emerald-700">
+            <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-300">
               ✓ Now valid: {result.becameValid.join(", ")}
             </p>
           )}
           {result.unlocked.length > 0 && (
-            <p className="mt-1 text-sm text-emerald-700">
+            <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-300">
               🔓 Unlocked: {result.unlocked.join(", ")}
             </p>
           )}
@@ -107,11 +107,11 @@ function CheckinPage() {
       )}
 
       {error && (
-        <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        <p className="mb-4 rounded-md bg-red-50 dark:bg-red-950/50 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>
       )}
 
       {today.entries.length === 0 && (
-        <div className="rounded-xl border border-dashed border-stone-300 p-8 text-center text-stone-500">
+        <div className="rounded-xl border border-dashed border-stone-300 dark:border-stone-700 p-8 text-center text-stone-500 dark:text-stone-400">
           No active habits yet — add some on your roadmap first.
         </div>
       )}
@@ -138,7 +138,7 @@ function CheckinPage() {
       </div>
 
       {pending.length === 0 && today.entries.length > 0 && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center text-emerald-800">
+        <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/50 p-6 text-center text-emerald-800 dark:text-emerald-300">
           ✓ All answered for now ({today.pointsToday >= 0 ? "+" : ""}
           {today.pointsToday} points today). See you tomorrow!
         </div>
@@ -146,12 +146,12 @@ function CheckinPage() {
 
       {answered.length > 0 && (
         <div className="mt-6">
-          <h2 className="mb-2 text-sm font-medium text-stone-500">Answered</h2>
+          <h2 className="mb-2 text-sm font-medium text-stone-500 dark:text-stone-400">Answered</h2>
           <ul className="space-y-1 text-sm">
             {answered.map((entry) => (
               <li
                 key={entry.habitId}
-                className="flex justify-between rounded-md bg-white px-3 py-2"
+                className="flex justify-between rounded-md bg-white dark:bg-stone-900 px-3 py-2"
               >
                 <span>
                   {entry.habitType === "QUIT" ? "🚫 " : ""}
@@ -159,7 +159,7 @@ function CheckinPage() {
                 </span>
                 <span
                   className={
-                    entry.todayStatus === "MISSED" ? "text-stone-400" : "text-emerald-600"
+                    entry.todayStatus === "MISSED" ? "text-stone-400" : "text-emerald-600 dark:text-emerald-400"
                   }
                 >
                   {entry.todayStatus === "MISSED"
@@ -204,7 +204,7 @@ function PendingRow({
   const periodic = entry.schedule !== "DAILY";
 
   return (
-    <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="font-medium">
@@ -214,8 +214,8 @@ function PendingRow({
               <span
                 className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
                   entry.daysLeftInPeriod <= entry.timesPerPeriod - entry.doneThisPeriod
-                    ? "bg-amber-100 font-medium text-amber-800"
-                    : "bg-stone-100 text-stone-500"
+                    ? "bg-amber-100 dark:bg-amber-400/15 font-medium text-amber-800 dark:text-amber-300"
+                    : "bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400"
                 }`}
               >
                 {entry.doneThisPeriod}/{entry.timesPerPeriod} this{" "}
@@ -233,7 +233,7 @@ function PendingRow({
             />
             <span className="text-xs text-stone-400">🔥 {entry.currentStreak}</span>
             {entry.multiplier > 1 && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+              <span className="rounded-full bg-amber-100 dark:bg-amber-400/15 px-2 py-0.5 text-xs text-amber-800 dark:text-amber-300">
                 ×{entry.multiplier}
               </span>
             )}
@@ -252,7 +252,7 @@ function PendingRow({
             <button
               onClick={onMissClick}
               disabled={busy}
-              className="rounded-lg border border-stone-300 px-4 py-2.5 text-sm transition-all hover:bg-stone-100 active:scale-95 disabled:opacity-50"
+              className="rounded-lg border border-stone-300 dark:border-stone-700 px-4 py-2.5 text-sm transition-all hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95 disabled:opacity-50"
             >
               {verbs.missed}
             </button>
@@ -261,9 +261,9 @@ function PendingRow({
       </div>
 
       {missDraft && (
-        <div className="mt-3 space-y-2 rounded-lg bg-stone-50 p-3">
+        <div className="mt-3 space-y-2 rounded-lg bg-stone-50 dark:bg-stone-900 p-3">
           <label className="block text-sm">
-            <span className="text-stone-600">
+            <span className="text-stone-600 dark:text-stone-300">
               What happened? (a reason halves the point loss)
             </span>
             <textarea
@@ -271,7 +271,7 @@ function PendingRow({
               maxLength={500}
               rows={2}
               onChange={(e) => onDraftChange({ ...missDraft, reason: e.target.value })}
-              className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none"
+              className="mt-1 w-full rounded-md border border-stone-300 dark:border-stone-700 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none"
               placeholder="e.g. traveled all day, was sick…"
             />
           </label>
@@ -290,13 +290,13 @@ function PendingRow({
             <button
               onClick={() => onMissConfirm(missDraft)}
               disabled={busy}
-              className="rounded-md bg-stone-700 px-4 py-1.5 text-sm text-white hover:bg-stone-600 disabled:opacity-50"
+              className="rounded-md bg-stone-700 dark:bg-stone-600 px-4 py-1.5 text-sm text-white hover:bg-stone-600 disabled:opacity-50"
             >
               Confirm miss
             </button>
             <button
               onClick={onMissCancel}
-              className="rounded-md border border-stone-300 px-4 py-1.5 text-sm hover:bg-stone-100"
+              className="rounded-md border border-stone-300 dark:border-stone-700 px-4 py-1.5 text-sm hover:bg-stone-100 dark:hover:bg-stone-800"
             >
               Cancel
             </button>

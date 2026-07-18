@@ -44,7 +44,7 @@ export function GaugeBar({
       </div>
       <span
         className={`shrink-0 text-xs font-medium tabular-nums ${
-          full ? "text-emerald-600" : "text-stone-500"
+          full ? "text-emerald-600 dark:text-emerald-400" : "text-stone-500 dark:text-stone-400"
         }`}
       >
         {gauge}/{max}

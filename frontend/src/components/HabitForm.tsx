@@ -15,7 +15,7 @@ function Segmented<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <div className="flex rounded-lg bg-stone-100 p-1">
+    <div className="flex rounded-lg bg-stone-100 dark:bg-stone-800 p-1">
       {options.map((option) => (
         <button
           key={option.value}
@@ -23,8 +23,8 @@ function Segmented<T extends string>({
           onClick={() => onChange(option.value)}
           className={`flex-1 rounded-md px-2 py-1.5 text-sm font-medium transition-all ${
             value === option.value
-              ? "bg-white text-stone-800 shadow-sm"
-              : "text-stone-500 hover:text-stone-700"
+              ? "bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100 shadow-sm"
+              : "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:text-stone-200"
           }`}
         >
           {option.label}
@@ -53,18 +53,18 @@ function Stepper({
       <button
         type="button"
         onClick={() => onChange(clamp(value - 1))}
-        className="h-9 w-9 rounded-lg border border-stone-300 text-lg leading-none text-stone-600 transition-colors hover:bg-stone-100 active:scale-95"
+        className="h-9 w-9 rounded-lg border border-stone-300 dark:border-stone-700 text-lg leading-none text-stone-600 dark:text-stone-300 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95"
       >
         −
       </button>
-      <div className="flex h-9 min-w-16 items-center justify-center rounded-lg bg-stone-100 px-2 text-sm font-semibold tabular-nums">
+      <div className="flex h-9 min-w-16 items-center justify-center rounded-lg bg-stone-100 dark:bg-stone-800 px-2 text-sm font-semibold tabular-nums">
         {value}
-        {suffix && <span className="ml-1 font-normal text-stone-500">{suffix}</span>}
+        {suffix && <span className="ml-1 font-normal text-stone-500 dark:text-stone-400">{suffix}</span>}
       </div>
       <button
         type="button"
         onClick={() => onChange(clamp(value + 1))}
-        className="h-9 w-9 rounded-lg border border-stone-300 text-lg leading-none text-stone-600 transition-colors hover:bg-stone-100 active:scale-95"
+        className="h-9 w-9 rounded-lg border border-stone-300 dark:border-stone-700 text-lg leading-none text-stone-600 dark:text-stone-300 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95"
       >
         +
       </button>
@@ -130,7 +130,7 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
       <h2 className="font-semibold">{initial ? "Edit habit" : "New habit"}</h2>
 
       {error && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        <p className="rounded-md bg-red-50 dark:bg-red-950/50 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>
       )}
 
       <label className="block">
@@ -139,7 +139,7 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
           maxLength={100}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full rounded-lg border border-stone-300 px-3 py-2.5 text-base focus:border-amber-500 focus:ring-2 focus:ring-amber-200 focus:outline-none"
+          className="w-full rounded-lg border border-stone-300 dark:border-stone-700 px-3 py-2.5 text-base focus:border-amber-500 focus:ring-2 focus:ring-amber-200 focus:outline-none"
           placeholder={habitType === "QUIT" ? "e.g. doomscrolling at night" : "e.g. 5 prayers"}
         />
       </label>
@@ -172,8 +172,8 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
           ]}
         />
         {schedule !== "DAILY" && (
-          <div className="flex items-center justify-between rounded-lg bg-amber-50 px-3 py-2">
-            <span className="text-sm text-stone-600">Times per {periodNoun}</span>
+          <div className="flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-400/10 px-3 py-2">
+            <span className="text-sm text-stone-600 dark:text-stone-300">Times per {periodNoun}</span>
             <Stepper
               value={timesPerPeriod}
               min={1}
@@ -209,7 +209,7 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
-          className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200 focus:outline-none"
+          className="mt-1 w-full rounded-lg border border-stone-300 dark:border-stone-700 px-3 py-2 text-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200 focus:outline-none"
           placeholder="Why this habit matters to you…"
         />
       </label>
@@ -229,8 +229,8 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
                   onClick={() => togglePrereq(habit.id)}
                   className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
                     on
-                      ? "border-amber-500 bg-amber-100 text-amber-900"
-                      : "border-stone-300 text-stone-500 hover:border-stone-400"
+                      ? "border-amber-500 bg-amber-100 dark:bg-amber-400/15 text-amber-900 dark:text-amber-200"
+                      : "border-stone-300 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:border-stone-400"
                   }`}
                 >
                   {on ? "✓ " : ""}
@@ -252,7 +252,7 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-stone-300 px-4 py-2.5 text-sm transition-colors hover:bg-stone-100"
+          className="rounded-lg border border-stone-300 dark:border-stone-700 px-4 py-2.5 text-sm transition-colors hover:bg-stone-100 dark:hover:bg-stone-800"
         >
           Cancel
         </button>

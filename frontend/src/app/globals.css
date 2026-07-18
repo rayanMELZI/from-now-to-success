@@ -1,8 +1,19 @@
 @import "tailwindcss";
 
+/* class-based dark mode: .dark on <html> switches the whole app */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+/* form controls follow the theme without per-element classes */
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: var(--color-stone-800);
+  color: var(--color-stone-100);
 }
 
 body {

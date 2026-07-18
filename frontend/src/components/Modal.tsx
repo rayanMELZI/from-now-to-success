@@ -38,7 +38,7 @@ export function Modal({
         className="absolute inset-0 cursor-default bg-black/40 backdrop-blur-[2px]"
         onClick={onClose}
       />
-      <div className="animate-sheet-in relative max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-md sm:rounded-2xl sm:pb-5">
+      <div className="animate-sheet-in relative max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl bg-white dark:bg-stone-900 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-md sm:rounded-2xl sm:pb-5">
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-stone-300 sm:hidden" />
         {children}
       </div>

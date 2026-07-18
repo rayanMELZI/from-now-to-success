@@ -10,9 +10,9 @@ const POINTS_PER_LEVEL = 500;
 
 function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
-      <p className="text-xs uppercase tracking-wide text-stone-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-stone-800">{value}</p>
+    <div className="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-4 shadow-sm">
+      <p className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">{label}</p>
+      <p className="mt-1 text-2xl font-semibold text-stone-800 dark:text-stone-100">{value}</p>
       {hint && <p className="text-xs text-stone-400">{hint}</p>}
     </div>
   );
@@ -31,10 +31,10 @@ function HistoryChart({ history }: { history: HistoryDay[] }) {
   const width = days.length * (barWidth + gap);
 
   return (
-    <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-4 shadow-sm">
       <div className="mb-2 flex items-center justify-between">
         <h2 className="font-medium">Last 30 days</h2>
-        <div className="flex gap-4 text-xs text-stone-500">
+        <div className="flex gap-4 text-xs text-stone-500 dark:text-stone-400">
           <span className="flex items-center gap-1">
             <span className="inline-block h-2.5 w-2.5 rounded-sm bg-[#059669]" /> done
           </span>
@@ -115,7 +115,7 @@ function HistoryChart({ history }: { history: HistoryDay[] }) {
           </svg>
 
           {hover && (
-            <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 rounded-md bg-stone-800 px-3 py-1.5 text-xs text-white shadow">
+            <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 rounded-md bg-stone-800 dark:bg-stone-600 px-3 py-1.5 text-xs text-white shadow">
               {hover.date}: {hover.done} done · {hover.missed} missed · +{hover.points} pts
             </div>
           )}
@@ -167,9 +167,9 @@ function StatsPage() {
       <HistoryChart history={history} />
 
       {habits.length > 0 && (
-        <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-4 shadow-sm">
           <h2 className="mb-2 font-medium">Streaks</h2>
-          <ul className="divide-y divide-stone-100 text-sm">
+          <ul className="divide-y divide-stone-100 dark:divide-stone-800 text-sm">
             {habits
               .filter((h) => h.status !== "LOCKED")
               .map((habit) => (
@@ -178,7 +178,7 @@ function StatsPage() {
                     {habit.habitType === "QUIT" ? "🚫 " : ""}
                     {habit.name}
                     {habit.status === "VALID" && (
-                      <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
+                      <span className="ml-2 rounded-full bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 text-xs text-emerald-800 dark:text-emerald-300">
                         valid
                       </span>
                     )}
@@ -189,7 +189,7 @@ function StatsPage() {
                     valid={habit.status === "VALID"}
                     className="w-36"
                   />
-                  <span className="shrink-0 text-stone-500">
+                  <span className="shrink-0 text-stone-500 dark:text-stone-400">
                     🔥 {habit.currentStreak}
                     <span className="ml-2 text-xs text-stone-400">best {habit.bestStreak}</span>
                   </span>

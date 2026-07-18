@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
+import { useTheme } from "@/lib/theme";
 import {
   pushSupported,
   sendTestNotification,
@@ -13,6 +14,7 @@ import {
 
 function SettingsPage() {
   const { user, refreshUser } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [timezone, setTimezone] = useState(user?.timezone ?? "UTC");
   const [reminderHour, setReminderHour] = useState(user?.reminderHour ?? 21);
   const [dayEndHour, setDayEndHour] = useState(user?.dayEndHour ?? 0);
@@ -77,26 +79,26 @@ function SettingsPage() {
       <h1 className="mb-4 text-lg font-semibold">Settings</h1>
 
       {error && (
-        <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        <p className="mb-4 rounded-md bg-red-50 dark:bg-red-950/50 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>
       )}
       {saved && (
-        <p className="mb-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <p className="mb-4 rounded-md bg-emerald-50 dark:bg-emerald-950/50 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
           Settings saved.
         </p>
       )}
 
-      <section className="space-y-4 rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+      <section className="space-y-4 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-5 shadow-sm">
         <h2 className="font-medium">Daily reminder</h2>
 
         <label className="block text-sm">
-          <span className="flex items-center justify-between text-stone-600">
+          <span className="flex items-center justify-between text-stone-600 dark:text-stone-300">
             Your timezone
             <button
               type="button"
               onClick={() =>
                 setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone)
               }
-              className="rounded-full bg-amber-100 px-3 py-0.5 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-200"
+              className="rounded-full bg-amber-100 dark:bg-amber-400/15 px-3 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300 transition-colors hover:bg-amber-200 dark:hover:bg-amber-400/30"
             >
               📍 Detect automatically
             </button>
@@ -104,7 +106,7 @@ function SettingsPage() {
           <select
             value={timezone}
             onChange={(e) => setTimezone(e.target.value)}
-            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:border-amber-500 focus:outline-none"
+            className="mt-1 w-full rounded-md border border-stone-300 dark:border-stone-700 px-3 py-2 focus:border-amber-500 focus:outline-none"
           >
             {timezones.map((tz) => (
               <option key={tz} value={tz}>
@@ -115,11 +117,11 @@ function SettingsPage() {
         </label>
 
         <label className="block text-sm">
-          <span className="text-stone-600">Ask me about my day at</span>
+          <span className="text-stone-600 dark:text-stone-300">Ask me about my day at</span>
           <select
             value={reminderHour}
             onChange={(e) => setReminderHour(Number(e.target.value))}
-            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:border-amber-500 focus:outline-none"
+            className="mt-1 w-full rounded-md border border-stone-300 dark:border-stone-700 px-3 py-2 focus:border-amber-500 focus:outline-none"
           >
             {Array.from({ length: 24 }, (_, h) => (
               <option key={h} value={h}>
@@ -130,11 +132,11 @@ function SettingsPage() {
         </label>
 
         <label className="block text-sm">
-          <span className="text-stone-600">My day ends at</span>
+          <span className="text-stone-600 dark:text-stone-300">My day ends at</span>
           <select
             value={dayEndHour}
             onChange={(e) => setDayEndHour(Number(e.target.value))}
-            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:border-amber-500 focus:outline-none"
+            className="mt-1 w-full rounded-md border border-stone-300 dark:border-stone-700 px-3 py-2 focus:border-amber-500 focus:outline-none"
           >
             {Array.from({ length: 24 }, (_, h) => (
               <option key={h} value={h}>
@@ -150,11 +152,11 @@ function SettingsPage() {
         </label>
 
         <label className="block text-sm">
-          <span className="text-stone-600">My week starts on</span>
+          <span className="text-stone-600 dark:text-stone-300">My week starts on</span>
           <select
             value={weekStartDay}
             onChange={(e) => setWeekStartDay(Number(e.target.value))}
-            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 focus:border-amber-500 focus:outline-none"
+            className="mt-1 w-full rounded-md border border-stone-300 dark:border-stone-700 px-3 py-2 focus:border-amber-500 focus:outline-none"
           >
             {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map(
               (day, i) => (
@@ -171,15 +173,35 @@ function SettingsPage() {
 
         <button
           onClick={saveSettings}
-          className="rounded-md bg-stone-800 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700"
+          className="rounded-md bg-stone-800 dark:bg-stone-600 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700 dark:hover:bg-stone-500"
         >
           Save
         </button>
       </section>
 
-      <section className="mt-4 space-y-3 rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+      <section className="mt-4 space-y-3 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-5 shadow-sm">
+        <h2 className="font-medium">Appearance</h2>
+        <div className="flex rounded-lg bg-stone-100 dark:bg-stone-800 p-1">
+          {(["light", "system", "dark"] as const).map((option) => (
+            <button
+              key={option}
+              onClick={() => setTheme(option)}
+              className={`flex-1 rounded-md px-2 py-1.5 text-sm font-medium capitalize transition-all ${
+                theme === option
+                  ? "bg-white dark:bg-stone-600 text-stone-800 dark:text-stone-100 shadow-sm"
+                  : "text-stone-500 dark:text-stone-400"
+              }`}
+            >
+              {option === "light" ? "☀️ " : option === "dark" ? "🌙 " : "💻 "}
+              {option}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="mt-4 space-y-3 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-5 shadow-sm">
         <h2 className="font-medium">Browser notifications</h2>
-        <p className="text-sm text-stone-500">
+        <p className="text-sm text-stone-500 dark:text-stone-400">
           Get a push notification on this device at your reminder hour — only on days
           you haven&apos;t checked in yet. It never nags twice.
         </p>
@@ -194,7 +216,7 @@ function SettingsPage() {
               disabled={pushBusy || pushOn === null}
               className={`rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
                 pushOn
-                  ? "border border-stone-300 hover:bg-stone-100"
+                  ? "border border-stone-300 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800"
                   : "bg-amber-600 text-white hover:bg-amber-500"
               }`}
             >
@@ -214,7 +236,7 @@ function SettingsPage() {
                     setError(err instanceof Error ? err.message : "Test failed");
                   }
                 }}
-                className="rounded-md border border-stone-300 px-4 py-2 text-sm transition-colors hover:bg-stone-100"
+                className="rounded-md border border-stone-300 dark:border-stone-700 px-4 py-2 text-sm transition-colors hover:bg-stone-100 dark:hover:bg-stone-800"
               >
                 Send a test notification
               </button>
