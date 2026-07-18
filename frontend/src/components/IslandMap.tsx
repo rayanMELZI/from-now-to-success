@@ -14,6 +14,7 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { Ban, Check, Flame, Footprints, Lock, Sparkles, Zap } from "lucide-react";
 import type { Habit } from "@/lib/types";
 import { useTheme } from "@/lib/theme";
 
@@ -64,7 +65,7 @@ function blobRadius(seed: number): string {
 /* ------------------------------------------------------------------ */
 
 type HabitNodeData = { habit: Habit; selected: boolean };
-type AnchorNodeData = { label: string; icon: string };
+type AnchorNodeData = { label: string };
 
 function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
   const { habit, selected } = data;
@@ -98,18 +99,32 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
       )}
       <div className="relative flex h-full flex-col items-center justify-center gap-1 px-3 text-center">
         <p
-          className={`max-w-full truncate text-sm font-semibold ${
+          className={`flex max-w-full items-center gap-1 truncate text-sm font-semibold ${
             locked ? "text-stone-500 dark:text-stone-400" : "text-stone-800 dark:text-stone-100"
           }`}
         >
-          {locked ? "🔒 " : habit.habitType === "QUIT" ? "🚫 " : ""}
-          {habit.name}
+          {locked && <Lock size={12} className="shrink-0" />}
+          {!locked && habit.habitType === "QUIT" && (
+            <Ban size={12} className="shrink-0 text-red-500" />
+          )}
+          <span className="truncate">{habit.name}</span>
         </p>
-        <p className={`text-xs ${locked ? "text-stone-400" : "text-stone-600 dark:text-stone-300"}`}>
-          {locked
-            ? "locked"
-            : `${valid ? "✓ " : ""}⚡ ${habit.gauge}/${habit.requiredStreak} · 🔥 ${habit.currentStreak}`}
-        </p>
+        {locked ? (
+          <p className="text-xs text-stone-400">locked</p>
+        ) : (
+          <p
+            className={`flex items-center gap-1 text-xs ${
+              locked ? "text-stone-400" : "text-stone-600 dark:text-stone-300"
+            }`}
+          >
+            {valid && <Check size={12} className="text-emerald-600 dark:text-emerald-400" />}
+            <Zap size={11} className="text-amber-600" />
+            {habit.gauge}/{habit.requiredStreak}
+            <span className="text-stone-300 dark:text-stone-600">·</span>
+            <Flame size={11} className="text-orange-500" />
+            {habit.currentStreak}
+          </p>
+        )}
       </div>
       <Handle type="target" position={Position.Left} className="invisible!" />
       <Handle type="source" position={Position.Right} className="invisible!" />
@@ -118,12 +133,13 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
 }
 
 function AnchorNode({ data }: NodeProps<Node<AnchorNodeData>>) {
+  const Icon = data.label === "now" ? Footprints : Sparkles;
   return (
     <div
-      className="flex h-26 w-37.5 flex-col items-center justify-center border-2 border-amber-800/60 bg-amber-100 dark:bg-amber-400/15 shadow-sm"
+      className="flex h-26 w-37.5 flex-col items-center justify-center gap-1 border-2 border-amber-800/60 bg-amber-100 dark:bg-amber-400/15 shadow-sm"
       style={{ borderRadius: blobRadius(data.label === "now" ? 5 : 9) }}
     >
-      <span className="text-2xl">{data.icon}</span>
+      <Icon size={22} className="text-amber-700 dark:text-amber-300" />
       <span className="text-sm font-semibold text-amber-900 dark:text-amber-200">{data.label}</span>
       <Handle type="target" position={Position.Left} className="invisible!" />
       <Handle type="source" position={Position.Right} className="invisible!" />
@@ -159,7 +175,7 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
         id: "now",
         type: "anchor",
         position: { x: 0, y: -52 },
-        data: { label: "now", icon: "🚶" },
+        data: { label: "now" },
         draggable: false,
         selectable: false,
       },
@@ -167,7 +183,7 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
         id: "success",
         type: "anchor",
         position: { x: (maxDepth + 2) * COL_W, y: -52 },
-        data: { label: "success", icon: "✨" },
+        data: { label: "success" },
         draggable: false,
         selectable: false,
       },

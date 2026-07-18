@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
+import { MapPin, Monitor, Moon, Sun } from "lucide-react";
 import {
   pushSupported,
   sendTestNotification,
@@ -100,7 +101,7 @@ function SettingsPage() {
               }
               className="rounded-full bg-amber-100 dark:bg-amber-400/15 px-3 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300 transition-colors hover:bg-amber-200 dark:hover:bg-amber-400/30"
             >
-              📍 Detect automatically
+              <span className="flex items-center gap-1"><MapPin size={12} /> Detect automatically</span>
             </button>
           </span>
           <select
@@ -192,8 +193,10 @@ function SettingsPage() {
                   : "text-stone-500 dark:text-stone-400"
               }`}
             >
-              {option === "light" ? "☀️ " : option === "dark" ? "🌙 " : "💻 "}
-              {option}
+              <span className="flex items-center justify-center gap-1.5">
+                {option === "light" ? <Sun size={14} /> : option === "dark" ? <Moon size={14} /> : <Monitor size={14} />}
+                {option}
+              </span>
             </button>
           ))}
         </div>

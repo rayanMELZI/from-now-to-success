@@ -4,12 +4,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
+import {
+  BarChart3,
+  ListChecks,
+  Map,
+  Moon,
+  Settings,
+  Star,
+  Sun,
+} from "lucide-react";
 
 const links = [
-  { href: "/", label: "Roadmap", icon: "🗺️" },
-  { href: "/checkin", label: "Check-in", icon: "✅" },
-  { href: "/stats", label: "Stats", icon: "📊" },
-  { href: "/settings", label: "Settings", icon: "⚙️" },
+  { href: "/", label: "Roadmap", Icon: Map },
+  { href: "/checkin", label: "Check-in", Icon: ListChecks },
+  { href: "/stats", label: "Stats", Icon: BarChart3 },
+  { href: "/settings", label: "Settings", Icon: Settings },
 ];
 
 export function Nav() {
@@ -55,15 +64,15 @@ export function Nav() {
             <button
               onClick={() => setTheme(resolved === "dark" ? "light" : "dark")}
               title="Toggle dark mode"
-              className="rounded-full p-1.5 text-lg leading-none transition-colors hover:bg-stone-100 dark:hover:bg-stone-800"
+              className="rounded-full p-2 text-stone-500 dark:text-stone-400 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800"
             >
-              {resolved === "dark" ? "☀️" : "🌙"}
+              {resolved === "dark" ? <Sun size={17} /> : <Moon size={17} />}
             </button>
             <span
-              className="rounded-full bg-amber-100 dark:bg-amber-400/15 px-3 py-1 font-medium text-amber-800 dark:text-amber-300"
+              className="flex items-center gap-1.5 rounded-full bg-amber-100 dark:bg-amber-400/15 px-3 py-1 font-medium text-amber-800 dark:text-amber-300"
               title={`${user.totalPoints} total points`}
             >
-              ⭐ {user.totalPoints} · Lv {user.level}
+              <Star size={13} fill="currentColor" /> {user.totalPoints} · Lv {user.level}
             </span>
             <span className="hidden text-stone-500 dark:text-stone-400 md:inline">{user.username}</span>
             <button
@@ -84,13 +93,13 @@ export function Nav() {
             <Link
               key={link.href}
               href={link.href}
-              className={`flex flex-col items-center gap-0.5 py-2 text-[11px] font-medium transition-colors ${
-                active ? "text-amber-700" : "text-stone-400"
+              className={`flex flex-col items-center gap-1 py-2 text-[11px] font-medium transition-colors ${
+                active
+                  ? "text-amber-700 dark:text-amber-400"
+                  : "text-stone-400 dark:text-stone-500"
               }`}
             >
-              <span className={`text-xl leading-none ${active ? "" : "grayscale opacity-70"}`}>
-                {link.icon}
-              </span>
+              <link.Icon size={20} strokeWidth={active ? 2.4 : 1.8} />
               {link.label}
             </Link>
           );

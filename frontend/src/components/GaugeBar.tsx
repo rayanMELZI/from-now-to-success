@@ -1,5 +1,7 @@
 "use client";
 
+import { Sparkles } from "lucide-react";
+
 /**
  * The habit gauge: fills toward validation, drops on misses.
  * The small tick marks the demotion floor (60%) — a VALID habit that
@@ -48,7 +50,7 @@ export function GaugeBar({
         }`}
       >
         {gauge}/{max}
-        {full && " ✦"}
+        {full && <Sparkles size={11} className="ml-0.5 inline text-emerald-500" />}
       </span>
     </div>
   );

@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent, type ReactNode } from "react";
 import type { Habit, HabitRequest, HabitSchedule, HabitType } from "@/lib/types";
+import { Ban, Sprout } from "lucide-react";
 
 /* ---------- small polished controls ---------- */
 
@@ -152,8 +153,8 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
           value={habitType}
           onChange={setHabitType}
           options={[
-            { value: "BUILD", label: "🌱 Build it" },
-            { value: "QUIT", label: "🚫 Quit it" },
+            { value: "BUILD", label: <span className="flex items-center justify-center gap-1.5"><Sprout size={14} className="text-emerald-600" />Build it</span> },
+            { value: "QUIT", label: <span className="flex items-center justify-center gap-1.5"><Ban size={14} className="text-red-500" />Quit it</span> },
           ]}
         />
       </div>

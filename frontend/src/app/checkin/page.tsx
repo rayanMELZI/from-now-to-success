@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
 import { habitVerbs, type CheckinResult, type TodayEntry, type TodayResponse } from "@/lib/types";
 import { GaugeBar } from "@/components/GaugeBar";
+import { Ban, Check, Flame, Snowflake, X } from "lucide-react";
 
 interface MissDraft {
   habitId: number;
@@ -68,8 +69,8 @@ function CheckinPage() {
     <div className="mx-auto w-full max-w-2xl flex-1 p-4">
       <div className="flex items-baseline justify-between">
         <h1 className="text-lg font-semibold">Daily check-in</h1>
-        <span className="text-xs text-stone-500 dark:text-stone-400">
-          🧊 {today.freezesLeft} freeze{today.freezesLeft === 1 ? "" : "s"} left this month
+        <span className="flex items-center gap-1 text-xs text-stone-500 dark:text-stone-400">
+          <Snowflake size={12} className="text-sky-500" /> {today.freezesLeft} freeze{today.freezesLeft === 1 ? "" : "s"} left this month
         </span>
       </div>
       <p className="mb-4 text-sm text-stone-500 dark:text-stone-400">
@@ -153,8 +154,8 @@ function CheckinPage() {
                 key={entry.habitId}
                 className="flex justify-between rounded-md bg-white dark:bg-stone-900 px-3 py-2"
               >
-                <span>
-                  {entry.habitType === "QUIT" ? "🚫 " : ""}
+                <span className="flex items-center gap-1.5">
+                  {entry.habitType === "QUIT" && <Ban size={13} className="text-red-500" />}
                   {entry.name}
                 </span>
                 <span
@@ -207,8 +208,8 @@ function PendingRow({
     <div className="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="font-medium">
-            {entry.habitType === "QUIT" ? "🚫 " : ""}
+          <p className="flex flex-wrap items-center gap-1.5 font-medium">
+            {entry.habitType === "QUIT" && <Ban size={14} className="text-red-500" />}
             {entry.name}
             {periodic && (
               <span
@@ -231,7 +232,7 @@ function PendingRow({
               valid={entry.status === "VALID"}
               className="max-w-40"
             />
-            <span className="text-xs text-stone-400">🔥 {entry.currentStreak}</span>
+            <span className="flex items-center gap-0.5 text-xs text-stone-400"><Flame size={12} className="text-orange-500" />{entry.currentStreak}</span>
             {entry.multiplier > 1 && (
               <span className="rounded-full bg-amber-100 dark:bg-amber-400/15 px-2 py-0.5 text-xs text-amber-800 dark:text-amber-300">
                 ×{entry.multiplier}
@@ -246,7 +247,7 @@ function PendingRow({
             disabled={busy}
             className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-500 active:scale-95 disabled:opacity-50"
           >
-            {busy ? "…" : verbs.did}
+            <span className="flex items-center gap-1.5"><Check size={15} />{busy ? "…" : verbs.did}</span>
           </button>
           {!periodic && (
             <button
@@ -254,7 +255,7 @@ function PendingRow({
               disabled={busy}
               className="rounded-lg border border-stone-300 dark:border-stone-700 px-4 py-2.5 text-sm transition-all hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95 disabled:opacity-50"
             >
-              {verbs.missed}
+              <span className="flex items-center gap-1.5"><X size={15} />{verbs.missed}</span>
             </button>
           )}
         </div>
@@ -282,8 +283,8 @@ function PendingRow({
               disabled={freezesLeft <= 0}
               onChange={(e) => onDraftChange({ ...missDraft, freeze: e.target.checked })}
             />
-            <span className={freezesLeft <= 0 ? "text-stone-400" : ""}>
-              🧊 Use a streak freeze — gauge and streak untouched ({freezesLeft} left)
+            <span className={`flex items-center gap-1 ${freezesLeft <= 0 ? "text-stone-400" : ""}`}>
+              <Snowflake size={13} className="text-sky-500" /> Use a streak freeze — gauge and streak untouched ({freezesLeft} left)
             </span>
           </label>
           <div className="flex gap-2">

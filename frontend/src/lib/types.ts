@@ -88,8 +88,8 @@ export interface HistoryDay {
 /** Wording flips for QUIT habits: success = avoiding it. */
 export function habitVerbs(type: HabitType) {
   return type === "QUIT"
-    ? { did: "Avoided it ✓", missed: "Relapsed ✗", question: "avoid" }
-    : { did: "Did it ✓", missed: "Missed ✗", question: "do" };
+    ? { did: "Avoided it", missed: "Relapsed", question: "avoid" }
+    : { did: "Did it", missed: "Missed", question: "do" };
 }
 
 export const scheduleLabel: Record<HabitSchedule, string> = {

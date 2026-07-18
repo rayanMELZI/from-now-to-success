@@ -8,6 +8,7 @@ import { IslandMap } from "@/components/IslandMap";
 import { HabitForm } from "@/components/HabitForm";
 import { GaugeBar } from "@/components/GaugeBar";
 import { Modal } from "@/components/Modal";
+import { Ban, Flame, Lock } from "lucide-react";
 
 function RoadmapPage() {
   const [habits, setHabits] = useState<Habit[] | null>(null);
@@ -119,8 +120,8 @@ function RoadmapPage() {
         {selected && (
           <div className="space-y-4">
             <div>
-              <h2 className="text-lg font-semibold">
-                {selected.habitType === "QUIT" ? "🚫 " : ""}
+              <h2 className="flex items-center gap-2 text-lg font-semibold">
+                {selected.habitType === "QUIT" && <Ban size={17} className="text-red-500" />}
                 {selected.name}
               </h2>
               {selected.description && (
@@ -148,8 +149,8 @@ function RoadmapPage() {
                 {selected.schedule !== "DAILY" && ` · ${selected.timesPerPeriod}×`}
               </dd>
               <dt className="text-stone-500 dark:text-stone-400">Streak</dt>
-              <dd>
-                🔥 {selected.currentStreak}
+              <dd className="flex items-center gap-1">
+                <Flame size={14} className="text-orange-500" /> {selected.currentStreak}
                 <span className="ml-1 text-xs text-stone-400">
                   (best {selected.bestStreak})
                 </span>
@@ -159,8 +160,8 @@ function RoadmapPage() {
             </dl>
 
             {selected.status === "LOCKED" && (
-              <p className="rounded-lg bg-stone-100 dark:bg-stone-800 px-3 py-2 text-xs text-stone-500 dark:text-stone-400">
-                🔒 Unlocks when all its prerequisite habits are valid.
+              <p className="flex items-center gap-1.5 rounded-lg bg-stone-100 dark:bg-stone-800 px-3 py-2 text-xs text-stone-500 dark:text-stone-400">
+                <Lock size={13} /> Unlocks when all its prerequisite habits are valid.
               </p>
             )}
 
