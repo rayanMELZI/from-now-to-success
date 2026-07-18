@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
 import type { Habit, HistoryDay } from "@/lib/types";
 import { GaugeBar } from "@/components/GaugeBar";
+import { Ban, Flame } from "lucide-react";
 
 const POINTS_PER_LEVEL = 500;
 
@@ -18,17 +19,51 @@ function StatTile({ label, value, hint }: { label: string; value: string; hint?:
   );
 }
 
-/** Last-30-days stacked bars: done (emerald) over missed (gray). */
+/** yyyy-mm-dd in local time; noon-UTC parsing sidesteps DST/offset issues. */
+function shiftDate(date: string, deltaDays: number): string {
+  const d = new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + deltaDays);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Last-30-days stacked bars: done (emerald) over missed (gray).
+ * Drawn in real pixels from the measured container width — no SVG
+ * scaling, so bars and labels never distort. Missing days are
+ * zero-filled to keep the time axis continuous.
+ */
 function HistoryChart({ history }: { history: HistoryDay[] }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
   const [hover, setHover] = useState<HistoryDay | null>(null);
 
-  const days = history.slice(-30);
-  const maxTotal = Math.max(1, ...days.map((d) => d.done + d.missed));
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) =>
+      setWidth(entries[0].contentRect.width),
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
-  const barWidth = 16;
-  const gap = 4;
-  const chartHeight = 120;
-  const width = days.length * (barWidth + gap);
+  const days = useMemo(() => {
+    const byDate = new Map(history.map((d) => [d.date, d]));
+    const localToday = new Date().toLocaleDateString("sv"); // yyyy-mm-dd
+    const lastData = history.length ? history[history.length - 1].date : localToday;
+    const end = lastData > localToday ? lastData : localToday;
+    return Array.from({ length: 30 }, (_, i) => {
+      const date = shiftDate(end, i - 29);
+      return byDate.get(date) ?? { date, done: 0, missed: 0, points: 0 };
+    });
+  }, [history]);
+
+  const maxTotal = Math.max(1, ...days.map((d) => d.done + d.missed));
+  const chartHeight = 130;
+  const gap = 3;
+  const barWidth = width > 0
+    ? Math.max(3, (width - (days.length - 1) * gap) / days.length)
+    : 0;
 
   return (
     <div className="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-4 shadow-sm">
@@ -44,79 +79,77 @@ function HistoryChart({ history }: { history: HistoryDay[] }) {
         </div>
       </div>
 
-      {days.length === 0 ? (
+      {history.length === 0 ? (
         <p className="py-8 text-center text-sm text-stone-400">
           No history yet — check in for a few days and your progress shows up here.
         </p>
       ) : (
-        <div className="relative">
-          {/* viewBox + w-full: the chart scales to any screen width */}
-          <svg
-            viewBox={`0 0 ${width} ${chartHeight + 18}`}
-            className="h-auto w-full"
-            preserveAspectRatio="none"
-            style={{ maxHeight: 180 }}
-          >
-            {days.map((day, i) => {
-              const x = i * (barWidth + gap);
-              const doneH = (day.done / maxTotal) * chartHeight;
-              const missedH = (day.missed / maxTotal) * chartHeight;
-              const hovered = hover?.date === day.date;
-              return (
-                <g
-                  key={day.date}
-                  onMouseEnter={() => setHover(day)}
-                  onMouseLeave={() => setHover(null)}
-                  opacity={hover && !hovered ? 0.55 : 1}
-                >
-                  {/* hit target bigger than the mark */}
-                  <rect
-                    x={x}
-                    y={0}
-                    width={barWidth + gap}
-                    height={chartHeight}
-                    fill="transparent"
-                  />
-                  {day.missed > 0 && (
+        <div ref={containerRef} className="relative">
+          {width > 0 && (
+            <svg width={width} height={chartHeight + 18}>
+              {days.map((day, i) => {
+                const x = i * (barWidth + gap);
+                const doneH = (day.done / maxTotal) * chartHeight;
+                const missedH = (day.missed / maxTotal) * chartHeight;
+                const hovered = hover?.date === day.date;
+                return (
+                  <g
+                    key={day.date}
+                    onMouseEnter={() => setHover(day)}
+                    onMouseLeave={() => setHover(null)}
+                    opacity={hover && !hovered ? 0.55 : 1}
+                  >
+                    {/* hit target bigger than the mark */}
                     <rect
                       x={x}
-                      y={chartHeight - missedH}
-                      width={barWidth}
-                      height={missedH}
-                      fill="#78716c"
-                      rx={2}
+                      y={0}
+                      width={barWidth + gap}
+                      height={chartHeight}
+                      fill="transparent"
                     />
-                  )}
-                  {day.done > 0 && (
-                    <rect
-                      x={x}
-                      // 2px surface gap between stacked segments
-                      y={chartHeight - missedH - doneH - (day.missed > 0 ? 2 : 0)}
-                      width={barWidth}
-                      height={doneH}
-                      fill="#059669"
-                      rx={2}
-                    />
-                  )}
-                  {i % 7 === 0 && (
-                    <text
-                      x={x + barWidth / 2}
-                      y={chartHeight + 14}
-                      textAnchor="middle"
-                      fontSize={9}
-                      fill="#a8a29e"
-                    >
-                      {day.date.slice(5)}
-                    </text>
-                  )}
-                </g>
-              );
-            })}
-          </svg>
+                    {day.missed > 0 && (
+                      <rect
+                        x={x}
+                        y={chartHeight - missedH}
+                        width={barWidth}
+                        height={missedH}
+                        fill="#78716c"
+                        rx={2}
+                      />
+                    )}
+                    {day.done > 0 && (
+                      <rect
+                        x={x}
+                        // 2px surface gap between stacked segments
+                        y={chartHeight - missedH - doneH - (day.missed > 0 ? 2 : 0)}
+                        width={barWidth}
+                        height={doneH}
+                        fill="#059669"
+                        rx={2}
+                      />
+                    )}
+                    {i % 7 === 1 && (
+                      <text
+                        x={x + barWidth / 2}
+                        y={chartHeight + 14}
+                        textAnchor="middle"
+                        fontSize={9}
+                        fill="#a8a29e"
+                      >
+                        {day.date.slice(5)}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+          )}
 
           {hover && (
-            <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 rounded-md bg-stone-800 dark:bg-stone-600 px-3 py-1.5 text-xs text-white shadow">
-              {hover.date}: {hover.done} done · {hover.missed} missed · +{hover.points} pts
+            <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 rounded-md bg-stone-800 dark:bg-stone-600 px-3 py-1.5 text-xs whitespace-nowrap text-white shadow">
+              {hover.date}: {hover.done} done · {hover.missed} missed ·{" "}
+              {hover.points >= 0 ? "+" : ""}
+              {hover.points} pts
             </div>
           )}
         </div>
@@ -174,8 +207,8 @@ function StatsPage() {
               .filter((h) => h.status !== "LOCKED")
               .map((habit) => (
                 <li key={habit.id} className="flex items-center justify-between gap-4 py-2">
-                  <span className="min-w-0 flex-1">
-                    {habit.habitType === "QUIT" ? "🚫 " : ""}
+                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                    {habit.habitType === "QUIT" && <Ban size={13} className="shrink-0 text-red-500" />}
                     {habit.name}
                     {habit.status === "VALID" && (
                       <span className="ml-2 rounded-full bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 text-xs text-emerald-800 dark:text-emerald-300">
@@ -189,8 +222,8 @@ function StatsPage() {
                     valid={habit.status === "VALID"}
                     className="w-36"
                   />
-                  <span className="shrink-0 text-stone-500 dark:text-stone-400">
-                    🔥 {habit.currentStreak}
+                  <span className="flex shrink-0 items-center gap-1 text-stone-500 dark:text-stone-400">
+                    <Flame size={13} className="text-orange-500" /> {habit.currentStreak}
                     <span className="ml-2 text-xs text-stone-400">best {habit.bestStreak}</span>
                   </span>
                 </li>
