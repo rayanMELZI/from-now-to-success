@@ -24,8 +24,10 @@ public final class GameRules {
     public static final int MISSES_TO_RESET_STREAK = 2;
     /** A VALID habit is demoted when gauge < ceil(requiredStreak * ratio). */
     public static final float DEMOTION_RATIO = 0.6f;
-    /** Streak freezes available per user per calendar month. */
+    /** Streak freezes (daily + weekly habits) per user per calendar month. */
     public static final int FREEZES_PER_MONTH = 3;
+    /** Deep Freezes (monthly habits) per user per rolling 3 months. */
+    public static final int DEEP_FREEZES_PER_QUARTER = 1;
 
     public record DayResult(int points, boolean becameValid) {}
 

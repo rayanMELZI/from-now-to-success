@@ -58,7 +58,7 @@ export interface TodayEntry {
   daysLeftInPeriod: number;
   timesPerPeriod: number;
   doneThisPeriod: number;
-  todayStatus: "DONE" | "MISSED" | "PENDING" | "DONE_TODAY";
+  todayStatus: "DONE" | "MISSED" | "PENDING" | "DONE_TODAY" | "FROZEN";
 }
 
 export interface TodayResponse {
@@ -66,6 +66,7 @@ export interface TodayResponse {
   allChecked: boolean;
   pointsToday: number;
   freezesLeft: number;
+  deepFreezesLeft: number;
   entries: TodayEntry[];
 }
 
@@ -74,6 +75,7 @@ export interface CheckinResult {
   totalPoints: number;
   level: number;
   freezesLeft: number;
+  deepFreezesLeft: number;
   becameValid: string[];
   unlocked: string[];
 }

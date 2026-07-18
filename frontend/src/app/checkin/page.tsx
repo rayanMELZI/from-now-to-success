@@ -67,10 +67,19 @@ function CheckinPage() {
 
   return (
     <div className="mx-auto w-full max-w-2xl flex-1 p-4">
-      <div className="flex items-baseline justify-between">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="text-lg font-semibold">Daily check-in</h1>
-        <span className="flex items-center gap-1 text-xs text-stone-500 dark:text-stone-400">
-          <Snowflake size={12} className="text-sky-500" /> {today.freezesLeft} freeze{today.freezesLeft === 1 ? "" : "s"} left this month
+        <span className="flex items-center gap-3 text-xs text-stone-500 dark:text-stone-400">
+          <span className="flex items-center gap-1" title="Freezes for daily & weekly habits">
+            <Snowflake size={12} className="text-sky-500" /> {today.freezesLeft} left
+          </span>
+          <span
+            className="flex items-center gap-1"
+            title="Deep Freeze for monthly habits — one every 3 months"
+          >
+            <Snowflake size={12} className="text-rose-500" />{" "}
+            {today.deepFreezesLeft > 0 ? "Deep Freeze ready" : "Deep Freeze used"}
+          </span>
         </span>
       </div>
       <p className="mb-4 text-sm text-stone-500 dark:text-stone-400">
@@ -82,13 +91,15 @@ function CheckinPage() {
         <div
           className={`mb-4 rounded-xl border p-4 ${
             result.earnedPoints >= 0
-              ? "border-emerald-200 dark:border-emerald-900 bg-emerald-50"
+              ? "border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/50"
               : "border-amber-200 bg-amber-50 dark:bg-amber-400/10"
           }`}
         >
           <p
             className={`font-medium ${
-              result.earnedPoints >= 0 ? "text-emerald-800 dark:text-emerald-300" : "text-amber-800 dark:text-amber-300"
+              result.earnedPoints >= 0
+                ? "text-emerald-800 dark:text-emerald-300"
+                : "text-amber-800 dark:text-amber-300"
             }`}
           >
             {result.earnedPoints >= 0 ? "+" : ""}
@@ -108,7 +119,9 @@ function CheckinPage() {
       )}
 
       {error && (
-        <p className="mb-4 rounded-md bg-red-50 dark:bg-red-950/50 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>
+        <p className="mb-4 rounded-md bg-red-50 dark:bg-red-950/50 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+          {error}
+        </p>
       )}
 
       {today.entries.length === 0 && (
@@ -125,9 +138,10 @@ function CheckinPage() {
             busy={busyId === entry.habitId}
             missDraft={missDraft?.habitId === entry.habitId ? missDraft : null}
             freezesLeft={today.freezesLeft}
+            deepFreezesLeft={today.deepFreezesLeft}
             onDone={() => answer(entry.habitId, true)}
-            onMissClick={() =>
-              setMissDraft({ habitId: entry.habitId, reason: "", freeze: false })
+            onMissClick={(freeze) =>
+              setMissDraft({ habitId: entry.habitId, reason: "", freeze })
             }
             onMissConfirm={(draft) =>
               answer(entry.habitId, false, draft.reason, draft.freeze)
@@ -147,7 +161,9 @@ function CheckinPage() {
 
       {answered.length > 0 && (
         <div className="mt-6">
-          <h2 className="mb-2 text-sm font-medium text-stone-500 dark:text-stone-400">Answered</h2>
+          <h2 className="mb-2 text-sm font-medium text-stone-500 dark:text-stone-400">
+            Answered
+          </h2>
           <ul className="space-y-1 text-sm">
             {answered.map((entry) => (
               <li
@@ -155,22 +171,12 @@ function CheckinPage() {
                 className="flex justify-between rounded-md bg-white dark:bg-stone-900 px-3 py-2"
               >
                 <span className="flex items-center gap-1.5">
-                  {entry.habitType === "QUIT" && <Ban size={13} className="text-red-500" />}
+                  {entry.habitType === "QUIT" && (
+                    <Ban size={13} className="text-red-500" />
+                  )}
                   {entry.name}
                 </span>
-                <span
-                  className={
-                    entry.todayStatus === "MISSED" ? "text-stone-400" : "text-emerald-600 dark:text-emerald-400"
-                  }
-                >
-                  {entry.todayStatus === "MISSED"
-                    ? "missed"
-                    : entry.todayStatus === "DONE_TODAY"
-                      ? `done today · ${entry.doneThisPeriod}/${entry.timesPerPeriod} this ${entry.schedule === "WEEKLY" ? "week" : "month"}`
-                      : entry.habitType === "QUIT"
-                        ? "avoided ✓"
-                        : "done ✓"}
-                </span>
+                <AnsweredStatus entry={entry} />
               </li>
             ))}
           </ul>
@@ -180,11 +186,112 @@ function CheckinPage() {
   );
 }
 
+function AnsweredStatus({ entry }: { entry: TodayEntry }) {
+  if (entry.todayStatus === "FROZEN") {
+    const deep = entry.schedule === "MONTHLY";
+    return (
+      <span
+        className={`flex items-center gap-1 ${deep ? "text-rose-500" : "text-sky-500"}`}
+      >
+        <Snowflake size={13} /> {deep ? "deep-frozen" : "frozen"}
+      </span>
+    );
+  }
+  if (entry.todayStatus === "MISSED") {
+    return <span className="text-stone-400">missed</span>;
+  }
+  return (
+    <span className="text-emerald-600 dark:text-emerald-400">
+      {entry.todayStatus === "DONE_TODAY"
+        ? `done today · ${entry.doneThisPeriod}/${entry.timesPerPeriod} this ${entry.schedule === "WEEKLY" ? "week" : "month"}`
+        : entry.habitType === "QUIT"
+          ? "avoided ✓"
+          : "done ✓"}
+    </span>
+  );
+}
+
+/** The pretty freeze switch: an ice card that lights up when armed. */
+function FreezeToggle({
+  active,
+  disabled,
+  deep,
+  quota,
+  onToggle,
+  locked,
+}: {
+  active: boolean;
+  disabled: boolean;
+  deep: boolean;
+  quota: string;
+  onToggle?: () => void;
+  locked?: boolean; // periodic skips: the freeze is the whole point, not optional
+}) {
+  const palette = deep
+    ? {
+        on: "border-rose-400 bg-rose-50 dark:bg-rose-950/40 shadow-rose-200/50 dark:shadow-rose-900/30",
+        icon: "bg-rose-500 text-white",
+        iconOff: "bg-rose-100 dark:bg-rose-900/50 text-rose-500",
+        text: "text-rose-700 dark:text-rose-300",
+        track: "bg-rose-500",
+      }
+    : {
+        on: "border-sky-400 bg-sky-50 dark:bg-sky-950/40 shadow-sky-200/50 dark:shadow-sky-900/30",
+        icon: "bg-sky-500 text-white",
+        iconOff: "bg-sky-100 dark:bg-sky-900/50 text-sky-500",
+        text: "text-sky-700 dark:text-sky-300",
+        track: "bg-sky-500",
+      };
+
+  return (
+    <button
+      type="button"
+      disabled={disabled || locked}
+      onClick={onToggle}
+      className={`flex w-full items-center gap-3 rounded-xl border-2 p-3 text-left transition-all ${
+        active
+          ? `${palette.on} shadow-md`
+          : "border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600"
+      } ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
+    >
+      <span
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all ${
+          active ? `${palette.icon} scale-110` : palette.iconOff
+        }`}
+      >
+        <Snowflake size={18} className={active ? "animate-pulse" : ""} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className={`block text-sm font-semibold ${active ? palette.text : ""}`}>
+          {deep ? "Deep Freeze" : "Streak freeze"}
+        </span>
+        <span className="block text-xs text-stone-500 dark:text-stone-400">
+          Gauge and streak stay untouched · {quota}
+        </span>
+      </span>
+      {!locked && (
+        <span
+          className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+            active ? palette.track : "bg-stone-300 dark:bg-stone-600"
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
+              active ? "left-5.5" : "left-0.5"
+            }`}
+          />
+        </span>
+      )}
+    </button>
+  );
+}
+
 function PendingRow({
   entry,
   busy,
   missDraft,
   freezesLeft,
+  deepFreezesLeft,
   onDone,
   onMissClick,
   onMissConfirm,
@@ -195,14 +302,18 @@ function PendingRow({
   busy: boolean;
   missDraft: MissDraft | null;
   freezesLeft: number;
+  deepFreezesLeft: number;
   onDone: () => void;
-  onMissClick: () => void;
+  onMissClick: (freeze: boolean) => void;
   onMissConfirm: (draft: MissDraft) => void;
   onMissCancel: () => void;
   onDraftChange: (draft: MissDraft) => void;
 }) {
   const verbs = habitVerbs(entry.habitType);
   const periodic = entry.schedule !== "DAILY";
+  const deep = entry.schedule === "MONTHLY";
+  const freezeQuotaLeft = deep ? deepFreezesLeft : freezesLeft;
+  const periodNoun = entry.schedule === "WEEKLY" ? "week" : "month";
 
   return (
     <div className="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-4 shadow-sm">
@@ -213,15 +324,14 @@ function PendingRow({
             {entry.name}
             {periodic && (
               <span
-                className={`ml-2 rounded-full px-2 py-0.5 text-xs ${
+                className={`rounded-full px-2 py-0.5 text-xs ${
                   entry.daysLeftInPeriod <= entry.timesPerPeriod - entry.doneThisPeriod
                     ? "bg-amber-100 dark:bg-amber-400/15 font-medium text-amber-800 dark:text-amber-300"
                     : "bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400"
                 }`}
               >
-                {entry.doneThisPeriod}/{entry.timesPerPeriod} this{" "}
-                {entry.schedule === "WEEKLY" ? "week" : "month"} · {entry.daysLeftInPeriod}{" "}
-                day{entry.daysLeftInPeriod === 1 ? "" : "s"} left
+                {entry.doneThisPeriod}/{entry.timesPerPeriod} this {periodNoun} ·{" "}
+                {entry.daysLeftInPeriod} day{entry.daysLeftInPeriod === 1 ? "" : "s"} left
               </span>
             )}
           </p>
@@ -232,7 +342,10 @@ function PendingRow({
               valid={entry.status === "VALID"}
               className="max-w-40"
             />
-            <span className="flex items-center gap-0.5 text-xs text-stone-400"><Flame size={12} className="text-orange-500" />{entry.currentStreak}</span>
+            <span className="flex items-center gap-0.5 text-xs text-stone-400">
+              <Flame size={12} className="text-orange-500" />
+              {entry.currentStreak}
+            </span>
             {entry.multiplier > 1 && (
               <span className="rounded-full bg-amber-100 dark:bg-amber-400/15 px-2 py-0.5 text-xs text-amber-800 dark:text-amber-300">
                 ×{entry.multiplier}
@@ -247,22 +360,53 @@ function PendingRow({
             disabled={busy}
             className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-500 active:scale-95 disabled:opacity-50"
           >
-            <span className="flex items-center gap-1.5"><Check size={15} />{busy ? "…" : verbs.did}</span>
+            <span className="flex items-center gap-1.5">
+              <Check size={15} />
+              {busy ? "…" : verbs.did}
+            </span>
           </button>
-          {!periodic && (
+          {periodic ? (
             <button
-              onClick={onMissClick}
+              onClick={() => onMissClick(true)}
+              disabled={busy || freezeQuotaLeft <= 0}
+              title={
+                freezeQuotaLeft <= 0
+                  ? deep
+                    ? "Deep Freeze already used (one every 3 months)"
+                    : "No freezes left this month"
+                  : `Skip this ${periodNoun} with a ${deep ? "Deep Freeze" : "freeze"}`
+              }
+              className={`rounded-lg border px-4 py-2.5 text-sm transition-all active:scale-95 disabled:opacity-40 ${
+                deep
+                  ? "border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                  : "border-sky-300 dark:border-sky-800 text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-950/40"
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                <Snowflake size={15} />
+                {deep ? "Deep Freeze" : "Freeze"}
+              </span>
+            </button>
+          ) : (
+            <button
+              onClick={() => onMissClick(false)}
               disabled={busy}
               className="rounded-lg border border-stone-300 dark:border-stone-700 px-4 py-2.5 text-sm transition-all hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95 disabled:opacity-50"
             >
-              <span className="flex items-center gap-1.5"><X size={15} />{verbs.missed}</span>
+              <span className="flex items-center gap-1.5">
+                <X size={15} />
+                {verbs.missed}
+              </span>
             </button>
           )}
         </div>
       </div>
 
       {missDraft && (
-        <div className="mt-3 space-y-2 rounded-lg bg-stone-50 dark:bg-stone-900 p-3">
+        <div className="mt-3 space-y-3 rounded-lg bg-stone-50 dark:bg-stone-900 p-3">
+          {periodic && (
+            <p className="text-sm font-medium">Skip this whole {periodNoun}?</p>
+          )}
           <label className="block text-sm">
             <span className="text-stone-600 dark:text-stone-300">
               What happened? (a reason halves the point loss)
@@ -276,28 +420,50 @@ function PendingRow({
               placeholder="e.g. traveled all day, was sick…"
             />
           </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={missDraft.freeze}
-              disabled={freezesLeft <= 0}
-              onChange={(e) => onDraftChange({ ...missDraft, freeze: e.target.checked })}
-            />
-            <span className={`flex items-center gap-1 ${freezesLeft <= 0 ? "text-stone-400" : ""}`}>
-              <Snowflake size={13} className="text-sky-500" /> Use a streak freeze — gauge and streak untouched ({freezesLeft} left)
-            </span>
-          </label>
+
+          <FreezeToggle
+            active={missDraft.freeze}
+            disabled={!periodic && freezesLeft <= 0}
+            deep={deep}
+            locked={periodic}
+            quota={
+              deep
+                ? `1 every 3 months (${deepFreezesLeft} ready)`
+                : `${freezesLeft} left this month`
+            }
+            onToggle={
+              periodic
+                ? undefined
+                : () => onDraftChange({ ...missDraft, freeze: !missDraft.freeze })
+            }
+          />
+
           <div className="flex gap-2">
             <button
               onClick={() => onMissConfirm(missDraft)}
               disabled={busy}
-              className="rounded-md bg-stone-700 dark:bg-stone-600 px-4 py-1.5 text-sm text-white hover:bg-stone-600 disabled:opacity-50"
+              className={`rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all active:scale-95 disabled:opacity-50 ${
+                missDraft.freeze
+                  ? deep
+                    ? "bg-rose-500 hover:bg-rose-400"
+                    : "bg-sky-500 hover:bg-sky-400"
+                  : "bg-stone-700 dark:bg-stone-600 hover:bg-stone-600 dark:hover:bg-stone-500"
+              }`}
             >
-              Confirm miss
+              <span className="flex items-center gap-1.5">
+                {missDraft.freeze && <Snowflake size={14} />}
+                {periodic
+                  ? deep
+                    ? "Use Deep Freeze"
+                    : `Freeze this ${periodNoun}`
+                  : missDraft.freeze
+                    ? "Freeze & confirm"
+                    : "Confirm miss"}
+              </span>
             </button>
             <button
               onClick={onMissCancel}
-              className="rounded-md border border-stone-300 dark:border-stone-700 px-4 py-1.5 text-sm hover:bg-stone-100 dark:hover:bg-stone-800"
+              className="rounded-lg border border-stone-300 dark:border-stone-700 px-4 py-2 text-sm hover:bg-stone-100 dark:hover:bg-stone-800"
             >
               Cancel
             </button>

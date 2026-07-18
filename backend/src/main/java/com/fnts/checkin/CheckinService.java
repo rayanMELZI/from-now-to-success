@@ -49,7 +49,8 @@ public class CheckinService {
     }
 
     /** Everything the check-in needs to know about one habit right now. */
-    private record PeriodState(HabitLog todayLog, int doneThisPeriod, boolean targetMet) {}
+    private record PeriodState(HabitLog todayLog, int doneThisPeriod, boolean targetMet,
+                               boolean periodFrozen) {}
 
     @Transactional
     public TodayResponse getToday(Long userId) {
@@ -89,7 +90,8 @@ public class CheckinService {
         }
 
         boolean allChecked = !entries.isEmpty() && !anyBlockingPending;
-        return new TodayResponse(today, allChecked, pointsToday, freezesLeft(userId, today), entries);
+        return new TodayResponse(today, allChecked, pointsToday,
+                freezesLeft(userId, today), deepFreezesLeft(userId, today), entries);
     }
 
     @Transactional
@@ -107,6 +109,7 @@ public class CheckinService {
                 .flatMap(Optional::stream)
                 .noneMatch(l -> l.getStatus() == HabitLog.Status.DONE);
         int freezesLeft = freezesLeft(userId, today);
+        int deepFreezesLeft = deepFreezesLeft(userId, today);
 
         int earned = 0;
         List<String> becameValid = new ArrayList<>();
@@ -120,18 +123,16 @@ public class CheckinService {
                             "Habit " + entry.habitId() + " is not trackable today"));
 
             PeriodState state = periodState(habit, today, weekStart);
-            if (state.todayLog() != null || state.targetMet()) {
-                continue; // already answered today / period already complete
+            if (state.todayLog() != null || state.targetMet() || state.periodFrozen()) {
+                continue; // already answered / period complete / period frozen
             }
 
             GameRules.DayResult result;
-            boolean excused = false;
-            boolean freeze = false;
+            boolean excused = !entry.done()
+                    && entry.reason() != null && !entry.reason().isBlank();
+            boolean freeze = !entry.done() && Boolean.TRUE.equals(entry.freeze());
 
             if (habit.getSchedule() == HabitSchedule.DAILY) {
-                excused = !entry.done()
-                        && entry.reason() != null && !entry.reason().isBlank();
-                freeze = !entry.done() && Boolean.TRUE.equals(entry.freeze());
                 if (freeze) {
                     if (freezesLeft <= 0) {
                         throw ApiException.badRequest("No streak freezes left this month");
@@ -141,14 +142,34 @@ public class CheckinService {
                 result = entry.done()
                         ? GameRules.applyDone(habit)
                         : GameRules.applyMiss(habit, excused, freeze);
-            } else {
-                if (!entry.done()) {
-                    throw ApiException.badRequest(
-                            "Weekly/monthly habits are only marked done; they auto-miss when the period ends");
-                }
+            } else if (entry.done()) {
                 boolean targetReached =
                         state.doneThisPeriod() + 1 >= habit.getTimesPerPeriod();
                 result = GameRules.applyPeriodicDone(habit, targetReached);
+            } else {
+                // Weekly/monthly can only be missed by SPENDING a freeze: it
+                // resolves the whole period as a protected miss. Weekly draws
+                // from the normal pool; monthly needs the rare Deep Freeze.
+                if (!freeze) {
+                    throw ApiException.badRequest(
+                            "Weekly/monthly habits auto-miss at period end; spend a freeze to skip the period");
+                }
+                if (habit.getSchedule() == HabitSchedule.WEEKLY) {
+                    if (freezesLeft <= 0) {
+                        throw ApiException.badRequest("No streak freezes left this month");
+                    }
+                    freezesLeft--;
+                } else {
+                    if (deepFreezesLeft <= 0) {
+                        throw ApiException.badRequest(
+                                "No Deep Freeze left (you get one every 3 months)");
+                    }
+                    deepFreezesLeft--;
+                }
+                result = GameRules.applyMiss(habit, excused, true);
+                // The period is settled: the catch-up must not miss it again.
+                habit.setLastEvaluatedPeriod(
+                        Periods.periodStart(habit.getSchedule(), today, weekStart));
             }
 
             HabitLog log = new HabitLog();
@@ -179,7 +200,8 @@ public class CheckinService {
         List<String> unlocked = habitService.syncLockStates(userId, today);
 
         return new CheckinResult(earned, user.getTotalPoints(),
-                Levels.levelFor(user.getTotalPoints()), freezesLeft, becameValid, unlocked);
+                Levels.levelFor(user.getTotalPoints()), freezesLeft, deepFreezesLeft,
+                becameValid, unlocked);
     }
 
     @Transactional
@@ -282,26 +304,40 @@ public class CheckinService {
                 .findByHabitIdAndLogDate(habit.getId(), today).orElse(null);
         if (habit.getSchedule() == HabitSchedule.DAILY) {
             boolean done = todayLog != null && todayLog.getStatus() == HabitLog.Status.DONE;
-            return new PeriodState(todayLog, done ? 1 : 0, done);
+            return new PeriodState(todayLog, done ? 1 : 0, done, false);
         }
         LocalDate period = Periods.periodStart(habit.getSchedule(), today, weekStart);
-        int done = logRepository.countDoneInPeriod(habit.getId(), period,
-                Periods.nextPeriodStart(habit.getSchedule(), period));
-        return new PeriodState(todayLog, done, done >= habit.getTimesPerPeriod());
+        LocalDate next = Periods.nextPeriodStart(habit.getSchedule(), period);
+        int done = logRepository.countDoneInPeriod(habit.getId(), period, next);
+        // A MISSED log inside the running period can only come from a freeze.
+        boolean frozen = logRepository.countMissedInPeriod(habit.getId(), period, next) > 0;
+        return new PeriodState(todayLog, done, done >= habit.getTimesPerPeriod(), frozen);
     }
 
     private String todayStatus(Habit habit, PeriodState state) {
         if (habit.getSchedule() == HabitSchedule.DAILY) {
-            return state.todayLog() == null ? "PENDING" : state.todayLog().getStatus().name();
+            if (state.todayLog() == null) return "PENDING";
+            if (state.todayLog().isFrozen()) return "FROZEN";
+            return state.todayLog().getStatus().name();
         }
+        if (state.periodFrozen()) return "FROZEN";
         if (state.targetMet()) return "DONE";
         if (state.todayLog() != null) return "DONE_TODAY";
         return "PENDING";
     }
 
     private int freezesLeft(Long userId, LocalDate today) {
-        int used = logRepository.countFrozenSince(userId, today.withDayOfMonth(1));
+        int used = logRepository.countNormalFrozenSince(
+                userId, today.withDayOfMonth(1), HabitSchedule.MONTHLY);
         return Math.max(0, GameRules.FREEZES_PER_MONTH - used);
+    }
+
+    /** One Deep Freeze (monthly habits) per rolling three calendar months. */
+    private int deepFreezesLeft(Long userId, LocalDate today) {
+        LocalDate quarterStart = today.withDayOfMonth(1).minusMonths(2);
+        int used = logRepository.countFrozenBySchedule(
+                userId, quarterStart, HabitSchedule.MONTHLY);
+        return Math.max(0, GameRules.DEEP_FREEZES_PER_QUARTER - used);
     }
 
     private User loadUser(Long userId) {

@@ -44,6 +44,7 @@ public class CheckinDtos {
             boolean allChecked,
             int pointsToday,
             int freezesLeft,
+            int deepFreezesLeft,
             List<TodayEntry> entries) {}
 
     public record CheckinResult(
@@ -51,6 +52,7 @@ public class CheckinDtos {
             int totalPoints,
             int level,
             int freezesLeft,
+            int deepFreezesLeft,
             List<String> becameValid,
             List<String> unlocked) {}
 
