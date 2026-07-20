@@ -8,6 +8,7 @@ import {
   ListChecks,
   Lock,
   Map,
+  MessageSquarePlus,
   Snowflake,
   Sprout,
   Zap,
@@ -109,6 +110,22 @@ const steps: Step[] = [
         checked in, pick when your day and week start, and switch to dark
         mode any time. You can replay this guide from Settings whenever you
         like.
+      </>
+    ),
+  },
+  {
+    icon: <MessageSquarePlus size={26} />,
+    color: "bg-amber-100 dark:bg-amber-400/15 text-amber-700 dark:text-amber-300",
+    title: "Shape what comes next",
+    body: (
+      <>
+        See the{" "}
+        <span className="inline-flex items-center gap-1 align-middle">
+          <MessageSquarePlus size={14} className="text-amber-600" />
+        </span>{" "}
+        icon in the top bar? Tap it any time to send an idea, a bug, or a
+        feature you wish existed — it goes straight to the developer. This app
+        grows from what its users ask for.
       </>
     ),
   },

@@ -1,9 +1,25 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+
+/* "Are we on the client?" as an external store: server snapshot false,
+ * client snapshot true — no setState-in-effect needed. */
+const noopSubscribe = () => () => {};
+const useIsClient = () =>
+  useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
 
 /**
  * Bottom sheet on phones, centered dialog on larger screens.
+ *
+ * Rendered through a portal into <body>: an ancestor with backdrop-filter
+ * (our sticky nav) becomes the containing block for fixed-position
+ * descendants, which would otherwise size inset-0 to the header instead of
+ * the viewport and clip the panel off-screen.
  */
 export function Modal({
   open,
@@ -14,6 +30,9 @@ export function Modal({
   onClose: () => void;
   children: ReactNode;
 }) {
+  // Portals need a DOM target, which doesn't exist during SSR.
+  const isClient = useIsClient();
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -25,9 +44,9 @@ export function Modal({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || !isClient) return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
       role="dialog"
@@ -38,10 +57,13 @@ export function Modal({
         className="absolute inset-0 cursor-default bg-black/40 backdrop-blur-[2px]"
         onClick={onClose}
       />
-      <div className="animate-sheet-in relative max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl bg-white dark:bg-stone-900 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-md sm:rounded-2xl sm:pb-5">
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-stone-300 sm:hidden" />
+      {/* dvh keeps the sheet inside the visible area when mobile browser
+          chrome shows/hides; the safe-area padding clears the home bar. */}
+      <div className="animate-sheet-in relative max-h-[85dvh] w-full overflow-y-auto overscroll-contain rounded-t-2xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[90dvh] sm:max-w-md sm:rounded-2xl sm:pb-5 dark:bg-stone-900">
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-stone-300 dark:bg-stone-600 sm:hidden" />
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -87,13 +87,13 @@ export function FeedbackButton() {
               </p>
             )}
 
+            {/* text-base (16px): anything smaller makes iOS zoom in on focus */}
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value.slice(0, MAX_LEN))}
               rows={5}
-              autoFocus
               placeholder="I'd love it if…"
-              className="mt-3 w-full rounded-lg border border-stone-300 dark:border-stone-700 bg-transparent px-3 py-2 text-sm focus:border-amber-500 focus:outline-none"
+              className="mt-3 w-full resize-none rounded-lg border border-stone-300 bg-transparent px-3 py-2 text-base focus:border-amber-500 focus:outline-none dark:border-stone-700"
             />
             <div className="mt-1 text-right text-xs text-stone-400">
               {message.length}/{MAX_LEN}
@@ -103,13 +103,13 @@ export function FeedbackButton() {
               <button
                 onClick={submit}
                 disabled={busy || !message.trim()}
-                className="flex-1 rounded-lg bg-amber-600 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-amber-500 active:scale-[0.99] disabled:opacity-50"
+                className="flex-1 rounded-lg bg-amber-600 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-amber-500 active:scale-[0.99] disabled:opacity-50"
               >
                 {busy ? "Sending…" : "Send feedback"}
               </button>
               <button
                 onClick={close}
-                className="rounded-lg border border-stone-300 dark:border-stone-700 px-4 py-2.5 text-sm hover:bg-stone-100 dark:hover:bg-stone-800"
+                className="rounded-lg border border-stone-300 px-4 py-3 text-sm hover:bg-stone-100 dark:border-stone-700 dark:hover:bg-stone-800"
               >
                 Cancel
               </button>
