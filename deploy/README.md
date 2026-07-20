@@ -52,6 +52,18 @@ Secrets:
 | `VAPID_PRIVATE_KEY` | from the same command |
 | `VAPID_SUBJECT`     | `mailto:you@example.com` |
 
+Optional — feedback briefings (leave unset to just store feedback silently):
+
+| Secret                | Value |
+|-----------------------|-------|
+| `GEMINI_API_KEY`      | free key from https://aistudio.google.com/apikey |
+| `FEEDBACK_NOTIFY_TO`  | the address that receives briefing emails |
+| `MAIL_USERNAME`       | the Gmail account that sends them |
+| `MAIL_PASSWORD`       | a Gmail **App Password** (Google Account → Security → 2-Step Verification → App passwords) — never the real password |
+
+Optional variable: `GEMINI_MODEL` (defaults to `gemini-2.5-flash`, which is
+on the free tier at 250 requests/day).
+
 Variables (not secret):
 
 | Variable         | Value |

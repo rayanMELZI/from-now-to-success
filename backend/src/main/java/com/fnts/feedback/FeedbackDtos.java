@@ -19,6 +19,13 @@ public class FeedbackDtos {
             String username,
             Instant createdAt) {}
 
+    /**
+     * What the submitter gets back. `delivered` is honest: false means the
+     * feedback is safely stored but the briefing email hasn't gone out yet
+     * (it will retry automatically).
+     */
+    public record SubmitResult(Long id, boolean delivered, boolean notificationsConfigured) {}
+
     static FeedbackResponse toResponse(Feedback feedback) {
         return new FeedbackResponse(
                 feedback.getId(),

@@ -22,6 +22,9 @@ cells on the map — from *now* to *success*.
   on any day. Answer each habit the moment you know — no need to wait.
 - A push notification asks about your day at your chosen hour — only on days
   you haven't finished checking in.
+- The in-app feedback button sends ideas to the developer: each one is
+  summarised and triaged by Gemini, then emailed with the raw text attached.
+  Feedback is always stored first, so a failed briefing is retried, never lost.
 
 ## Stack
 

@@ -42,6 +42,28 @@ public class Feedback {
     @Column(nullable = false)
     private FeedbackStatus status = FeedbackStatus.NEW;
 
+    @Column(name = "ai_summary", columnDefinition = "text")
+    private String aiSummary;
+
+    @Column(name = "ai_category")
+    private String aiCategory;
+
+    @Column(name = "ai_effort")
+    private String aiEffort;
+
+    @Column(name = "ai_verdict", columnDefinition = "text")
+    private String aiVerdict;
+
+    /** Null while the briefing email is still owed. */
+    @Column(name = "notified_at")
+    private Instant notifiedAt;
+
+    @Column(nullable = false)
+    private int attempts = 0;
+
+    @Column(name = "last_error", length = 500)
+    private String lastError;
+
     @Column(name = "created_at", nullable = false, updatable = false, insertable = false)
     private Instant createdAt;
 }

@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fnts.common.ApiException;
 import com.fnts.feedback.FeedbackDtos.FeedbackRequest;
 import com.fnts.feedback.FeedbackDtos.FeedbackResponse;
+import com.fnts.feedback.FeedbackDtos.SubmitResult;
 import com.fnts.user.User;
 import com.fnts.user.UserRepository;
 
@@ -17,14 +18,26 @@ public class FeedbackService {
 
     private final FeedbackRepository feedbackRepository;
     private final UserRepository userRepository;
+    private final FeedbackNotifier notifier;
 
-    public FeedbackService(FeedbackRepository feedbackRepository, UserRepository userRepository) {
+    public FeedbackService(FeedbackRepository feedbackRepository,
+                           UserRepository userRepository,
+                           FeedbackNotifier notifier) {
         this.feedbackRepository = feedbackRepository;
         this.userRepository = userRepository;
+        this.notifier = notifier;
     }
 
-    @Transactional
-    public FeedbackResponse submit(Long userId, FeedbackRequest request) {
+    /**
+     * Saves the feedback, then tries to brief-and-email it.
+     *
+     * Deliberately NOT @Transactional: the save must commit on its own (via
+     * the repository's own transaction) before the notification runs, so a
+     * Gemini/SMTP failure can never roll the feedback away. It just stays
+     * queued for FeedbackRetryScheduler, and the caller is told honestly
+     * that delivery is still pending.
+     */
+    public SubmitResult submit(Long userId, FeedbackRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> ApiException.notFound("User not found"));
 
@@ -32,8 +45,10 @@ public class FeedbackService {
         feedback.setUser(user);
         feedback.setMessage(request.message().trim());
         feedback.setPage(request.page());
+        Feedback saved = feedbackRepository.save(feedback);
 
-        return FeedbackDtos.toResponse(feedbackRepository.save(feedback));
+        boolean delivered = notifier.notifyOne(saved.getId());
+        return new SubmitResult(saved.getId(), delivered, notifier.isEnabled());
     }
 
     @Transactional(readOnly = true)

@@ -2,11 +2,17 @@
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { Check, MessageSquarePlus } from "lucide-react";
+import { Check, Clock, MessageSquarePlus } from "lucide-react";
 import { api } from "@/lib/api";
 import { Modal } from "./Modal";
 
 const MAX_LEN = 2000;
+
+interface SubmitResult {
+  id: number;
+  delivered: boolean;
+  notificationsConfigured: boolean;
+}
 
 export function FeedbackButton() {
   const pathname = usePathname();
@@ -14,7 +20,7 @@ export function FeedbackButton() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState(false);
+  const [sent, setSent] = useState<SubmitResult | null>(null);
 
   function close() {
     setOpen(false);
@@ -22,7 +28,7 @@ export function FeedbackButton() {
     setTimeout(() => {
       setMessage("");
       setError(null);
-      setSent(false);
+      setSent(null);
     }, 200);
   }
 
@@ -31,11 +37,12 @@ export function FeedbackButton() {
     setBusy(true);
     setError(null);
     try {
-      await api("/api/feedback", {
-        method: "POST",
-        body: { message: message.trim(), page: pathname },
-      });
-      setSent(true);
+      setSent(
+        await api<SubmitResult>("/api/feedback", {
+          method: "POST",
+          body: { message: message.trim(), page: pathname },
+        }),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't send that — try again?");
     } finally {
@@ -56,16 +63,26 @@ export function FeedbackButton() {
       <Modal open={open} onClose={close}>
         {sent ? (
           <div className="flex flex-col items-center py-2 text-center">
-            <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-400/15 text-emerald-600 dark:text-emerald-400">
-              <Check size={22} />
+            <span
+              className={`mb-3 flex h-12 w-12 items-center justify-center rounded-full ${
+                sent.delivered
+                  ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-400"
+                  : "bg-amber-100 text-amber-600 dark:bg-amber-400/15 dark:text-amber-400"
+              }`}
+            >
+              {sent.delivered ? <Check size={22} /> : <Clock size={22} />}
             </span>
-            <h2 className="text-base font-semibold">Thanks!</h2>
+            <h2 className="text-base font-semibold">
+              {sent.delivered ? "Thanks!" : "Saved!"}
+            </h2>
             <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
-              Your feedback was sent. Good ideas make it into the app.
+              {sent.delivered
+                ? "Your feedback reached the developer. Good ideas make it into the app."
+                : "Your feedback is safely stored. It couldn't be forwarded to the developer just yet — it'll be retried automatically."}
             </p>
             <button
               onClick={close}
-              className="mt-4 rounded-lg bg-stone-800 dark:bg-stone-600 px-5 py-2 text-sm font-medium text-white hover:bg-stone-700 dark:hover:bg-stone-500"
+              className="mt-4 rounded-lg bg-stone-800 px-5 py-2 text-sm font-medium text-white hover:bg-stone-700 dark:bg-stone-600 dark:hover:bg-stone-500"
             >
               Close
             </button>

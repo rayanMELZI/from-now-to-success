@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.fnts.auth.CurrentUser;
 import com.fnts.feedback.FeedbackDtos.FeedbackRequest;
 import com.fnts.feedback.FeedbackDtos.FeedbackResponse;
+import com.fnts.feedback.FeedbackDtos.SubmitResult;
 
 import jakarta.validation.Valid;
 
@@ -35,8 +36,8 @@ public class FeedbackController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public FeedbackResponse submit(@AuthenticationPrincipal CurrentUser user,
-                                   @Valid @RequestBody FeedbackRequest request) {
+    public SubmitResult submit(@AuthenticationPrincipal CurrentUser user,
+                               @Valid @RequestBody FeedbackRequest request) {
         return feedbackService.submit(user.id(), request);
     }
 

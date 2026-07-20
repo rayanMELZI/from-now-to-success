@@ -8,4 +8,7 @@ import java.util.List;
 public interface FeedbackRepository extends JpaRepository<Feedback, Long> {
 
     List<Feedback> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    /** Rows still owed a briefing email, oldest first. */
+    List<Feedback> findByNotifiedAtIsNullOrderByCreatedAtAsc(Pageable pageable);
 }
