@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import { ThemeProvider } from "@/lib/theme";
+import { OnboardingProvider } from "@/lib/onboarding";
 import { Nav } from "@/components/Nav";
 import { RegisterSW } from "@/components/RegisterSW";
 
@@ -47,10 +48,12 @@ export default function RootLayout({
         />
         <ThemeProvider>
           <AuthProvider>
-            <RegisterSW />
-            <Nav />
-            {/* bottom padding clears the mobile tab bar */}
-            <main className="flex flex-1 flex-col pb-16 sm:pb-0">{children}</main>
+            <OnboardingProvider>
+              <RegisterSW />
+              <Nav />
+              {/* bottom padding clears the mobile tab bar */}
+              <main className="flex flex-1 flex-col pb-16 sm:pb-0">{children}</main>
+            </OnboardingProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

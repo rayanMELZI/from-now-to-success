@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
-import { MapPin, Monitor, Moon, Sun } from "lucide-react";
+import { useOnboarding } from "@/lib/onboarding";
+import { BookOpen, MapPin, Monitor, Moon, Sun } from "lucide-react";
 import {
   pushSupported,
   sendTestNotification,
@@ -16,6 +17,7 @@ import {
 function SettingsPage() {
   const { user, refreshUser } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { show: showGuide } = useOnboarding();
   const [timezone, setTimezone] = useState(user?.timezone ?? "UTC");
   const [reminderHour, setReminderHour] = useState(user?.reminderHour ?? 21);
   const [dayEndHour, setDayEndHour] = useState(user?.dayEndHour ?? 0);
@@ -247,6 +249,13 @@ function SettingsPage() {
           </div>
         )}
       </section>
+
+      <button
+        onClick={showGuide}
+        className="mx-auto mt-4 flex items-center gap-1.5 text-xs text-stone-400 transition-colors hover:text-stone-600 dark:hover:text-stone-300"
+      >
+        <BookOpen size={13} /> Replay the app guide
+      </button>
     </div>
   );
 }
