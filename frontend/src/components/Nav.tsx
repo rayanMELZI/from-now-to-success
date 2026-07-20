@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
+import { FeedbackButton } from "./FeedbackButton";
 import {
   BarChart3,
   ListChecks,
@@ -61,6 +62,7 @@ export function Nav() {
           </nav>
 
           <div className="ml-auto flex items-center gap-3 text-sm">
+            <FeedbackButton />
             <button
               onClick={() => setTheme(resolved === "dark" ? "light" : "dark")}
               title="Toggle dark mode"
