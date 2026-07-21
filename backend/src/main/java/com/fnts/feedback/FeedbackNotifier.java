@@ -69,30 +69,32 @@ public class FeedbackNotifier {
 
         feedback.setAttempts(feedback.getAttempts() + 1);
         try {
-            Briefing briefing = null;
-            if (gemini.isEnabled()) {
+            // Only call Gemini when we don't already have a briefing (a prior
+            // attempt may have succeeded before the email failed) and we
+            // haven't run out of AI attempts. Otherwise a stuck email retry
+            // would re-summarise every 10 minutes and burn the daily quota.
+            boolean needsBriefing = feedback.getAiSummary() == null;
+            if (needsBriefing && gemini.isEnabled()
+                    && feedback.getAttempts() <= GIVE_UP_ON_AI_AFTER) {
                 try {
-                    briefing = gemini.summarise(
+                    Briefing briefing = gemini.summarise(
                             feedback.getUser().getUsername(),
                             feedback.getPage(),
                             feedback.getMessage());
+                    feedback.setAiSummary(briefing.summary());
+                    feedback.setAiCategory(briefing.category());
+                    feedback.setAiEffort(briefing.effort());
+                    feedback.setAiVerdict(briefing.verdict());
                 } catch (RuntimeException e) {
                     if (feedback.getAttempts() < GIVE_UP_ON_AI_AFTER) {
                         throw e; // retry the whole thing later, briefing included
                     }
-                    log.warn("Gemini still failing after {} attempts; sending feedback {} raw",
+                    log.warn("Gemini failed {} times; sending feedback {} without a briefing",
                             feedback.getAttempts(), feedback.getId(), e);
                 }
             }
 
-            if (briefing != null) {
-                feedback.setAiSummary(briefing.summary());
-                feedback.setAiCategory(briefing.category());
-                feedback.setAiEffort(briefing.effort());
-                feedback.setAiVerdict(briefing.verdict());
-            }
-
-            mailSender.send(buildEmail(feedback, briefing));
+            mailSender.send(buildEmail(feedback, briefingFrom(feedback)));
 
             feedback.setNotifiedAt(Instant.now());
             feedback.setLastError(null);
@@ -104,6 +106,15 @@ public class FeedbackNotifier {
                     feedback.getId(), feedback.getAttempts(), reason);
             return false;
         }
+    }
+
+    /** Rebuilds a Briefing from the persisted columns, or null if none. */
+    private static Briefing briefingFrom(Feedback feedback) {
+        if (feedback.getAiSummary() == null) {
+            return null;
+        }
+        return new Briefing(feedback.getAiSummary(), feedback.getAiCategory(),
+                feedback.getAiEffort(), feedback.getAiVerdict());
     }
 
     private SimpleMailMessage buildEmail(Feedback feedback, Briefing briefing) {
