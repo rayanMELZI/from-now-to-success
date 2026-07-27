@@ -14,44 +14,67 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import dagre from "@dagrejs/dagre";
 import { Ban, Check, Flame, Footprints, Lock, Sparkles, Zap } from "lucide-react";
 import type { Habit } from "@/lib/types";
 import { useTheme } from "@/lib/theme";
 
 /* ------------------------------------------------------------------ */
-/* Layout: column = prerequisite depth, rows spread middle-out.        */
+/* Layout: dagre lays the prerequisite DAG out left-to-right. It ranks */
+/* nodes by prerequisite depth AND minimises edge crossings within     */
+/* each rank, so connected habits line up and the arcs read cleanly —  */
+/* instead of the old creation-order (FIFO) row placement.             */
 /* ------------------------------------------------------------------ */
 
-const COL_W = 240;
-const ROW_H = 150;
+const NODE_W = 190;
+const NODE_H = 104;
+const ANCHOR_W = 150;
+const ANCHOR_GAP = 60;
 
-function computeDepths(habits: Habit[]): Map<number, number> {
-  const byId = new Map(habits.map((h) => [h.id, h]));
-  const depths = new Map<number, number>();
-
-  function depthOf(id: number, visiting: Set<number>): number {
-    const cached = depths.get(id);
-    if (cached !== undefined) return cached;
-    if (visiting.has(id)) return 0; // cycle guard (backend forbids cycles anyway)
-    visiting.add(id);
-    const prereqs = byId.get(id)?.prerequisiteIds ?? [];
-    const depth = prereqs.length
-      ? 1 + Math.max(...prereqs.map((p) => depthOf(p, visiting)))
-      : 0;
-    depths.set(id, depth);
-    return depth;
-  }
-
-  habits.forEach((h) => depthOf(h.id, new Set()));
-  return depths;
+interface Positioned {
+  positions: Map<number, { x: number; y: number }>;
+  now: { x: number; y: number };
+  success: { x: number; y: number };
 }
 
-function middleOutRows(count: number): number[] {
-  const rows: number[] = [];
-  for (let i = 0; i < count; i++) {
-    rows.push(Math.ceil(i / 2) * (i % 2 === 0 ? 1 : -1));
-  }
-  return rows;
+/** Runs dagre; returns React Flow top-left positions plus anchor spots. */
+function layoutHabits(habits: Habit[]): Positioned {
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir: "LR", ranksep: 80, nodesep: 28, marginx: 20, marginy: 20 });
+  g.setDefaultEdgeLabel(() => ({}));
+
+  const ids = new Set(habits.map((h) => h.id));
+  habits.forEach((h) => g.setNode(String(h.id), { width: NODE_W, height: NODE_H }));
+  habits.forEach((h) =>
+    h.prerequisiteIds
+      .filter((p) => ids.has(p)) // ignore dangling prereqs
+      .forEach((p) => g.setEdge(String(p), String(h.id))),
+  );
+
+  dagre.layout(g);
+
+  const positions = new Map<number, { x: number; y: number }>();
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  habits.forEach((h) => {
+    const n = g.node(String(h.id)); // dagre gives the node CENTRE
+    const x = n.x - NODE_W / 2;
+    const y = n.y - NODE_H / 2;
+    positions.set(h.id, { x, y });
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x + NODE_W);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y + NODE_H);
+  });
+
+  const centreY = (minY + maxY) / 2 - NODE_H / 2;
+  return {
+    positions,
+    now: { x: minX - ANCHOR_GAP - ANCHOR_W, y: centreY },
+    success: { x: maxX + ANCHOR_GAP, y: centreY },
+  };
 }
 
 /* Stable organic blob per habit: varied border-radius from the id. */
@@ -164,22 +187,21 @@ interface IslandMapProps {
 
 export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
   const { resolved } = useTheme();
-  const { nodes, edges } = useMemo(() => {
-    const depths = computeDepths(habits);
-    const maxDepth = habits.length ? Math.max(...depths.values()) : 0;
 
-    const byDepth = new Map<number, Habit[]>();
-    habits.forEach((h) => {
-      const d = depths.get(h.id) ?? 0;
-      if (!byDepth.has(d)) byDepth.set(d, []);
-      byDepth.get(d)!.push(h);
-    });
+  // The dagre layout only depends on the graph STRUCTURE (which habit points
+  // to which), so memoise it on a signature of ids + prerequisites. Changing
+  // selection or a gauge value then doesn't recompute positions.
+  const structure = habits
+    .map((h) => `${h.id}>${[...h.prerequisiteIds].sort((a, b) => a - b).join(",")}`)
+    .join("|");
+  const layout = useMemo(() => layoutHabits(habits), [structure]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const nodes: Node[] = [
+  const nodes = useMemo<Node[]>(() => {
+    const list: Node[] = [
       {
         id: "now",
         type: "anchor",
-        position: { x: 0, y: -52 },
+        position: layout.now,
         data: { label: "now" },
         draggable: false,
         selectable: false,
@@ -187,47 +209,45 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
       {
         id: "success",
         type: "anchor",
-        position: { x: (maxDepth + 2) * COL_W, y: -52 },
+        position: layout.success,
         data: { label: "success" },
         draggable: false,
         selectable: false,
       },
     ];
-
-    byDepth.forEach((group, depth) => {
-      const sorted = [...group].sort((a, b) => a.id - b.id);
-      const rows = middleOutRows(sorted.length);
-      sorted.forEach((habit, i) => {
-        nodes.push({
-          id: String(habit.id),
-          type: "habit",
-          position: { x: (depth + 1) * COL_W, y: rows[i] * ROW_H - 52 },
-          data: { habit, selected: habit.id === selectedId },
-          draggable: false,
-        });
+    habits.forEach((habit) => {
+      list.push({
+        id: String(habit.id),
+        type: "habit",
+        position: layout.positions.get(habit.id) ?? { x: 0, y: 0 },
+        data: { habit, selected: habit.id === selectedId },
+        draggable: false,
       });
     });
+    return list;
+  }, [habits, layout, selectedId]);
 
-    const edges: Edge[] = habits.flatMap((habit) =>
-      habit.prerequisiteIds.map((prereqId) => {
-        const prereq = habits.find((h) => h.id === prereqId);
-        const flowing = prereq?.status === "VALID";
-        return {
-          id: `${prereqId}-${habit.id}`,
-          source: String(prereqId),
-          target: String(habit.id),
-          animated: flowing,
-          style: {
-            stroke: flowing ? "#d97706" : "#a8a29e",
-            strokeWidth: 1.5,
-            strokeDasharray: flowing ? undefined : "6 6",
-          },
-        };
-      }),
-    );
-
-    return { nodes, edges };
-  }, [habits, selectedId]);
+  const edges = useMemo<Edge[]>(
+    () =>
+      habits.flatMap((habit) =>
+        habit.prerequisiteIds.map((prereqId) => {
+          const prereq = habits.find((h) => h.id === prereqId);
+          const flowing = prereq?.status === "VALID";
+          return {
+            id: `${prereqId}-${habit.id}`,
+            source: String(prereqId),
+            target: String(habit.id),
+            animated: flowing,
+            style: {
+              stroke: flowing ? "#d97706" : "#a8a29e",
+              strokeWidth: 1.5,
+              strokeDasharray: flowing ? undefined : "6 6",
+            },
+          };
+        }),
+      ),
+    [habits],
+  );
 
   return (
     // React Flow needs a concrete height, not just min/flex sizing.
