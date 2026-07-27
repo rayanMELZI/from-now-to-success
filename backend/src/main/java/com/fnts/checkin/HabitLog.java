@@ -3,9 +3,11 @@ package com.fnts.checkin;
 import java.time.Instant;
 import java.time.LocalDate;
 
+import com.fnts.common.EncryptedStringConverter;
 import com.fnts.habit.Habit;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -48,6 +50,8 @@ public class HabitLog {
     private int pointsAwarded = 0;
 
     /** User-provided excuse for a miss; halves the point penalty. */
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(columnDefinition = "text")
     private String reason;
 
     /** A streak freeze was spent on this miss: gauge and streak untouched. */

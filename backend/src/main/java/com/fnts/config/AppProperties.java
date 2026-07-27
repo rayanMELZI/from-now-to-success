@@ -8,9 +8,13 @@ public record AppProperties(
         Refresh refresh,
         Push push,
         Feedback feedback,
+        Crypto crypto,
         boolean secureCookies
 ) {
     public record Jwt(String secret, int accessTtlMinutes) {}
+
+    /** Base64 32-byte AES key for encrypting sensitive free-text at rest. */
+    public record Crypto(String key) {}
 
     public record Refresh(int ttlDays) {}
 

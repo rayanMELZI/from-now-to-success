@@ -48,6 +48,7 @@ Secrets:
 | `CF_ACCESS_CLIENT_SECRET`| service token Client Secret |
 | `POSTGRES_PASSWORD` | any strong password (`openssl rand -base64 24`) |
 | `JWT_SECRET`        | `openssl rand -base64 48` |
+| `DATA_ENCRYPTION_KEY` | `openssl rand -base64 32` — ⚠️ **back this up; losing it permanently destroys all encrypted habit/feedback data** and never rotate it without a re-encryption step |
 | `VAPID_PUBLIC_KEY`  | from `npx web-push generate-vapid-keys` |
 | `VAPID_PRIVATE_KEY` | from the same command |
 | `VAPID_SUBJECT`     | `mailto:you@example.com` |
