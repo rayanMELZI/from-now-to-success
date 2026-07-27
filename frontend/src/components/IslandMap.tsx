@@ -76,22 +76,27 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
     : 0;
 
   return (
+    // No box-shadow here on purpose: a blurred shadow on every node forces the
+    // browser to re-rasterise each one on every frame while React Flow pans the
+    // canvas — the main cause of the mobile/PWA lag. Selection is shown with a
+    // thicker coloured border, which composites for free.
     <div
-      className={`relative h-26 w-47.5 overflow-hidden border-2 shadow-sm transition-shadow ${
+      className={`relative h-26 w-47.5 overflow-hidden ${
         selected
-          ? "border-amber-500 shadow-lg shadow-amber-200/60"
+          ? "border-[3px] border-amber-500"
           : locked
-            ? "border-stone-300 dark:border-stone-700"
+            ? "border-2 border-stone-300 dark:border-stone-700"
             : valid
-              ? "border-emerald-700/60"
-              : "border-amber-800/50"
+              ? "border-2 border-emerald-700/60"
+              : "border-2 border-amber-800/50"
       } ${locked ? "bg-stone-200 dark:bg-stone-800" : "bg-amber-50 dark:bg-amber-400/10"}`}
       style={{ borderRadius: blobRadius(habit.id) }}
     >
-      {/* gauge liquid */}
+      {/* gauge liquid — transition scoped to height so it never re-evaluates
+          during a pan (transition-all would watch transform too) */}
       {!locked && pct > 0 && (
         <div
-          className={`absolute inset-x-0 bottom-0 transition-all duration-700 ${
+          className={`absolute inset-x-0 bottom-0 transition-[height] duration-500 ${
             valid ? "bg-emerald-300/60" : "bg-amber-300/60"
           }`}
           style={{ height: `${pct}%` }}
@@ -136,7 +141,7 @@ function AnchorNode({ data }: NodeProps<Node<AnchorNodeData>>) {
   const Icon = data.label === "now" ? Footprints : Sparkles;
   return (
     <div
-      className="flex h-26 w-37.5 flex-col items-center justify-center gap-1 border-2 border-amber-800/60 bg-amber-100 dark:bg-amber-400/15 shadow-sm"
+      className="flex h-26 w-37.5 flex-col items-center justify-center gap-1 border-2 border-amber-800/60 bg-amber-100 dark:bg-amber-400/15"
       style={{ borderRadius: blobRadius(data.label === "now" ? 5 : 9) }}
     >
       <Icon size={22} className="text-amber-700 dark:text-amber-300" />
@@ -237,6 +242,13 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
         minZoom={0.3}
         maxZoom={1.6}
         nodesConnectable={false}
+        nodesDraggable={false}
+        // Skip off-screen nodes and drop focus/selection bookkeeping we don't
+        // use — less work per frame while panning, especially on mobile.
+        onlyRenderVisibleElements
+        nodesFocusable={false}
+        edgesFocusable={false}
+        elementsSelectable={false}
         onNodeClick={(_, node) => {
           const habit = habits.find((h) => String(h.id) === node.id);
           if (habit) onSelect(habit);
