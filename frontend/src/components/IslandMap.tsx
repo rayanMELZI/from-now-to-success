@@ -14,7 +14,6 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import dagre from "@dagrejs/dagre";
 import { Ban, Check, Flame, Footprints, Lock, Sparkles, Zap } from "lucide-react";
 import type { Habit } from "@/lib/types";
 import { useTheme } from "@/lib/theme";
@@ -22,19 +21,21 @@ import { useTheme } from "@/lib/theme";
 /* ------------------------------------------------------------------ */
 /* Layout                                                              */
 /*                                                                     */
-/* dagre lays the DAG out left-to-right (now → habits → success) and   */
-/* minimises edge crossings. On top of that we find the longest        */
-/* dependency chain (the "spine") and weight its edges heavily, so     */
-/* dagre pulls it into a straight line down the centre. Short branches  */
-/* and lone habits then settle above and below it, and the whole map   */
-/* reads as one path converging on success.                            */
+/* A custom layered layout. Columns are prerequisite depth (left to    */
+/* right). The longest dependency chain (the "spine") is pinned to a   */
+/* straight line down the vertical CENTRE, and in every column the     */
+/* other habits are split evenly above and below it, ordered near      */
+/* their prerequisites to keep the arcs from crossing. So the map      */
+/* reads as one main road to success, with branches and lone habits    */
+/* at the top and bottom edges.                                        */
 /* ------------------------------------------------------------------ */
 
 const NODE_W = 190;
 const NODE_H = 104;
+const COL_W = 240; // horizontal gap between depth columns
+const ROW_H = 132; // vertical gap between stacked habits
 const ANCHOR_W = 150;
 const ANCHOR_GAP = 60;
-const SPINE_WEIGHT = 100;
 
 interface Layout {
   positions: Map<string, { x: number; y: number }>;
@@ -50,8 +51,8 @@ function computeLayout(habits: Habit[]): Layout {
   const byId = new Map(habits.map((h) => [h.id, h]));
   const prereqsOf = (h: Habit) => h.prerequisiteIds.filter((p) => ids.has(p));
 
-  // The spine = the longest dependency chain among the habits. Find it with a
-  // memoised DFS that tracks the best predecessor, then walk it back.
+  // Longest dependency chain ending at each habit → its depth (rank), plus the
+  // best predecessor so we can walk back the single longest chain (the spine).
   const chainLen = new Map<number, number>();
   const chainPrev = new Map<number, number | null>();
   const lenOf = (h: Habit): number => {
@@ -81,47 +82,50 @@ function computeLayout(habits: Habit[]): Layout {
   for (let cur: number | null | undefined = last.id; cur != null; cur = chainPrev.get(cur)) {
     spineSeq.unshift(cur);
   }
-  // "from->to" keys of the spine (habit → habit only; the now/success anchors
-  // stay decorative bookends with no edges).
+  const spineIds = new Set(spineSeq);
+
   const spine = new Set<string>();
   for (let i = 0; i + 1 < spineSeq.length; i++) {
     spine.add(edgeKey(String(spineSeq[i]), String(spineSeq[i + 1])));
   }
 
-  // Dagre lays out the habits; the spine edges are weighted heavily so dagre
-  // straightens the longest chain into a line, with branches settling around it.
-  const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: "LR", ranksep: 80, nodesep: 26, marginx: 24, marginy: 24 });
-  g.setDefaultEdgeLabel(() => ({}));
-  habits.forEach((h) => g.setNode(String(h.id), { width: NODE_W, height: NODE_H }));
-  habits.forEach((h) =>
-    prereqsOf(h).forEach((p) =>
-      g.setEdge(String(p), String(h.id), {
-        weight: spine.has(edgeKey(String(p), String(h.id))) ? SPINE_WEIGHT : 1,
-      }),
-    ),
-  );
+  const rankOf = (id: number) => (chainLen.get(id) ?? 1) - 1;
+  const maxRank = spineSeq.length - 1; // the spine has exactly one node per column
 
-  dagre.layout(g);
+  const columns: Habit[][] = Array.from({ length: maxRank + 1 }, () => []);
+  habits.forEach((h) => columns[rankOf(h.id)].push(h));
 
-  // Centre the spine vertically (shift so its mean y is 0), so the main chain
-  // runs through the middle and shorter branches spread above and below it.
-  const spineY =
-    spineSeq.reduce((sum, id) => sum + g.node(String(id)).y, 0) / spineSeq.length;
+  // Assign y column by column (left → right, so prerequisites are placed
+  // first). Each column is centred on its spine node (track 0); the rest are
+  // ordered by the average y of their prerequisites and split half above,
+  // half below — so nothing piles up on one side.
+  const yOf = new Map<number, number>();
+  const barycentre = (h: Habit) => {
+    const ps = prereqsOf(h);
+    if (!ps.length) return 0;
+    return ps.reduce((sum, p) => sum + (yOf.get(p) ?? 0), 0) / ps.length;
+  };
+  for (let r = 0; r <= maxRank; r++) {
+    const spineNode = columns[r].find((h) => spineIds.has(h.id))!;
+    const others = columns[r]
+      .filter((h) => !spineIds.has(h.id))
+      .sort((a, b) => barycentre(a) - barycentre(b) || a.id - b.id);
+    const half = Math.round(others.length / 2);
+    const ordered = [...others.slice(0, half), spineNode, ...others.slice(half)];
+    ordered.forEach((h, i) => yOf.set(h.id, (i - half) * ROW_H));
+  }
 
   const positions = new Map<string, { x: number; y: number }>();
-  let minLeft = Infinity;
-  let maxRight = -Infinity;
-  habits.forEach((h) => {
-    const n = g.node(String(h.id)); // dagre gives node centres
-    positions.set(String(h.id), { x: n.x - NODE_W / 2, y: n.y - spineY - NODE_H / 2 });
-    minLeft = Math.min(minLeft, n.x - NODE_W / 2);
-    maxRight = Math.max(maxRight, n.x + NODE_W / 2);
-  });
+  habits.forEach((h) =>
+    positions.set(String(h.id), {
+      x: rankOf(h.id) * COL_W,
+      y: (yOf.get(h.id) ?? 0) - NODE_H / 2,
+    }),
+  );
 
-  // now / success sit at the ends, aligned with the (now-centred) spine.
-  positions.set("now", { x: minLeft - ANCHOR_GAP - ANCHOR_W, y: -NODE_H / 2 });
-  positions.set("success", { x: maxRight + ANCHOR_GAP, y: -NODE_H / 2 });
+  // now / success: edge-free bookends at the ends, aligned with the spine.
+  positions.set("now", { x: -ANCHOR_GAP - ANCHOR_W, y: -NODE_H / 2 });
+  positions.set("success", { x: maxRank * COL_W + NODE_W + ANCHOR_GAP, y: -NODE_H / 2 });
 
   return { positions, spine };
 }
