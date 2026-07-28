@@ -14,67 +14,120 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import dagre from "@dagrejs/dagre";
 import { Ban, Check, Flame, Footprints, Lock, Sparkles, Zap } from "lucide-react";
 import type { Habit } from "@/lib/types";
 import { useTheme } from "@/lib/theme";
 
 /* ------------------------------------------------------------------ */
-/* Layout: dagre lays the prerequisite DAG out left-to-right. It ranks */
-/* nodes by prerequisite depth AND minimises edge crossings within     */
-/* each rank, so connected habits line up and the arcs read cleanly —  */
-/* instead of the old creation-order (FIFO) row placement.             */
+/* Layout                                                              */
+/*                                                                     */
+/* A custom layered layout. Columns are prerequisite depth (left to    */
+/* right). The longest dependency chain (the "spine") is pinned to a   */
+/* straight line down the vertical CENTRE, and in every column the     */
+/* other habits are split evenly above and below it, ordered near      */
+/* their prerequisites to keep the arcs from crossing. So the map      */
+/* reads as one main road to success, with branches and lone habits    */
+/* at the top and bottom edges.                                        */
 /* ------------------------------------------------------------------ */
 
 const NODE_W = 190;
 const NODE_H = 104;
+const COL_W = 240; // horizontal gap between depth columns
+const ROW_H = 132; // vertical gap between stacked habits
 const ANCHOR_W = 150;
 const ANCHOR_GAP = 60;
 
-interface Positioned {
-  positions: Map<number, { x: number; y: number }>;
-  now: { x: number; y: number };
-  success: { x: number; y: number };
+interface Layout {
+  positions: Map<string, { x: number; y: number }>;
+  spine: Set<string>; // habit-to-habit "from->to" keys on the longest chain
 }
 
-/** Runs dagre; returns React Flow top-left positions plus anchor spots. */
-function layoutHabits(habits: Habit[]): Positioned {
-  const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: "LR", ranksep: 80, nodesep: 28, marginx: 20, marginy: 20 });
-  g.setDefaultEdgeLabel(() => ({}));
+function edgeKey(from: string, to: string) {
+  return `${from}->${to}`;
+}
 
+function computeLayout(habits: Habit[]): Layout {
   const ids = new Set(habits.map((h) => h.id));
-  habits.forEach((h) => g.setNode(String(h.id), { width: NODE_W, height: NODE_H }));
+  const byId = new Map(habits.map((h) => [h.id, h]));
+  const prereqsOf = (h: Habit) => h.prerequisiteIds.filter((p) => ids.has(p));
+
+  // Longest dependency chain ending at each habit → its depth (rank), plus the
+  // best predecessor so we can walk back the single longest chain (the spine).
+  const chainLen = new Map<number, number>();
+  const chainPrev = new Map<number, number | null>();
+  const lenOf = (h: Habit): number => {
+    const cached = chainLen.get(h.id);
+    if (cached !== undefined) return cached;
+    chainLen.set(h.id, 1); // guard
+    let best = 0;
+    let prev: number | null = null;
+    for (const p of prereqsOf(h)) {
+      const v = lenOf(byId.get(p)!);
+      if (v > best) {
+        best = v;
+        prev = p;
+      }
+    }
+    chainLen.set(h.id, best + 1);
+    chainPrev.set(h.id, prev);
+    return best + 1;
+  };
+  habits.forEach(lenOf);
+
+  let last = habits[0];
+  habits.forEach((h) => {
+    if ((chainLen.get(h.id) ?? 0) > (chainLen.get(last.id) ?? 0)) last = h;
+  });
+  const spineSeq: number[] = [];
+  for (let cur: number | null | undefined = last.id; cur != null; cur = chainPrev.get(cur)) {
+    spineSeq.unshift(cur);
+  }
+  const spineIds = new Set(spineSeq);
+
+  const spine = new Set<string>();
+  for (let i = 0; i + 1 < spineSeq.length; i++) {
+    spine.add(edgeKey(String(spineSeq[i]), String(spineSeq[i + 1])));
+  }
+
+  const rankOf = (id: number) => (chainLen.get(id) ?? 1) - 1;
+  const maxRank = spineSeq.length - 1; // the spine has exactly one node per column
+
+  const columns: Habit[][] = Array.from({ length: maxRank + 1 }, () => []);
+  habits.forEach((h) => columns[rankOf(h.id)].push(h));
+
+  // Assign y column by column (left → right, so prerequisites are placed
+  // first). Each column is centred on its spine node (track 0); the rest are
+  // ordered by the average y of their prerequisites and split half above,
+  // half below — so nothing piles up on one side.
+  const yOf = new Map<number, number>();
+  const barycentre = (h: Habit) => {
+    const ps = prereqsOf(h);
+    if (!ps.length) return 0;
+    return ps.reduce((sum, p) => sum + (yOf.get(p) ?? 0), 0) / ps.length;
+  };
+  for (let r = 0; r <= maxRank; r++) {
+    const spineNode = columns[r].find((h) => spineIds.has(h.id))!;
+    const others = columns[r]
+      .filter((h) => !spineIds.has(h.id))
+      .sort((a, b) => barycentre(a) - barycentre(b) || a.id - b.id);
+    const half = Math.round(others.length / 2);
+    const ordered = [...others.slice(0, half), spineNode, ...others.slice(half)];
+    ordered.forEach((h, i) => yOf.set(h.id, (i - half) * ROW_H));
+  }
+
+  const positions = new Map<string, { x: number; y: number }>();
   habits.forEach((h) =>
-    h.prerequisiteIds
-      .filter((p) => ids.has(p)) // ignore dangling prereqs
-      .forEach((p) => g.setEdge(String(p), String(h.id))),
+    positions.set(String(h.id), {
+      x: rankOf(h.id) * COL_W,
+      y: (yOf.get(h.id) ?? 0) - NODE_H / 2,
+    }),
   );
 
-  dagre.layout(g);
+  // now / success: edge-free bookends at the ends, aligned with the spine.
+  positions.set("now", { x: -ANCHOR_GAP - ANCHOR_W, y: -NODE_H / 2 });
+  positions.set("success", { x: maxRank * COL_W + NODE_W + ANCHOR_GAP, y: -NODE_H / 2 });
 
-  const positions = new Map<number, { x: number; y: number }>();
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  habits.forEach((h) => {
-    const n = g.node(String(h.id)); // dagre gives the node CENTRE
-    const x = n.x - NODE_W / 2;
-    const y = n.y - NODE_H / 2;
-    positions.set(h.id, { x, y });
-    minX = Math.min(minX, x);
-    maxX = Math.max(maxX, x + NODE_W);
-    minY = Math.min(minY, y);
-    maxY = Math.max(maxY, y + NODE_H);
-  });
-
-  const centreY = (minY + maxY) / 2 - NODE_H / 2;
-  return {
-    positions,
-    now: { x: minX - ANCHOR_GAP - ANCHOR_W, y: centreY },
-    success: { x: maxX + ANCHOR_GAP, y: centreY },
-  };
+  return { positions, spine };
 }
 
 /* Stable organic blob per habit: varied border-radius from the id. */
@@ -188,20 +241,20 @@ interface IslandMapProps {
 export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
   const { resolved } = useTheme();
 
-  // The dagre layout only depends on the graph STRUCTURE (which habit points
-  // to which), so memoise it on a signature of ids + prerequisites. Changing
-  // selection or a gauge value then doesn't recompute positions.
+  // Layout depends only on graph STRUCTURE (which habit points to which), so
+  // memoise it on a signature of ids + prerequisites — selection or a gauge
+  // change then doesn't recompute positions.
   const structure = habits
     .map((h) => `${h.id}>${[...h.prerequisiteIds].sort((a, b) => a - b).join(",")}`)
     .join("|");
-  const layout = useMemo(() => layoutHabits(habits), [structure]); // eslint-disable-line react-hooks/exhaustive-deps
+  const layout = useMemo(() => computeLayout(habits), [structure]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const nodes = useMemo<Node[]>(() => {
     const list: Node[] = [
       {
         id: "now",
         type: "anchor",
-        position: layout.now,
+        position: layout.positions.get("now") ?? { x: 0, y: 0 },
         data: { label: "now" },
         draggable: false,
         selectable: false,
@@ -209,7 +262,7 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
       {
         id: "success",
         type: "anchor",
-        position: layout.success,
+        position: layout.positions.get("success") ?? { x: 0, y: 0 },
         data: { label: "success" },
         draggable: false,
         selectable: false,
@@ -219,7 +272,7 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
       list.push({
         id: String(habit.id),
         type: "habit",
-        position: layout.positions.get(habit.id) ?? { x: 0, y: 0 },
+        position: layout.positions.get(String(habit.id)) ?? { x: 0, y: 0 },
         data: { habit, selected: habit.id === selectedId },
         draggable: false,
       });
@@ -227,27 +280,34 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
     return list;
   }, [habits, layout, selectedId]);
 
-  const edges = useMemo<Edge[]>(
-    () =>
-      habits.flatMap((habit) =>
-        habit.prerequisiteIds.map((prereqId) => {
-          const prereq = habits.find((h) => h.id === prereqId);
-          const flowing = prereq?.status === "VALID";
+  const edges = useMemo<Edge[]>(() => {
+    const ids = new Set(habits.map((h) => h.id));
+    const byId = new Map(habits.map((h) => [h.id, h]));
+
+    // habit → habit prerequisite edges
+    const prereqEdges: Edge[] = habits.flatMap((habit) =>
+      habit.prerequisiteIds
+        .filter((p) => ids.has(p))
+        .map((prereqId) => {
+          const onSpine = layout.spine.has(edgeKey(String(prereqId), String(habit.id)));
+          const valid = byId.get(prereqId)?.status === "VALID";
           return {
             id: `${prereqId}-${habit.id}`,
             source: String(prereqId),
             target: String(habit.id),
-            animated: flowing,
-            style: {
-              stroke: flowing ? "#d97706" : "#a8a29e",
-              strokeWidth: 1.5,
-              strokeDasharray: flowing ? undefined : "6 6",
-            },
+            style: onSpine
+              ? { stroke: "#d97706", strokeWidth: 2.5 } // the golden main road
+              : {
+                  stroke: valid ? "#d97706" : "#a8a29e",
+                  strokeWidth: 1.5,
+                  strokeDasharray: valid ? undefined : "6 6",
+                },
           };
         }),
-      ),
-    [habits],
-  );
+    );
+
+    return prereqEdges;
+  }, [habits, layout]);
 
   return (
     // React Flow needs a concrete height, not just min/flex sizing.
@@ -276,7 +336,7 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
         onPaneClick={() => onSelect(null)}
         proOptions={{ hideAttribution: false }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} />
+        <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} />
         <Controls showInteractive={false} position="bottom-right" />
       </ReactFlow>
     </div>
