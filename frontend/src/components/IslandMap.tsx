@@ -152,9 +152,10 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
     : 0;
 
   return (
-    // No box-shadow: a blurred shadow on every node re-rasterises each frame
-    // while React Flow pans the canvas — the main cause of the mobile lag.
-    // Selection shows as a thicker coloured border, which composites for free.
+    // No box-shadow here on purpose: a blurred shadow on every node forces the
+    // browser to re-rasterise each one on every frame while React Flow pans the
+    // canvas — the main cause of the mobile/PWA lag. Selection is shown with a
+    // thicker coloured border, which composites for free.
     <div
       className={`relative h-26 w-47.5 overflow-hidden ${
         selected
@@ -167,7 +168,8 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
       } ${locked ? "bg-stone-200 dark:bg-stone-800" : "bg-amber-50 dark:bg-amber-400/10"}`}
       style={{ borderRadius: blobRadius(habit.id) }}
     >
-      {/* gauge liquid — transition scoped to height so panning never triggers it */}
+      {/* gauge liquid — transition scoped to height so it never re-evaluates
+          during a pan (transition-all would watch transform too) */}
       {!locked && pct > 0 && (
         <div
           className={`absolute inset-x-0 bottom-0 transition-[height] duration-500 ${

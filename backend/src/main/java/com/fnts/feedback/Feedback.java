@@ -2,9 +2,11 @@ package com.fnts.feedback;
 
 import java.time.Instant;
 
+import com.fnts.common.EncryptedStringConverter;
 import com.fnts.user.User;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -32,6 +34,7 @@ public class Feedback {
     @JoinColumn(name = "user_id")
     private User user;
 
+    @Convert(converter = EncryptedStringConverter.class)
     @Column(nullable = false, columnDefinition = "text")
     private String message;
 
@@ -42,6 +45,7 @@ public class Feedback {
     @Column(nullable = false)
     private FeedbackStatus status = FeedbackStatus.NEW;
 
+    @Convert(converter = EncryptedStringConverter.class)
     @Column(name = "ai_summary", columnDefinition = "text")
     private String aiSummary;
 
@@ -51,6 +55,7 @@ public class Feedback {
     @Column(name = "ai_effort")
     private String aiEffort;
 
+    @Convert(converter = EncryptedStringConverter.class)
     @Column(name = "ai_verdict", columnDefinition = "text")
     private String aiVerdict;
 
