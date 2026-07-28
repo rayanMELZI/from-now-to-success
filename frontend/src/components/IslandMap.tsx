@@ -20,61 +20,110 @@ import type { Habit } from "@/lib/types";
 import { useTheme } from "@/lib/theme";
 
 /* ------------------------------------------------------------------ */
-/* Layout: dagre lays the prerequisite DAG out left-to-right. It ranks */
-/* nodes by prerequisite depth AND minimises edge crossings within     */
-/* each rank, so connected habits line up and the arcs read cleanly —  */
-/* instead of the old creation-order (FIFO) row placement.             */
+/* Layout                                                              */
+/*                                                                     */
+/* dagre lays the DAG out left-to-right (now → habits → success) and   */
+/* minimises edge crossings. On top of that we find the longest        */
+/* dependency chain (the "spine") and weight its edges heavily, so     */
+/* dagre pulls it into a straight line down the centre. Short branches  */
+/* and lone habits then settle above and below it, and the whole map   */
+/* reads as one path converging on success.                            */
 /* ------------------------------------------------------------------ */
 
 const NODE_W = 190;
 const NODE_H = 104;
 const ANCHOR_W = 150;
 const ANCHOR_GAP = 60;
+const SPINE_WEIGHT = 100;
 
-interface Positioned {
-  positions: Map<number, { x: number; y: number }>;
-  now: { x: number; y: number };
-  success: { x: number; y: number };
+interface Layout {
+  positions: Map<string, { x: number; y: number }>;
+  spine: Set<string>; // habit-to-habit "from->to" keys on the longest chain
 }
 
-/** Runs dagre; returns React Flow top-left positions plus anchor spots. */
-function layoutHabits(habits: Habit[]): Positioned {
-  const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: "LR", ranksep: 80, nodesep: 28, marginx: 20, marginy: 20 });
-  g.setDefaultEdgeLabel(() => ({}));
+function edgeKey(from: string, to: string) {
+  return `${from}->${to}`;
+}
 
+function computeLayout(habits: Habit[]): Layout {
   const ids = new Set(habits.map((h) => h.id));
+  const byId = new Map(habits.map((h) => [h.id, h]));
+  const prereqsOf = (h: Habit) => h.prerequisiteIds.filter((p) => ids.has(p));
+
+  // The spine = the longest dependency chain among the habits. Find it with a
+  // memoised DFS that tracks the best predecessor, then walk it back.
+  const chainLen = new Map<number, number>();
+  const chainPrev = new Map<number, number | null>();
+  const lenOf = (h: Habit): number => {
+    const cached = chainLen.get(h.id);
+    if (cached !== undefined) return cached;
+    chainLen.set(h.id, 1); // guard
+    let best = 0;
+    let prev: number | null = null;
+    for (const p of prereqsOf(h)) {
+      const v = lenOf(byId.get(p)!);
+      if (v > best) {
+        best = v;
+        prev = p;
+      }
+    }
+    chainLen.set(h.id, best + 1);
+    chainPrev.set(h.id, prev);
+    return best + 1;
+  };
+  habits.forEach(lenOf);
+
+  let last = habits[0];
+  habits.forEach((h) => {
+    if ((chainLen.get(h.id) ?? 0) > (chainLen.get(last.id) ?? 0)) last = h;
+  });
+  const spineSeq: number[] = [];
+  for (let cur: number | null | undefined = last.id; cur != null; cur = chainPrev.get(cur)) {
+    spineSeq.unshift(cur);
+  }
+  // "from->to" keys of the spine (habit → habit only; the now/success anchors
+  // stay decorative bookends with no edges).
+  const spine = new Set<string>();
+  for (let i = 0; i + 1 < spineSeq.length; i++) {
+    spine.add(edgeKey(String(spineSeq[i]), String(spineSeq[i + 1])));
+  }
+
+  // Dagre lays out the habits; the spine edges are weighted heavily so dagre
+  // straightens the longest chain into a line, with branches settling around it.
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir: "LR", ranksep: 80, nodesep: 26, marginx: 24, marginy: 24 });
+  g.setDefaultEdgeLabel(() => ({}));
   habits.forEach((h) => g.setNode(String(h.id), { width: NODE_W, height: NODE_H }));
   habits.forEach((h) =>
-    h.prerequisiteIds
-      .filter((p) => ids.has(p)) // ignore dangling prereqs
-      .forEach((p) => g.setEdge(String(p), String(h.id))),
+    prereqsOf(h).forEach((p) =>
+      g.setEdge(String(p), String(h.id), {
+        weight: spine.has(edgeKey(String(p), String(h.id))) ? SPINE_WEIGHT : 1,
+      }),
+    ),
   );
 
   dagre.layout(g);
 
-  const positions = new Map<number, { x: number; y: number }>();
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
+  // Centre the spine vertically (shift so its mean y is 0), so the main chain
+  // runs through the middle and shorter branches spread above and below it.
+  const spineY =
+    spineSeq.reduce((sum, id) => sum + g.node(String(id)).y, 0) / spineSeq.length;
+
+  const positions = new Map<string, { x: number; y: number }>();
+  let minLeft = Infinity;
+  let maxRight = -Infinity;
   habits.forEach((h) => {
-    const n = g.node(String(h.id)); // dagre gives the node CENTRE
-    const x = n.x - NODE_W / 2;
-    const y = n.y - NODE_H / 2;
-    positions.set(h.id, { x, y });
-    minX = Math.min(minX, x);
-    maxX = Math.max(maxX, x + NODE_W);
-    minY = Math.min(minY, y);
-    maxY = Math.max(maxY, y + NODE_H);
+    const n = g.node(String(h.id)); // dagre gives node centres
+    positions.set(String(h.id), { x: n.x - NODE_W / 2, y: n.y - spineY - NODE_H / 2 });
+    minLeft = Math.min(minLeft, n.x - NODE_W / 2);
+    maxRight = Math.max(maxRight, n.x + NODE_W / 2);
   });
 
-  const centreY = (minY + maxY) / 2 - NODE_H / 2;
-  return {
-    positions,
-    now: { x: minX - ANCHOR_GAP - ANCHOR_W, y: centreY },
-    success: { x: maxX + ANCHOR_GAP, y: centreY },
-  };
+  // now / success sit at the ends, aligned with the (now-centred) spine.
+  positions.set("now", { x: minLeft - ANCHOR_GAP - ANCHOR_W, y: -NODE_H / 2 });
+  positions.set("success", { x: maxRight + ANCHOR_GAP, y: -NODE_H / 2 });
+
+  return { positions, spine };
 }
 
 /* Stable organic blob per habit: varied border-radius from the id. */
@@ -99,22 +148,25 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
     : 0;
 
   return (
+    // No box-shadow: a blurred shadow on every node re-rasterises each frame
+    // while React Flow pans the canvas — the main cause of the mobile lag.
+    // Selection shows as a thicker coloured border, which composites for free.
     <div
-      className={`relative h-26 w-47.5 overflow-hidden border-2 shadow-sm transition-shadow ${
+      className={`relative h-26 w-47.5 overflow-hidden ${
         selected
-          ? "border-amber-500 shadow-lg shadow-amber-200/60"
+          ? "border-[3px] border-amber-500"
           : locked
-            ? "border-stone-300 dark:border-stone-700"
+            ? "border-2 border-stone-300 dark:border-stone-700"
             : valid
-              ? "border-emerald-700/60"
-              : "border-amber-800/50"
+              ? "border-2 border-emerald-700/60"
+              : "border-2 border-amber-800/50"
       } ${locked ? "bg-stone-200 dark:bg-stone-800" : "bg-amber-50 dark:bg-amber-400/10"}`}
       style={{ borderRadius: blobRadius(habit.id) }}
     >
-      {/* gauge liquid */}
+      {/* gauge liquid — transition scoped to height so panning never triggers it */}
       {!locked && pct > 0 && (
         <div
-          className={`absolute inset-x-0 bottom-0 transition-all duration-700 ${
+          className={`absolute inset-x-0 bottom-0 transition-[height] duration-500 ${
             valid ? "bg-emerald-300/60" : "bg-amber-300/60"
           }`}
           style={{ height: `${pct}%` }}
@@ -159,7 +211,7 @@ function AnchorNode({ data }: NodeProps<Node<AnchorNodeData>>) {
   const Icon = data.label === "now" ? Footprints : Sparkles;
   return (
     <div
-      className="flex h-26 w-37.5 flex-col items-center justify-center gap-1 border-2 border-amber-800/60 bg-amber-100 dark:bg-amber-400/15 shadow-sm"
+      className="flex h-26 w-37.5 flex-col items-center justify-center gap-1 border-2 border-amber-800/60 bg-amber-100 dark:bg-amber-400/15"
       style={{ borderRadius: blobRadius(data.label === "now" ? 5 : 9) }}
     >
       <Icon size={22} className="text-amber-700 dark:text-amber-300" />
@@ -183,20 +235,20 @@ interface IslandMapProps {
 export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
   const { resolved } = useTheme();
 
-  // The dagre layout only depends on the graph STRUCTURE (which habit points
-  // to which), so memoise it on a signature of ids + prerequisites. Changing
-  // selection or a gauge value then doesn't recompute positions.
+  // Layout depends only on graph STRUCTURE (which habit points to which), so
+  // memoise it on a signature of ids + prerequisites — selection or a gauge
+  // change then doesn't recompute positions.
   const structure = habits
     .map((h) => `${h.id}>${[...h.prerequisiteIds].sort((a, b) => a - b).join(",")}`)
     .join("|");
-  const layout = useMemo(() => layoutHabits(habits), [structure]); // eslint-disable-line react-hooks/exhaustive-deps
+  const layout = useMemo(() => computeLayout(habits), [structure]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const nodes = useMemo<Node[]>(() => {
     const list: Node[] = [
       {
         id: "now",
         type: "anchor",
-        position: layout.now,
+        position: layout.positions.get("now") ?? { x: 0, y: 0 },
         data: { label: "now" },
         draggable: false,
         selectable: false,
@@ -204,7 +256,7 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
       {
         id: "success",
         type: "anchor",
-        position: layout.success,
+        position: layout.positions.get("success") ?? { x: 0, y: 0 },
         data: { label: "success" },
         draggable: false,
         selectable: false,
@@ -214,7 +266,7 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
       list.push({
         id: String(habit.id),
         type: "habit",
-        position: layout.positions.get(habit.id) ?? { x: 0, y: 0 },
+        position: layout.positions.get(String(habit.id)) ?? { x: 0, y: 0 },
         data: { habit, selected: habit.id === selectedId },
         draggable: false,
       });
@@ -222,27 +274,34 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
     return list;
   }, [habits, layout, selectedId]);
 
-  const edges = useMemo<Edge[]>(
-    () =>
-      habits.flatMap((habit) =>
-        habit.prerequisiteIds.map((prereqId) => {
-          const prereq = habits.find((h) => h.id === prereqId);
-          const flowing = prereq?.status === "VALID";
+  const edges = useMemo<Edge[]>(() => {
+    const ids = new Set(habits.map((h) => h.id));
+    const byId = new Map(habits.map((h) => [h.id, h]));
+
+    // habit → habit prerequisite edges
+    const prereqEdges: Edge[] = habits.flatMap((habit) =>
+      habit.prerequisiteIds
+        .filter((p) => ids.has(p))
+        .map((prereqId) => {
+          const onSpine = layout.spine.has(edgeKey(String(prereqId), String(habit.id)));
+          const valid = byId.get(prereqId)?.status === "VALID";
           return {
             id: `${prereqId}-${habit.id}`,
             source: String(prereqId),
             target: String(habit.id),
-            animated: flowing,
-            style: {
-              stroke: flowing ? "#d97706" : "#a8a29e",
-              strokeWidth: 1.5,
-              strokeDasharray: flowing ? undefined : "6 6",
-            },
+            style: onSpine
+              ? { stroke: "#d97706", strokeWidth: 2.5 } // the golden main road
+              : {
+                  stroke: valid ? "#d97706" : "#a8a29e",
+                  strokeWidth: 1.5,
+                  strokeDasharray: valid ? undefined : "6 6",
+                },
           };
         }),
-      ),
-    [habits],
-  );
+    );
+
+    return prereqEdges;
+  }, [habits, layout]);
 
   return (
     // React Flow needs a concrete height, not just min/flex sizing.
@@ -257,6 +316,13 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
         minZoom={0.3}
         maxZoom={1.6}
         nodesConnectable={false}
+        nodesDraggable={false}
+        // Skip off-screen nodes and drop focus/selection bookkeeping we don't
+        // use — less work per frame while panning, especially on mobile.
+        onlyRenderVisibleElements
+        nodesFocusable={false}
+        edgesFocusable={false}
+        elementsSelectable={false}
         onNodeClick={(_, node) => {
           const habit = habits.find((h) => String(h.id) === node.id);
           if (habit) onSelect(habit);
@@ -264,7 +330,7 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
         onPaneClick={() => onSelect(null)}
         proOptions={{ hideAttribution: false }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} />
+        <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} />
         <Controls showInteractive={false} position="bottom-right" />
       </ReactFlow>
     </div>
