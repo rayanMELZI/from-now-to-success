@@ -42,20 +42,6 @@ docker compose up --build
 # open http://localhost:3000
 ```
 
-### Local development (without Docker for the app itself)
-
-```bash
-# database
-docker run -d --name fnts-dev-db -e POSTGRES_USER=fnts -e POSTGRES_PASSWORD=fnts \
-  -e POSTGRES_DB=fnts -p 5434:5432 postgres:16-alpine
-
-# backend (needs DB_URL=jdbc:postgresql://localhost:5434/fnts, JWT_SECRET, VAPID_* env vars)
-cd backend && ./mvnw spring-boot:run
-
-# frontend (proxies /api to localhost:8080)
-cd frontend && npm run dev
-```
-
 ### Tests
 
 ```bash
