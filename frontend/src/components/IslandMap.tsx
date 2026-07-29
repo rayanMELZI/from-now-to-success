@@ -23,11 +23,10 @@ import { useTheme } from "@/lib/theme";
 /*                                                                     */
 /* A custom layered layout. Columns are prerequisite depth (left to    */
 /* right). The longest dependency chain (the "spine") is pinned to a   */
-/* straight line down the vertical CENTRE, and in every column the     */
-/* other habits are split evenly above and below it, ordered near      */
-/* their prerequisites to keep the arcs from crossing. So the map      */
-/* reads as one main road to success, with branches and lone habits    */
-/* at the top and bottom edges.                                        */
+/* straight line down the vertical CENTRE; in every column the other   */
+/* habits are split evenly above and below it, ordered near their      */
+/* prerequisites so arcs stay untangled. Lone habits fall to the top   */
+/* and bottom edges, and the map reads as one main path to success.    */
 /* ------------------------------------------------------------------ */
 
 const NODE_W = 190;
@@ -39,14 +38,11 @@ const ANCHOR_GAP = 60;
 
 interface Layout {
   positions: Map<string, { x: number; y: number }>;
-  spine: Set<string>; // habit-to-habit "from->to" keys on the longest chain
-}
-
-function edgeKey(from: string, to: string) {
-  return `${from}->${to}`;
 }
 
 function computeLayout(habits: Habit[]): Layout {
+  if (habits.length === 0) return { positions: new Map() };
+
   const ids = new Set(habits.map((h) => h.id));
   const byId = new Map(habits.map((h) => [h.id, h]));
   const prereqsOf = (h: Habit) => h.prerequisiteIds.filter((p) => ids.has(p));
@@ -58,7 +54,7 @@ function computeLayout(habits: Habit[]): Layout {
   const lenOf = (h: Habit): number => {
     const cached = chainLen.get(h.id);
     if (cached !== undefined) return cached;
-    chainLen.set(h.id, 1); // guard
+    chainLen.set(h.id, 1); // guard against cycles (backend forbids them anyway)
     let best = 0;
     let prev: number | null = null;
     for (const p of prereqsOf(h)) {
@@ -78,27 +74,20 @@ function computeLayout(habits: Habit[]): Layout {
   habits.forEach((h) => {
     if ((chainLen.get(h.id) ?? 0) > (chainLen.get(last.id) ?? 0)) last = h;
   });
-  const spineSeq: number[] = [];
+  const spineIds = new Set<number>();
   for (let cur: number | null | undefined = last.id; cur != null; cur = chainPrev.get(cur)) {
-    spineSeq.unshift(cur);
-  }
-  const spineIds = new Set(spineSeq);
-
-  const spine = new Set<string>();
-  for (let i = 0; i + 1 < spineSeq.length; i++) {
-    spine.add(edgeKey(String(spineSeq[i]), String(spineSeq[i + 1])));
+    spineIds.add(cur);
   }
 
   const rankOf = (id: number) => (chainLen.get(id) ?? 1) - 1;
-  const maxRank = spineSeq.length - 1; // the spine has exactly one node per column
+  const maxRank = Math.max(...habits.map((h) => rankOf(h.id)));
 
   const columns: Habit[][] = Array.from({ length: maxRank + 1 }, () => []);
   habits.forEach((h) => columns[rankOf(h.id)].push(h));
 
-  // Assign y column by column (left → right, so prerequisites are placed
-  // first). Each column is centred on its spine node (track 0); the rest are
-  // ordered by the average y of their prerequisites and split half above,
-  // half below — so nothing piles up on one side.
+  // Assign y column by column (left → right, so prerequisites are placed first).
+  // Each column is centred on its spine node; the rest are ordered by the mean
+  // y of their prerequisites and split half above, half below.
   const yOf = new Map<number, number>();
   const barycentre = (h: Habit) => {
     const ps = prereqsOf(h);
@@ -106,13 +95,16 @@ function computeLayout(habits: Habit[]): Layout {
     return ps.reduce((sum, p) => sum + (yOf.get(p) ?? 0), 0) / ps.length;
   };
   for (let r = 0; r <= maxRank; r++) {
-    const spineNode = columns[r].find((h) => spineIds.has(h.id))!;
+    const spineNode = columns[r].find((h) => spineIds.has(h.id));
     const others = columns[r]
       .filter((h) => !spineIds.has(h.id))
       .sort((a, b) => barycentre(a) - barycentre(b) || a.id - b.id);
     const half = Math.round(others.length / 2);
-    const ordered = [...others.slice(0, half), spineNode, ...others.slice(half)];
-    ordered.forEach((h, i) => yOf.set(h.id, (i - half) * ROW_H));
+    const ordered = spineNode
+      ? [...others.slice(0, half), spineNode, ...others.slice(half)]
+      : others;
+    const centre = spineNode ? half : (ordered.length - 1) / 2;
+    ordered.forEach((h, i) => yOf.set(h.id, (i - centre) * ROW_H));
   }
 
   const positions = new Map<string, { x: number; y: number }>();
@@ -123,11 +115,11 @@ function computeLayout(habits: Habit[]): Layout {
     }),
   );
 
-  // now / success: edge-free bookends at the ends, aligned with the spine.
+  // now / success: edge-free decorative bookends at the ends, aligned with the spine.
   positions.set("now", { x: -ANCHOR_GAP - ANCHOR_W, y: -NODE_H / 2 });
   positions.set("success", { x: maxRank * COL_W + NODE_W + ANCHOR_GAP, y: -NODE_H / 2 });
 
-  return { positions, spine };
+  return { positions };
 }
 
 /* Stable organic blob per habit: varied border-radius from the id. */
@@ -152,25 +144,22 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
     : 0;
 
   return (
-    // No box-shadow: a blurred shadow on every node re-rasterises each frame
-    // while React Flow pans the canvas — the main cause of the mobile lag.
-    // Selection shows as a thicker coloured border, which composites for free.
     <div
-      className={`relative h-26 w-47.5 overflow-hidden ${
+      className={`relative h-26 w-47.5 overflow-hidden border-2 shadow-sm transition-shadow ${
         selected
-          ? "border-[3px] border-amber-500"
+          ? "border-amber-500 shadow-lg shadow-amber-200/60"
           : locked
-            ? "border-2 border-stone-300 dark:border-stone-700"
+            ? "border-stone-300 dark:border-stone-700"
             : valid
-              ? "border-2 border-emerald-700/60"
-              : "border-2 border-amber-800/50"
+              ? "border-emerald-700/60"
+              : "border-amber-800/50"
       } ${locked ? "bg-stone-200 dark:bg-stone-800" : "bg-amber-50 dark:bg-amber-400/10"}`}
       style={{ borderRadius: blobRadius(habit.id) }}
     >
-      {/* gauge liquid — transition scoped to height so panning never triggers it */}
+      {/* gauge liquid */}
       {!locked && pct > 0 && (
         <div
-          className={`absolute inset-x-0 bottom-0 transition-[height] duration-500 ${
+          className={`absolute inset-x-0 bottom-0 transition-all duration-700 ${
             valid ? "bg-emerald-300/60" : "bg-amber-300/60"
           }`}
           style={{ height: `${pct}%` }}
@@ -215,7 +204,7 @@ function AnchorNode({ data }: NodeProps<Node<AnchorNodeData>>) {
   const Icon = data.label === "now" ? Footprints : Sparkles;
   return (
     <div
-      className="flex h-26 w-37.5 flex-col items-center justify-center gap-1 border-2 border-amber-800/60 bg-amber-100 dark:bg-amber-400/15"
+      className="flex h-26 w-37.5 flex-col items-center justify-center gap-1 border-2 border-amber-800/60 bg-amber-100 dark:bg-amber-400/15 shadow-sm"
       style={{ borderRadius: blobRadius(data.label === "now" ? 5 : 9) }}
     >
       <Icon size={22} className="text-amber-700 dark:text-amber-300" />
@@ -278,34 +267,27 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
     return list;
   }, [habits, layout, selectedId]);
 
-  const edges = useMemo<Edge[]>(() => {
-    const ids = new Set(habits.map((h) => h.id));
-    const byId = new Map(habits.map((h) => [h.id, h]));
-
-    // habit → habit prerequisite edges
-    const prereqEdges: Edge[] = habits.flatMap((habit) =>
-      habit.prerequisiteIds
-        .filter((p) => ids.has(p))
-        .map((prereqId) => {
-          const onSpine = layout.spine.has(edgeKey(String(prereqId), String(habit.id)));
-          const valid = byId.get(prereqId)?.status === "VALID";
+  const edges = useMemo<Edge[]>(
+    () =>
+      habits.flatMap((habit) =>
+        habit.prerequisiteIds.map((prereqId) => {
+          const prereq = habits.find((h) => h.id === prereqId);
+          const flowing = prereq?.status === "VALID";
           return {
             id: `${prereqId}-${habit.id}`,
             source: String(prereqId),
             target: String(habit.id),
-            style: onSpine
-              ? { stroke: "#d97706", strokeWidth: 2.5 } // the golden main road
-              : {
-                  stroke: valid ? "#d97706" : "#a8a29e",
-                  strokeWidth: 1.5,
-                  strokeDasharray: valid ? undefined : "6 6",
-                },
+            animated: flowing,
+            style: {
+              stroke: flowing ? "#d97706" : "#a8a29e",
+              strokeWidth: 1.5,
+              strokeDasharray: flowing ? undefined : "6 6",
+            },
           };
         }),
-    );
-
-    return prereqEdges;
-  }, [habits, layout]);
+      ),
+    [habits],
+  );
 
   return (
     // React Flow needs a concrete height, not just min/flex sizing.
@@ -320,13 +302,6 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
         minZoom={0.3}
         maxZoom={1.6}
         nodesConnectable={false}
-        nodesDraggable={false}
-        // Skip off-screen nodes and drop focus/selection bookkeeping we don't
-        // use — less work per frame while panning, especially on mobile.
-        onlyRenderVisibleElements
-        nodesFocusable={false}
-        edgesFocusable={false}
-        elementsSelectable={false}
         onNodeClick={(_, node) => {
           const habit = habits.find((h) => String(h.id) === node.id);
           if (habit) onSelect(habit);
@@ -334,7 +309,7 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
         onPaneClick={() => onSelect(null)}
         proOptions={{ hideAttribution: false }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} />
+        <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} />
         <Controls showInteractive={false} position="bottom-right" />
       </ReactFlow>
     </div>
