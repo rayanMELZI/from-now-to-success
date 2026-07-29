@@ -13,6 +13,38 @@ interface MissDraft {
   freeze: boolean;
 }
 
+type GroupBy = "none" | "rhythm" | "goal";
+
+const GROUP_OPTIONS: { key: GroupBy; label: string }[] = [
+  { key: "none", label: "None" },
+  { key: "rhythm", label: "Rhythm" },
+  { key: "goal", label: "Goal" },
+];
+
+/** Splits the check-in list into labelled sections by the chosen property. */
+function groupEntries(
+  entries: TodayEntry[],
+  mode: GroupBy,
+): { key: string; label: string; items: TodayEntry[] }[] {
+  const buckets: { key: string; label: string; match: (e: TodayEntry) => boolean }[] =
+    mode === "rhythm"
+      ? [
+          { key: "DAILY", label: "Daily", match: (e) => e.schedule === "DAILY" },
+          { key: "WEEKLY", label: "Weekly", match: (e) => e.schedule === "WEEKLY" },
+          { key: "MONTHLY", label: "Monthly", match: (e) => e.schedule === "MONTHLY" },
+        ]
+      : mode === "goal"
+        ? [
+            { key: "BUILD", label: "Building", match: (e) => e.habitType === "BUILD" },
+            { key: "QUIT", label: "Quitting", match: (e) => e.habitType === "QUIT" },
+          ]
+        : [{ key: "all", label: "", match: () => true }];
+
+  return buckets
+    .map((b) => ({ key: b.key, label: b.label, items: entries.filter(b.match) }))
+    .filter((g) => g.items.length > 0);
+}
+
 function CheckinPage() {
   const { refreshUser } = useAuth();
   const [today, setToday] = useState<TodayResponse | null>(null);
@@ -20,6 +52,17 @@ function CheckinPage() {
   const [result, setResult] = useState<CheckinResult | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Remembered grouping choice (lazy init avoids a setState-in-effect).
+  const [groupBy, setGroupByState] = useState<GroupBy>(() =>
+    typeof window === "undefined"
+      ? "none"
+      : ((localStorage.getItem("checkinGroupBy") as GroupBy | null) ?? "none"),
+  );
+  const setGroupBy = (g: GroupBy) => {
+    setGroupByState(g);
+    localStorage.setItem("checkinGroupBy", g);
+  };
 
   // setState happens in the promise callback, never in the effect body itself
   // (react-hooks/set-state-in-effect).
@@ -130,25 +173,58 @@ function CheckinPage() {
         </div>
       )}
 
-      <div className="space-y-2">
-        {pending.map((entry) => (
-          <PendingRow
-            key={entry.habitId}
-            entry={entry}
-            busy={busyId === entry.habitId}
-            missDraft={missDraft?.habitId === entry.habitId ? missDraft : null}
-            freezesLeft={today.freezesLeft}
-            deepFreezesLeft={today.deepFreezesLeft}
-            onDone={() => answer(entry.habitId, true)}
-            onMissClick={(freeze) =>
-              setMissDraft({ habitId: entry.habitId, reason: "", freeze })
-            }
-            onMissConfirm={(draft) =>
-              answer(entry.habitId, false, draft.reason, draft.freeze)
-            }
-            onMissCancel={() => setMissDraft(null)}
-            onDraftChange={setMissDraft}
-          />
+      {pending.length > 1 && (
+        <div className="mb-3 flex items-center gap-2 text-xs">
+          <span className="text-stone-500 dark:text-stone-400">Group by</span>
+          <div className="flex rounded-lg bg-stone-100 dark:bg-stone-800 p-0.5">
+            {GROUP_OPTIONS.map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => setGroupBy(opt.key)}
+                className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+                  groupBy === opt.key
+                    ? "bg-white dark:bg-stone-600 text-stone-800 dark:text-stone-100 shadow-sm"
+                    : "text-stone-500 dark:text-stone-400"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-5">
+        {groupEntries(pending, groupBy).map((group) => (
+          <div key={group.key} className="space-y-2">
+            {group.label && (
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-400">
+                {group.label}
+                <span className="ml-1 text-stone-300 dark:text-stone-600">
+                  · {group.items.length}
+                </span>
+              </h3>
+            )}
+            {group.items.map((entry) => (
+              <PendingRow
+                key={entry.habitId}
+                entry={entry}
+                busy={busyId === entry.habitId}
+                missDraft={missDraft?.habitId === entry.habitId ? missDraft : null}
+                freezesLeft={today.freezesLeft}
+                deepFreezesLeft={today.deepFreezesLeft}
+                onDone={() => answer(entry.habitId, true)}
+                onMissClick={(freeze) =>
+                  setMissDraft({ habitId: entry.habitId, reason: "", freeze })
+                }
+                onMissConfirm={(draft) =>
+                  answer(entry.habitId, false, draft.reason, draft.freeze)
+                }
+                onMissCancel={() => setMissDraft(null)}
+                onDraftChange={setMissDraft}
+              />
+            ))}
+          </div>
         ))}
       </div>
 
