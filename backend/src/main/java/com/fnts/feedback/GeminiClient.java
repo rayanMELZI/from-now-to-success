@@ -21,7 +21,8 @@ import tools.jackson.databind.ObjectMapper;
 @Component
 public class GeminiClient {
 
-    public record Briefing(String summary, String category, String effort, String verdict) {}
+    public record Briefing(String summary, String category, String effort, String verdict,
+                           boolean worthDoing, String issueTitle) {}
 
     private static final String PROMPT = """
             You are triaging a user feature request / bug report for a habit-tracking
@@ -78,8 +79,15 @@ public class GeminiClient {
                         "effort", Map.of("type", "string",
                                 "enum", List.of("TRIVIAL", "SMALL", "MEDIUM", "LARGE", "UNCLEAR")),
                         "verdict", Map.of("type", "string",
-                                "description", "2-3 sentences: is this worth building, and why or why not?")),
-                "required", List.of("summary", "category", "effort", "verdict"));
+                                "description", "2-3 sentences: is this worth building, and why or why not?"),
+                        "worthDoing", Map.of("type", "boolean",
+                                "description", "true only if this is a concrete, worthwhile change the "
+                                        + "developer should actually put on the backlog. false for vague "
+                                        + "ideas, things that already exist, or not worth the effort."),
+                        "issueTitle", Map.of("type", "string",
+                                "description", "A short imperative GitHub-issue title, e.g. "
+                                        + "\"Group the check-in list by schedule\". Always fill it in.")),
+                "required", List.of("summary", "category", "effort", "verdict", "worthDoing", "issueTitle"));
 
         Map<String, Object> body = Map.of(
                 "contents", List.of(Map.of(
@@ -111,6 +119,8 @@ public class GeminiClient {
                 parsed.path("summary").stringValue(""),
                 parsed.path("category").stringValue(""),
                 parsed.path("effort").stringValue(""),
-                parsed.path("verdict").stringValue(""));
+                parsed.path("verdict").stringValue(""),
+                parsed.path("worthDoing").booleanValue(false),
+                parsed.path("issueTitle").stringValue(""));
     }
 }

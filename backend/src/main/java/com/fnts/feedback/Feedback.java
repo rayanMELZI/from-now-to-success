@@ -59,6 +59,19 @@ public class Feedback {
     @Column(name = "ai_verdict", columnDefinition = "text")
     private String aiVerdict;
 
+    /** The model's build/skip decision; null until a briefing succeeds. */
+    @Column(name = "ai_worth_doing")
+    private Boolean aiWorthDoing;
+
+    /** Short imperative title for the GitHub issue (can restate the request). */
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(name = "ai_issue_title", columnDefinition = "text")
+    private String aiIssueTitle;
+
+    /** Set once a GitHub issue exists; also the guard against filing twice. */
+    @Column(name = "github_issue_url", columnDefinition = "text")
+    private String githubIssueUrl;
+
     /** Null while the briefing email is still owed. */
     @Column(name = "notified_at")
     private Instant notifiedAt;

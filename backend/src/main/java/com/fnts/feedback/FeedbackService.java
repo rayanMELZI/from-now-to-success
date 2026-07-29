@@ -51,6 +51,15 @@ public class FeedbackService {
         return new SubmitResult(saved.getId(), delivered, notifier.isEnabled());
     }
 
+    /**
+     * Files a GitHub issue for one feedback regardless of the AI verdict —
+     * the manual "create issue" link from a briefing email. Returns the issue
+     * url, or null if it couldn't be filed (already filed returns the url).
+     */
+    public String promoteToIssue(Long feedbackId) {
+        return notifier.fileIssue(feedbackId, true);
+    }
+
     @Transactional(readOnly = true)
     public List<FeedbackResponse> list(int limit) {
         return feedbackRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, limit))

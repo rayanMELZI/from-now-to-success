@@ -11,4 +11,7 @@ public interface FeedbackRepository extends JpaRepository<Feedback, Long> {
 
     /** Rows still owed a briefing email, oldest first. */
     List<Feedback> findByNotifiedAtIsNullOrderByCreatedAtAsc(Pageable pageable);
+
+    /** Worthy rows whose GitHub issue hasn't been filed yet, oldest first. */
+    List<Feedback> findByAiWorthDoingIsTrueAndGithubIssueUrlIsNullOrderByCreatedAtAsc(Pageable pageable);
 }

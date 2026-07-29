@@ -42,4 +42,26 @@ public class FeedbackRetryScheduler {
             notifier.notifyOne(feedback.getId());
         }
     }
+
+    /**
+     * Files GitHub issues for worthy feedback whose issue creation failed
+     * earlier (or that predates GitHub being configured). Self-healing in the
+     * same way as the email retry above.
+     */
+    @Scheduled(cron = "0 */10 * * * *")
+    public void fileWorthyIssues() {
+        if (!notifier.isGithubEnabled()) {
+            return;
+        }
+        List<Feedback> worthy =
+                repository.findByAiWorthDoingIsTrueAndGithubIssueUrlIsNullOrderByCreatedAtAsc(
+                        PageRequest.of(0, BATCH));
+        if (worthy.isEmpty()) {
+            return;
+        }
+        log.info("Filing {} pending GitHub issue(s) for worthy feedback", worthy.size());
+        for (Feedback feedback : worthy) {
+            notifier.fileIssue(feedback.getId(), false);
+        }
+    }
 }

@@ -62,6 +62,20 @@ Optional — feedback briefings (leave unset to just store feedback silently):
 | `MAIL_USERNAME`       | the Gmail account that sends them |
 | `MAIL_PASSWORD`       | a Gmail **App Password** (Google Account → Security → 2-Step Verification → App passwords) — never the real password |
 
+Optional — auto-file GitHub issues for feedback the AI judges worth building
+(leave unset to just email briefings):
+
+| Secret / Variable       | Value |
+|-------------------------|-------|
+| `GH_ISSUES_TOKEN` (secret) | a **fine-grained PAT** scoped to the target repo with **Issues: Read and write**. (Can't be named `GITHUB_*` — GitHub reserves that prefix for secrets.) |
+| `GITHUB_ISSUES_REPO` (variable) | `owner/repo` to file issues in (e.g. `rayanMELZI/from-now-to-success`) |
+| `PUBLIC_BASE_URL` (variable) | the app's public URL (e.g. `https://fnts.example.dev`) — makes the one-click "create issue" link in briefing emails work; without it that link is omitted |
+
+Worth-building feedback opens an issue automatically (labelled by category +
+effort); anything the AI skips still gets emailed with a signed link so you can
+promote it yourself. The user's verbatim message goes into the issue body, so it
+reaches GitHub — the same trust boundary as the briefing emails.
+
 Optional variable: `GEMINI_MODEL` (defaults to `gemini-2.5-flash`, which is
 on the free tier at 250 requests/day).
 
