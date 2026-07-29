@@ -36,6 +36,9 @@ services:
       FEEDBACK_NOTIFY_TO: ${FEEDBACK_NOTIFY_TO:-}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      GITHUB_ISSUES_TOKEN: ${GITHUB_ISSUES_TOKEN:-}
+      GITHUB_ISSUES_REPO: ${GITHUB_ISSUES_REPO:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
     depends_on:
       db:
         condition: service_healthy

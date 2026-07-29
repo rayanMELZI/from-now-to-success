@@ -8,7 +8,9 @@ public record AppProperties(
         Refresh refresh,
         Push push,
         Feedback feedback,
+        Github github,
         Crypto crypto,
+        String publicBaseUrl,
         boolean secureCookies
 ) {
     public record Jwt(String secret, int accessTtlMinutes) {}
@@ -26,4 +28,10 @@ public record AppProperties(
      */
     public record Feedback(String geminiApiKey, String geminiModel, String geminiBaseUrl,
                            String notifyTo, String notifyFrom) {}
+
+    /**
+     * Auto-filed GitHub issues for feedback the AI judges worth building.
+     * Blank token or repo disables it — feedback is still briefed and emailed.
+     */
+    public record Github(String token, String repo, String baseUrl) {}
 }

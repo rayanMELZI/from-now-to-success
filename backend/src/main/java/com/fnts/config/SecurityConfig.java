@@ -38,6 +38,10 @@ public class SecurityConfig {
                         // second (wrong) denial overwrites the real one — e.g. a 403 from
                         // hasRole() gets silently rewritten to 401 before it reaches the client.
                         .requestMatchers("/error").permitAll()
+                        // The "create issue" link is clicked from an email, so it
+                        // carries a signed token instead of a login (verified in the
+                        // controller). Must come before the /api/feedback ADMIN rule.
+                        .requestMatchers(HttpMethod.GET, "/api/feedback/*/promote").permitAll()
                         // Anyone signed in can submit feedback; only ADMIN can list it.
                         .requestMatchers(HttpMethod.GET, "/api/feedback").hasRole("ADMIN")
                         .anyRequest().authenticated())

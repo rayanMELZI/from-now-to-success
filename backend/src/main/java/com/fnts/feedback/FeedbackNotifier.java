@@ -3,6 +3,8 @@ package com.fnts.feedback;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,15 +37,18 @@ public class FeedbackNotifier {
 
     private final FeedbackRepository repository;
     private final GeminiClient gemini;
+    private final GithubIssueClient github;
     private final JavaMailSender mailSender;
     private final AppProperties props;
 
     public FeedbackNotifier(FeedbackRepository repository,
                             GeminiClient gemini,
+                            GithubIssueClient github,
                             JavaMailSender mailSender,
                             AppProperties props) {
         this.repository = repository;
         this.gemini = gemini;
+        this.github = github;
         this.mailSender = mailSender;
         this.props = props;
     }
@@ -51,6 +56,10 @@ public class FeedbackNotifier {
     public boolean isEnabled() {
         String to = props.feedback().notifyTo();
         return to != null && !to.isBlank();
+    }
+
+    public boolean isGithubEnabled() {
+        return github.isEnabled();
     }
 
     /**
@@ -85,6 +94,8 @@ public class FeedbackNotifier {
                     feedback.setAiCategory(briefing.category());
                     feedback.setAiEffort(briefing.effort());
                     feedback.setAiVerdict(briefing.verdict());
+                    feedback.setAiWorthDoing(briefing.worthDoing());
+                    feedback.setAiIssueTitle(briefing.issueTitle());
                 } catch (RuntimeException e) {
                     if (feedback.getAttempts() < GIVE_UP_ON_AI_AFTER) {
                         throw e; // retry the whole thing later, briefing included
@@ -93,6 +104,12 @@ public class FeedbackNotifier {
                             feedback.getAttempts(), feedback.getId(), e);
                 }
             }
+
+            // File the issue before the email so worthy feedback's mail can
+            // carry the issue link. Best-effort: never throws, so a GitHub
+            // outage can't block (or duplicate) the email — the scheduler
+            // re-files any worthy row still missing its issue url.
+            doFileIssue(feedback, false);
 
             mailSender.send(buildEmail(feedback, briefingFrom(feedback)));
 
@@ -114,7 +131,117 @@ public class FeedbackNotifier {
             return null;
         }
         return new Briefing(feedback.getAiSummary(), feedback.getAiCategory(),
-                feedback.getAiEffort(), feedback.getAiVerdict());
+                feedback.getAiEffort(), feedback.getAiVerdict(),
+                Boolean.TRUE.equals(feedback.getAiWorthDoing()),
+                feedback.getAiIssueTitle() == null ? "" : feedback.getAiIssueTitle());
+    }
+
+    /**
+     * Files a GitHub issue for one feedback row and returns its url (or null).
+     * Used by the manual "create issue" link (force = true, files regardless
+     * of the AI verdict) and by the scheduler that sweeps worthy rows.
+     */
+    @Transactional
+    public String fileIssue(Long feedbackId, boolean force) {
+        Feedback feedback = repository.findById(feedbackId).orElse(null);
+        if (feedback == null) {
+            return null;
+        }
+        doFileIssue(feedback, force);
+        return feedback.getGithubIssueUrl();
+    }
+
+    /**
+     * Creates the issue on the already-loaded row if it qualifies and none
+     * exists yet. Never throws: a GitHub failure is logged and left for a
+     * later retry. The stored url is the dedup guard, so this is idempotent.
+     */
+    private void doFileIssue(Feedback feedback, boolean force) {
+        if (feedback.getGithubIssueUrl() != null      // already filed
+                || feedback.getAiSummary() == null     // not briefed yet
+                || !github.isEnabled()) {
+            return;
+        }
+        if (!force && !Boolean.TRUE.equals(feedback.getAiWorthDoing())) {
+            return; // AI said skip and nobody overrode it
+        }
+        try {
+            String url = github.createIssue(
+                    issueTitle(feedback), issueBody(feedback), issueLabels(feedback));
+            feedback.setGithubIssueUrl(url);
+            log.info("Filed GitHub issue for feedback {}: {}", feedback.getId(), url);
+        } catch (RuntimeException e) {
+            log.warn("Could not file GitHub issue for feedback {}: {}",
+                    feedback.getId(), e.toString());
+        }
+    }
+
+    private static String issueTitle(Feedback feedback) {
+        String title = feedback.getAiIssueTitle();
+        if (title == null || title.isBlank()) {
+            title = feedback.getAiSummary();
+        }
+        if (title == null || title.isBlank()) {
+            title = "Feedback #" + feedback.getId();
+        }
+        return title.length() > 120 ? title.substring(0, 117) + "..." : title;
+    }
+
+    /** Category + effort as lowercase labels; GitHub creates missing ones. */
+    private static List<String> issueLabels(Feedback feedback) {
+        List<String> labels = new ArrayList<>();
+        if (feedback.getAiCategory() != null && !feedback.getAiCategory().isBlank()) {
+            labels.add(feedback.getAiCategory().toLowerCase());
+        }
+        if (feedback.getAiEffort() != null && !feedback.getAiEffort().isBlank()) {
+            labels.add("effort: " + feedback.getAiEffort().toLowerCase());
+        }
+        return labels;
+    }
+
+    private static String issueBody(Feedback feedback) {
+        StringBuilder body = new StringBuilder();
+        if (feedback.getAiVerdict() != null && !feedback.getAiVerdict().isBlank()) {
+            body.append("**AI verdict** — ").append(feedback.getAiVerdict()).append("\n\n");
+        }
+        body.append("**Category:** ").append(nz(feedback.getAiCategory()))
+                .append(" · **Effort:** ").append(nz(feedback.getAiEffort())).append("\n\n")
+                .append("### Original feedback\n\n")
+                .append("> ").append(feedback.getMessage().replace("\n", "\n> ")).append("\n\n")
+                .append("_From page ").append(feedback.getPage() == null ? "unknown" : feedback.getPage())
+                .append(" · feedback #").append(feedback.getId())
+                .append(" · ").append(STAMP.format(feedback.getCreatedAt())).append("_\n");
+        return body.toString();
+    }
+
+    private static String nz(String s) {
+        return s == null || s.isBlank() ? "—" : s;
+    }
+
+    /**
+     * Adds either the filed issue's link (worthy, already created) or a signed
+     * one-click "create issue" link (so you can promote a feedback the AI
+     * skipped). The promote link needs a configured public base URL.
+     */
+    private void appendIssueLine(StringBuilder body, Feedback feedback) {
+        if (feedback.getGithubIssueUrl() != null) {
+            body.append("Issue: ").append(feedback.getGithubIssueUrl()).append('\n');
+            return;
+        }
+        if (!github.isEnabled()) {
+            return;
+        }
+        String base = props.publicBaseUrl();
+        if (base == null || base.isBlank()) {
+            return;
+        }
+        String token = PromoteToken.sign(props.jwt().secret(), feedback.getId());
+        String url = base.replaceAll("/+$", "")
+                + "/api/feedback/" + feedback.getId() + "/promote?token=" + token;
+        String why = Boolean.TRUE.equals(feedback.getAiWorthDoing())
+                ? "No issue filed yet (GitHub may be unconfigured). File one:"
+                : "AI verdict: skip. File it as an issue anyway:";
+        body.append('\n').append(why).append('\n').append(url).append('\n');
     }
 
     private SimpleMailMessage buildEmail(Feedback feedback, Briefing briefing) {
@@ -143,6 +270,8 @@ public class FeedbackNotifier {
                 .append('\n')
                 .append("Sent:  ").append(STAMP.format(feedback.getCreatedAt())).append('\n')
                 .append("Ref:   feedback #").append(feedback.getId()).append('\n');
+
+        appendIssueLine(body, feedback);
 
         SimpleMailMessage mail = new SimpleMailMessage();
         mail.setTo(props.feedback().notifyTo());

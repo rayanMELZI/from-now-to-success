@@ -17,7 +17,8 @@ class EncryptionServiceTest {
 
     private static EncryptionService service(String base64Key) {
         AppProperties props = new AppProperties(
-                null, null, null, null, new AppProperties.Crypto(base64Key), false);
+                null, null, null, null, null,
+                new AppProperties.Crypto(base64Key), null, false);
         return new EncryptionService(props);
     }
 

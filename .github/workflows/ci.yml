@@ -132,6 +132,9 @@ jobs:
           FEEDBACK_NOTIFY_TO=${{ secrets.FEEDBACK_NOTIFY_TO }}
           MAIL_USERNAME=${{ secrets.MAIL_USERNAME }}
           MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }}
+          GITHUB_ISSUES_TOKEN=${{ secrets.GH_ISSUES_TOKEN }}
+          GITHUB_ISSUES_REPO=${{ vars.GITHUB_ISSUES_REPO }}
+          PUBLIC_BASE_URL=${{ vars.PUBLIC_BASE_URL }}
           EOF
 
       - name: Install cloudflared
