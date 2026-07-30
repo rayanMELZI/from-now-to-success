@@ -65,26 +65,31 @@ public class FeedbackController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(page("Invalid or expired link.", null));
         }
-        String url = feedbackService.promoteToIssue(id);
         // Always 200 so the reverse proxy (Cloudflare) shows this page instead
         // of hijacking a 5xx with its own error screen — this endpoint is only
         // ever read by a human clicking the email link.
-        if (url == null) {
-            return ResponseEntity.ok(page(
-                    "No issue was filed. If GitHub was only just configured, redeploy so the "
-                    + "server picks up the token; otherwise check the server logs.", null));
+        try {
+            String url = feedbackService.promoteToIssue(id);
+            return ResponseEntity.ok(page("Issue created for feedback #" + id + ".", url));
+        } catch (RuntimeException e) {
+            return ResponseEntity.ok(page("Couldn't create the issue: " + e.getMessage(), null));
         }
-        return ResponseEntity.ok(page("Issue created for feedback #" + id + ".", url));
     }
 
     private static String page(String message, String issueUrl) {
-        String link = issueUrl == null ? ""
-                : "<p><a href=\"" + issueUrl + "\">" + issueUrl + "</a></p>";
+        String safeUrl = issueUrl == null ? null : escape(issueUrl);
+        String link = safeUrl == null ? ""
+                : "<p><a href=\"" + safeUrl + "\">" + safeUrl + "</a></p>";
         return """
                 <!doctype html><meta charset="utf-8">
                 <title>fromNowToSuccess</title>
                 <body style="font-family:system-ui;max-width:32rem;margin:4rem auto;padding:0 1rem">
                 <h1 style="font-size:1.1rem">%s</h1>%s</body>
-                """.formatted(message, link);
+                """.formatted(escape(message), link);
+    }
+
+    private static String escape(String s) {
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\"", "&quot;");
     }
 }
