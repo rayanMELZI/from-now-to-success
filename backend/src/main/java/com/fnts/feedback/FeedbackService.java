@@ -57,7 +57,7 @@ public class FeedbackService {
      * url, or null if it couldn't be filed (already filed returns the url).
      */
     public String promoteToIssue(Long feedbackId) {
-        return notifier.fileIssue(feedbackId, true);
+        return notifier.promoteOrExplain(feedbackId);
     }
 
     @Transactional(readOnly = true)

@@ -59,15 +59,27 @@ public class GithubIssueClient {
                 "body", body,
                 "labels", labels);
 
-        String response = restClient.post()
-                .uri("/repos/{repo}/issues", props.github().repo())
-                .header("Authorization", "Bearer " + props.github().token())
-                .header("Accept", "application/vnd.github+json")
-                .header("X-GitHub-Api-Version", "2022-11-28")
-                .header("Content-Type", "application/json")
-                .body(payload)
-                .retrieve()
-                .body(String.class);
+        String response;
+        try {
+            response = restClient.post()
+                    .uri("/repos/{repo}/issues", props.github().repo())
+                    .header("Authorization", "Bearer " + props.github().token())
+                    .header("Accept", "application/vnd.github+json")
+                    .header("X-GitHub-Api-Version", "2022-11-28")
+                    .header("Content-Type", "application/json")
+                    .body(payload)
+                    .retrieve()
+                    .body(String.class);
+        } catch (org.springframework.web.client.RestClientResponseException e) {
+            // Surface GitHub's own reason (e.g. 403 "Resource not accessible by
+            // personal access token", 404 wrong repo) so it's diagnosable
+            // without server logs.
+            String detail = objectMapper.readTree(e.getResponseBodyAsString())
+                    .path("message").stringValue(e.getStatusText());
+            throw new IllegalStateException(
+                    "GitHub API " + e.getStatusCode().value() + " for repo "
+                    + props.github().repo() + ": " + detail, e);
+        }
 
         JsonNode root = objectMapper.readTree(response);
         String url = root.path("html_url").stringValue("");

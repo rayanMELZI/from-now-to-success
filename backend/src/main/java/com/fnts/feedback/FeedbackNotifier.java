@@ -152,6 +152,35 @@ public class FeedbackNotifier {
     }
 
     /**
+     * Manual "create issue" path: files the issue and returns its url, but lets
+     * the reason bubble up (unlike {@link #fileIssue}) so the click-through page
+     * can show why it failed — GitHub's message, missing config, etc.
+     */
+    @Transactional
+    public String promoteOrExplain(Long feedbackId) {
+        Feedback feedback = repository.findById(feedbackId).orElse(null);
+        if (feedback == null) {
+            throw new IllegalStateException("No feedback #" + feedbackId + ".");
+        }
+        if (feedback.getGithubIssueUrl() != null) {
+            return feedback.getGithubIssueUrl(); // already filed
+        }
+        if (!github.isEnabled()) {
+            throw new IllegalStateException(
+                    "GitHub issue filing isn't configured on the server "
+                    + "(GITHUB_ISSUES_TOKEN / GITHUB_ISSUES_REPO).");
+        }
+        if (feedback.getAiSummary() == null) {
+            throw new IllegalStateException("No AI briefing yet — try again in a moment.");
+        }
+        String url = github.createIssue(
+                issueTitle(feedback), issueBody(feedback), issueLabels(feedback));
+        feedback.setGithubIssueUrl(url);
+        log.info("Filed GitHub issue for feedback {} (manual): {}", feedbackId, url);
+        return url;
+    }
+
+    /**
      * Creates the issue on the already-loaded row if it qualifies and none
      * exists yet. Never throws: a GitHub failure is logged and left for a
      * later retry. The stored url is the dedup guard, so this is idempotent.
@@ -239,7 +268,7 @@ public class FeedbackNotifier {
         String url = base.replaceAll("/+$", "")
                 + "/api/feedback/" + feedback.getId() + "/promote?token=" + token;
         String why = Boolean.TRUE.equals(feedback.getAiWorthDoing())
-                ? "No issue filed yet (GitHub may be unconfigured). File one:"
+                ? "Worth building, but no issue was filed yet (the last attempt failed). File one:"
                 : "AI verdict: skip. File it as an issue anyway:";
         body.append('\n').append(why).append('\n').append(url).append('\n');
     }
