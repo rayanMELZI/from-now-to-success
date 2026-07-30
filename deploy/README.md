@@ -67,8 +67,8 @@ Optional — auto-file GitHub issues for feedback the AI judges worth building
 
 | Secret / Variable       | Value |
 |-------------------------|-------|
-| `GH_ISSUES_TOKEN` (secret) | a **fine-grained PAT** scoped to the target repo with **Issues: Read and write**. (Can't be named `GITHUB_*` — GitHub reserves that prefix for secrets.) |
-| `GITHUB_ISSUES_REPO` (variable) | `owner/repo` to file issues in (e.g. `rayanMELZI/from-now-to-success`) |
+| `GH_ISSUES_TOKEN` (secret) | a **fine-grained PAT** scoped to the target repo with **Issues: Read and write** (or a classic token with the `repo` scope — `public_repo` if the repo is public). GitHub reserves the `GITHUB_` prefix, so neither the secret nor the variable below can use it. |
+| `FEEDBACK_ISSUES_REPO` (variable) | `owner/repo` to file issues in (e.g. `rayanMELZI/from-now-to-success`) |
 | `PUBLIC_BASE_URL` (variable) | the app's public URL (e.g. `https://fnts.example.dev`) — makes the one-click "create issue" link in briefing emails work; without it that link is omitted |
 
 Worth-building feedback opens an issue automatically (labelled by category +
