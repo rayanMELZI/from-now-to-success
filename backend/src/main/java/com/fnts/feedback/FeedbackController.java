@@ -66,9 +66,13 @@ public class FeedbackController {
                     .body(page("Invalid or expired link.", null));
         }
         String url = feedbackService.promoteToIssue(id);
+        // Always 200 so the reverse proxy (Cloudflare) shows this page instead
+        // of hijacking a 5xx with its own error screen — this endpoint is only
+        // ever read by a human clicking the email link.
         if (url == null) {
-            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                    .body(page("Couldn't create the issue — check the server logs and try again.", null));
+            return ResponseEntity.ok(page(
+                    "No issue was filed. If GitHub was only just configured, redeploy so the "
+                    + "server picks up the token; otherwise check the server logs.", null));
         }
         return ResponseEntity.ok(page("Issue created for feedback #" + id + ".", url));
     }
