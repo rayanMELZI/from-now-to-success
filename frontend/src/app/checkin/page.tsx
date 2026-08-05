@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
 import { habitVerbs, type CheckinResult, type TodayEntry, type TodayResponse } from "@/lib/types";
 import { GaugeBar } from "@/components/GaugeBar";
-import { Ban, Check, Flame, Snowflake, X } from "lucide-react";
+import { Ban, Check, Flame, GripVertical, Snowflake, X } from "lucide-react";
 
 interface MissDraft {
   habitId: number;
@@ -45,6 +45,18 @@ function groupEntries(
     .filter((g) => g.items.length > 0);
 }
 
+/** Which section an entry lands in — dragging never crosses those. */
+function groupKey(entry: TodayEntry, mode: GroupBy): string {
+  return mode === "rhythm" ? entry.schedule : mode === "goal" ? entry.habitType : "all";
+}
+
+/** Immutably moves the item at `from` to index `to`. */
+function moveItem<T>(items: T[], from: number, to: number): T[] {
+  const next = [...items];
+  next.splice(to, 0, next.splice(from, 1)[0]);
+  return next;
+}
+
 function CheckinPage() {
   const { refreshUser } = useAuth();
   const [today, setToday] = useState<TodayResponse | null>(null);
@@ -52,6 +64,12 @@ function CheckinPage() {
   const [result, setResult] = useState<CheckinResult | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Manual ordering. `dragOrder` holds the pending ids while the user is
+  // rearranging them; null means "show the order the server sent".
+  const [dragOrder, setDragOrder] = useState<number[] | null>(null);
+  const [draggingId, setDraggingId] = useState<number | null>(null);
+  const rowRefs = useRef(new Map<number, HTMLDivElement>());
 
   // Remembered grouping choice (lazy init avoids a setState-in-effect).
   const [groupBy, setGroupByState] = useState<GroupBy>(() =>
@@ -67,7 +85,12 @@ function CheckinPage() {
   // setState happens in the promise callback, never in the effect body itself
   // (react-hooks/set-state-in-effect).
   const reload = useCallback(
-    () => api<TodayResponse>("/api/checkins/today").then(setToday),
+    () =>
+      api<TodayResponse>("/api/checkins/today").then((data) => {
+        setToday(data);
+        // The server's order is now the truth; drop the local arrangement.
+        setDragOrder(null);
+      }),
     [],
   );
 
@@ -99,14 +122,76 @@ function CheckinPage() {
     }
   }
 
+  /** Persist the manual order the user just dragged into place. */
+  async function saveOrder(habitIds: number[]) {
+    setError(null);
+    try {
+      await api("/api/habits/order", { method: "PUT", body: { habitIds } });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save the order");
+    }
+    // Either way, fall back to whatever the server now holds.
+    await reload();
+  }
+
   if (!today) {
     return (
       <div className="flex flex-1 items-center justify-center text-stone-400">Loading…</div>
     );
   }
 
-  const pending = today.entries.filter((e) => e.todayStatus === "PENDING");
   const answered = today.entries.filter((e) => e.todayStatus !== "PENDING");
+  const serverPending = today.entries.filter((e) => e.todayStatus === "PENDING");
+  // Only the pending rows are draggable, so only they get rearranged locally.
+  const pending = dragOrder
+    ? dragOrder.flatMap((id) => serverPending.filter((e) => e.habitId === id))
+    : serverPending;
+
+  function beginDrag(habitId: number) {
+    setDraggingId(habitId);
+    setDragOrder(pending.map((e) => e.habitId));
+  }
+
+  /** Slots the dragged habit into whichever row the pointer is over. */
+  function dragTo(clientY: number) {
+    if (draggingId === null || dragOrder === null) return;
+    const from = dragOrder.indexOf(draggingId);
+    const dragged = pending[from];
+    if (!dragged) return;
+
+    for (const entry of pending) {
+      const row = rowRefs.current.get(entry.habitId);
+      // Sections stay intact: a habit can only move inside its own group.
+      if (!row || groupKey(entry, groupBy) !== groupKey(dragged, groupBy)) continue;
+      const box = row.getBoundingClientRect();
+      if (clientY < box.top || clientY > box.bottom) continue;
+
+      const to = dragOrder.indexOf(entry.habitId);
+      if (to !== from && to >= 0) setDragOrder(moveItem(dragOrder, from, to));
+      return;
+    }
+  }
+
+  function endDrag() {
+    if (draggingId === null) return;
+    setDraggingId(null);
+    if (!dragOrder) return;
+    const unchanged = dragOrder.every((id, i) => id === serverPending[i]?.habitId);
+    if (unchanged) setDragOrder(null);
+    else saveOrder(dragOrder);
+  }
+
+  /** Arrow keys move a focused handle — dragging alone excludes keyboards. */
+  function moveWithKeyboard(habitId: number, delta: number) {
+    const ids = pending.map((e) => e.habitId);
+    const from = ids.indexOf(habitId);
+    const to = from + delta;
+    if (to < 0 || to >= ids.length) return;
+    if (groupKey(pending[to], groupBy) !== groupKey(pending[from], groupBy)) return;
+    const next = moveItem(ids, from, to);
+    setDragOrder(next);
+    saveOrder(next);
+  }
 
   return (
     <div className="mx-auto w-full max-w-2xl flex-1 p-4">
@@ -213,6 +298,16 @@ function CheckinPage() {
                 missDraft={missDraft?.habitId === entry.habitId ? missDraft : null}
                 freezesLeft={today.freezesLeft}
                 deepFreezesLeft={today.deepFreezesLeft}
+                draggable={pending.length > 1}
+                dragging={draggingId === entry.habitId}
+                rowRef={(el) => {
+                  if (el) rowRefs.current.set(entry.habitId, el);
+                  else rowRefs.current.delete(entry.habitId);
+                }}
+                onDragBegin={() => beginDrag(entry.habitId)}
+                onDragMove={dragTo}
+                onDragEnd={endDrag}
+                onKeyboardMove={(delta) => moveWithKeyboard(entry.habitId, delta)}
                 onDone={() => answer(entry.habitId, true)}
                 onMissClick={(freeze) =>
                   setMissDraft({ habitId: entry.habitId, reason: "", freeze })
@@ -368,6 +463,13 @@ function PendingRow({
   missDraft,
   freezesLeft,
   deepFreezesLeft,
+  draggable,
+  dragging,
+  rowRef,
+  onDragBegin,
+  onDragMove,
+  onDragEnd,
+  onKeyboardMove,
   onDone,
   onMissClick,
   onMissConfirm,
@@ -379,6 +481,13 @@ function PendingRow({
   missDraft: MissDraft | null;
   freezesLeft: number;
   deepFreezesLeft: number;
+  draggable: boolean;
+  dragging: boolean;
+  rowRef: (el: HTMLDivElement | null) => void;
+  onDragBegin: () => void;
+  onDragMove: (clientY: number) => void;
+  onDragEnd: () => void;
+  onKeyboardMove: (delta: number) => void;
   onDone: () => void;
   onMissClick: (freeze: boolean) => void;
   onMissConfirm: (draft: MissDraft) => void;
@@ -392,8 +501,47 @@ function PendingRow({
   const periodNoun = entry.schedule === "WEEKLY" ? "week" : "month";
 
   return (
-    <div className="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-4 shadow-sm">
+    <div
+      ref={rowRef}
+      className={`rounded-xl border bg-white dark:bg-stone-900 p-4 shadow-sm transition-shadow ${
+        dragging
+          ? "border-amber-400 shadow-lg select-none"
+          : "border-stone-200 dark:border-stone-800"
+      }`}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
+        {draggable && (
+          <button
+            type="button"
+            aria-label={`Reorder ${entry.name} — drag, or use the arrow keys`}
+            title="Drag to reorder"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              // Capture keeps the moves coming once the pointer leaves the
+              // small handle; not every browser grants it, hence the guard.
+              try {
+                event.currentTarget.setPointerCapture(event.pointerId);
+              } catch {
+                /* drag still works while the pointer stays on the handle */
+              }
+              event.currentTarget.focus();
+              onDragBegin();
+            }}
+            onPointerMove={(event) => onDragMove(event.clientY)}
+            onPointerUp={onDragEnd}
+            onPointerCancel={onDragEnd}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+              event.preventDefault();
+              onKeyboardMove(event.key === "ArrowUp" ? -1 : 1);
+            }}
+            className={`-ml-2 shrink-0 touch-none rounded-md p-1 text-stone-300 dark:text-stone-700 transition-colors hover:text-stone-500 dark:hover:text-stone-400 focus-visible:text-stone-500 focus-visible:outline-none ${
+              dragging ? "cursor-grabbing text-stone-500" : "cursor-grab"
+            }`}
+          >
+            <GripVertical size={16} />
+          </button>
+        )}
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-1.5 font-medium">
             {entry.habitType === "QUIT" && <Ban size={14} className="text-red-500" />}

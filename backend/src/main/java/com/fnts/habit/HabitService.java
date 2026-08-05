@@ -4,10 +4,13 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,7 +34,7 @@ public class HabitService {
 
     @Transactional(readOnly = true)
     public List<HabitResponse> list(Long userId) {
-        return habitRepository.findByUserIdOrderByIdAsc(userId).stream()
+        return habitRepository.findByUserIdOrderBySortOrderAscIdAsc(userId).stream()
                 .map(HabitDtos::toResponse)
                 .toList();
     }
@@ -49,6 +52,10 @@ public class HabitService {
                 .allMatch(p -> p.getStatus() == HabitStatus.VALID);
         habit.setStatus(unlocked ? HabitStatus.ACTIVE : HabitStatus.LOCKED);
         habit.setStartDate(today(user));
+        // New habits land at the bottom of the user's manual order.
+        habit.setSortOrder(habitRepository.findTopByUserIdOrderBySortOrderDesc(userId)
+                .map(last -> last.getSortOrder() + 1)
+                .orElse(1));
 
         return HabitDtos.toResponse(habitRepository.save(habit));
     }
@@ -62,11 +69,52 @@ public class HabitService {
         return HabitDtos.toResponse(habit);
     }
 
+    /**
+     * Applies a user-chosen order. The request may cover only part of the
+     * habits (the check-in list hides LOCKED ones), so the moved habits take
+     * over the slots that subset already occupied — untouched habits keep
+     * their exact place in the overall list.
+     */
+    @Transactional
+    public List<HabitResponse> reorder(Long userId, List<Long> habitIds) {
+        List<Habit> all = habitRepository.findByUserIdOrderBySortOrderAscIdAsc(userId);
+        // Rows migrated from before this feature can share a sort_order; make
+        // the positions dense and distinct first so slot swapping is well-defined.
+        for (int i = 0; i < all.size(); i++) {
+            all.get(i).setSortOrder(i + 1);
+        }
+
+        Map<Long, Habit> byId = all.stream()
+                .collect(Collectors.toMap(Habit::getId, habit -> habit));
+        List<Habit> moved = new ArrayList<>();
+        Set<Long> seen = new HashSet<>();
+        for (Long habitId : habitIds) {
+            if (!seen.add(habitId)) {
+                throw ApiException.badRequest("Duplicate habit in the new order");
+            }
+            Habit habit = byId.get(habitId);
+            if (habit == null) {
+                throw ApiException.notFound("Habit not found");
+            }
+            moved.add(habit);
+        }
+
+        List<Integer> slots = moved.stream().map(Habit::getSortOrder).sorted().toList();
+        for (int i = 0; i < moved.size(); i++) {
+            moved.get(i).setSortOrder(slots.get(i));
+        }
+
+        return all.stream()
+                .sorted(Comparator.comparingInt(Habit::getSortOrder).thenComparing(Habit::getId))
+                .map(HabitDtos::toResponse)
+                .toList();
+    }
+
     @Transactional
     public void delete(Long userId, Long habitId) {
         Habit habit = getOwned(userId, habitId);
         // Other habits may reference this one as a prerequisite; detach those links first.
-        for (Habit other : habitRepository.findByUserIdOrderByIdAsc(userId)) {
+        for (Habit other : habitRepository.findByUserIdOrderBySortOrderAscIdAsc(userId)) {
             other.getPrerequisites().remove(habit);
         }
         habitRepository.delete(habit);
@@ -83,7 +131,7 @@ public class HabitService {
     @Transactional
     public List<String> syncLockStates(Long userId, LocalDate today) {
         List<String> unlockedNames = new ArrayList<>();
-        for (Habit habit : habitRepository.findByUserIdOrderByIdAsc(userId)) {
+        for (Habit habit : habitRepository.findByUserIdOrderBySortOrderAscIdAsc(userId)) {
             if (habit.getStatus() == HabitStatus.VALID) {
                 continue;
             }

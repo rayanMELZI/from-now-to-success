@@ -59,7 +59,7 @@ public class CheckinService {
         DayOfWeek weekStart = DayOfWeek.of(user.getWeekStartDay());
         catchUpMissedPeriods(user, today);
 
-        List<Habit> habits = habitRepository.findByUserIdAndStatusInOrderByIdAsc(userId, TRACKABLE);
+        List<Habit> habits = habitRepository.findByUserIdAndStatusInOrderBySortOrderAscIdAsc(userId, TRACKABLE);
 
         int pointsToday = 0;
         List<TodayEntry> entries = new ArrayList<>();
@@ -101,7 +101,7 @@ public class CheckinService {
         DayOfWeek weekStart = DayOfWeek.of(user.getWeekStartDay());
         catchUpMissedPeriods(user, today);
 
-        List<Habit> habits = habitRepository.findByUserIdAndStatusInOrderByIdAsc(userId, TRACKABLE);
+        List<Habit> habits = habitRepository.findByUserIdAndStatusInOrderBySortOrderAscIdAsc(userId, TRACKABLE);
         // The engagement bonus goes to the day's FIRST done answer, so
         // answering habits one by one through the day still earns it once.
         boolean noDoneYet = habits.stream()
@@ -231,7 +231,7 @@ public class CheckinService {
         DayOfWeek weekStart = DayOfWeek.of(user.getWeekStartDay());
         int penalties = 0;
 
-        for (Habit habit : habitRepository.findByUserIdAndStatusInOrderByIdAsc(
+        for (Habit habit : habitRepository.findByUserIdAndStatusInOrderBySortOrderAscIdAsc(
                 user.getId(), TRACKABLE)) {
             if (habit.getSchedule() == HabitSchedule.DAILY) {
                 penalties += catchUpDaily(habit, today);
