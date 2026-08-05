@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.fnts.auth.CurrentUser;
 import com.fnts.habit.HabitDtos.HabitRequest;
 import com.fnts.habit.HabitDtos.HabitResponse;
+import com.fnts.habit.HabitDtos.ReorderRequest;
 
 import jakarta.validation.Valid;
 
@@ -47,6 +48,12 @@ public class HabitController {
                                 @PathVariable Long id,
                                 @Valid @RequestBody HabitRequest request) {
         return habitService.update(user.id(), id, request);
+    }
+
+    @PutMapping("/order")
+    public List<HabitResponse> reorder(@AuthenticationPrincipal CurrentUser user,
+                                       @Valid @RequestBody ReorderRequest request) {
+        return habitService.reorder(user.id(), request.habitIds());
     }
 
     @DeleteMapping("/{id}")

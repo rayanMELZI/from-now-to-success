@@ -29,6 +29,7 @@ export interface Habit {
   bestStreak: number;
   consecutiveMisses: number;
   startDate: string;
+  sortOrder: number;
   prerequisiteIds: number[];
 }
 

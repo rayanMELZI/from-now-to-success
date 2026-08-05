@@ -90,6 +90,10 @@ public class Habit {
     @Column(name = "start_date", nullable = false)
     private LocalDate startDate;
 
+    /** User-chosen position in the check-in list; ties break on id. */
+    @Column(name = "sort_order", nullable = false)
+    private int sortOrder = 0;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "habit_prerequisites",
             joinColumns = @JoinColumn(name = "habit_id"),

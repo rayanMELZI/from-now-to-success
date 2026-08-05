@@ -6,6 +6,8 @@ import java.util.List;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 public class HabitDtos {
@@ -19,6 +21,9 @@ public class HabitDtos {
             HabitType habitType,
             @Min(1) @Max(30) Integer timesPerPeriod,
             List<Long> prerequisiteIds) {}
+
+    /** The user's habit ids in the exact order they want to see them. */
+    public record ReorderRequest(@NotEmpty List<@NotNull Long> habitIds) {}
 
     public record HabitResponse(
             Long id,
@@ -35,6 +40,7 @@ public class HabitDtos {
             int bestStreak,
             int consecutiveMisses,
             LocalDate startDate,
+            int sortOrder,
             List<Long> prerequisiteIds) {}
 
     public static HabitResponse toResponse(Habit habit) {
@@ -53,6 +59,7 @@ public class HabitDtos {
                 habit.getBestStreak(),
                 habit.getConsecutiveMisses(),
                 habit.getStartDate(),
+                habit.getSortOrder(),
                 habit.getPrerequisites().stream().map(Habit::getId).sorted().toList());
     }
 

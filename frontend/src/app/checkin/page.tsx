@@ -5,7 +5,17 @@ import { api } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
 import { habitVerbs, type CheckinResult, type TodayEntry, type TodayResponse } from "@/lib/types";
 import { GaugeBar } from "@/components/GaugeBar";
-import { Ban, Check, Flame, Snowflake, X } from "lucide-react";
+import {
+  Ban,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Flame,
+  GripVertical,
+  ListOrdered,
+  Snowflake,
+  X,
+} from "lucide-react";
 
 interface MissDraft {
   habitId: number;
@@ -52,6 +62,7 @@ function CheckinPage() {
   const [result, setResult] = useState<CheckinResult | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reordering, setReordering] = useState(false);
 
   // Remembered grouping choice (lazy init avoids a setState-in-effect).
   const [groupBy, setGroupByState] = useState<GroupBy>(() =>
@@ -96,6 +107,18 @@ function CheckinPage() {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setBusyId(null);
+    }
+  }
+
+  /** Persist the manual order the user just dragged into place. */
+  async function saveOrder(habitIds: number[]) {
+    setError(null);
+    try {
+      await api("/api/habits/order", { method: "PUT", body: { habitIds } });
+      await reload();
+      setReordering(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save the order");
     }
   }
 
@@ -173,69 +196,89 @@ function CheckinPage() {
         </div>
       )}
 
-      {pending.length > 1 && (
-        <div className="mb-3 flex items-center gap-2 text-xs">
-          <span className="text-stone-500 dark:text-stone-400">Group by</span>
-          <div className="flex rounded-lg bg-stone-100 dark:bg-stone-800 p-0.5">
-            {GROUP_OPTIONS.map((opt) => (
-              <button
-                key={opt.key}
-                onClick={() => setGroupBy(opt.key)}
-                className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
-                  groupBy === opt.key
-                    ? "bg-white dark:bg-stone-600 text-stone-800 dark:text-stone-100 shadow-sm"
-                    : "text-stone-500 dark:text-stone-400"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+      {!reordering && today.entries.length > 1 && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+          {pending.length > 1 && (
+            <span className="flex items-center gap-2">
+              <span className="text-stone-500 dark:text-stone-400">Group by</span>
+              <span className="flex rounded-lg bg-stone-100 dark:bg-stone-800 p-0.5">
+                {GROUP_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.key}
+                    onClick={() => setGroupBy(opt.key)}
+                    className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+                      groupBy === opt.key
+                        ? "bg-white dark:bg-stone-600 text-stone-800 dark:text-stone-100 shadow-sm"
+                        : "text-stone-500 dark:text-stone-400"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </span>
+            </span>
+          )}
+          <button
+            onClick={() => setReordering(true)}
+            className="ml-auto flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-medium text-stone-500 dark:text-stone-400 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800"
+          >
+            <ListOrdered size={13} />
+            Reorder
+          </button>
         </div>
       )}
 
-      <div className="space-y-5">
-        {groupEntries(pending, groupBy).map((group) => (
-          <div key={group.key} className="space-y-2">
-            {group.label && (
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-400">
-                {group.label}
-                <span className="ml-1 text-stone-300 dark:text-stone-600">
-                  · {group.items.length}
-                </span>
-              </h3>
-            )}
-            {group.items.map((entry) => (
-              <PendingRow
-                key={entry.habitId}
-                entry={entry}
-                busy={busyId === entry.habitId}
-                missDraft={missDraft?.habitId === entry.habitId ? missDraft : null}
-                freezesLeft={today.freezesLeft}
-                deepFreezesLeft={today.deepFreezesLeft}
-                onDone={() => answer(entry.habitId, true)}
-                onMissClick={(freeze) =>
-                  setMissDraft({ habitId: entry.habitId, reason: "", freeze })
-                }
-                onMissConfirm={(draft) =>
-                  answer(entry.habitId, false, draft.reason, draft.freeze)
-                }
-                onMissCancel={() => setMissDraft(null)}
-                onDraftChange={setMissDraft}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
+      {reordering ? (
+        <ReorderList
+          entries={today.entries}
+          grouped={groupBy !== "none"}
+          onSave={saveOrder}
+          onCancel={() => setReordering(false)}
+        />
+      ) : (
+        <div className="space-y-5">
+          {groupEntries(pending, groupBy).map((group) => (
+            <div key={group.key} className="space-y-2">
+              {group.label && (
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-400">
+                  {group.label}
+                  <span className="ml-1 text-stone-300 dark:text-stone-600">
+                    · {group.items.length}
+                  </span>
+                </h3>
+              )}
+              {group.items.map((entry) => (
+                <PendingRow
+                  key={entry.habitId}
+                  entry={entry}
+                  busy={busyId === entry.habitId}
+                  missDraft={missDraft?.habitId === entry.habitId ? missDraft : null}
+                  freezesLeft={today.freezesLeft}
+                  deepFreezesLeft={today.deepFreezesLeft}
+                  onDone={() => answer(entry.habitId, true)}
+                  onMissClick={(freeze) =>
+                    setMissDraft({ habitId: entry.habitId, reason: "", freeze })
+                  }
+                  onMissConfirm={(draft) =>
+                    answer(entry.habitId, false, draft.reason, draft.freeze)
+                  }
+                  onMissCancel={() => setMissDraft(null)}
+                  onDraftChange={setMissDraft}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
 
-      {pending.length === 0 && today.entries.length > 0 && (
+      {!reordering && pending.length === 0 && today.entries.length > 0 && (
         <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/50 p-6 text-center text-emerald-800 dark:text-emerald-300">
           ✓ All answered for now ({today.pointsToday >= 0 ? "+" : ""}
           {today.pointsToday} points today). See you tomorrow!
         </div>
       )}
 
-      {answered.length > 0 && (
+      {!reordering && answered.length > 0 && (
         <div className="mt-6">
           <h2 className="mb-2 text-sm font-medium text-stone-500 dark:text-stone-400">
             Answered
@@ -258,6 +301,122 @@ function CheckinPage() {
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Manual ordering. Drag the handle with a mouse, or use the arrows — those
+ * also cover touch and keyboard, which HTML5 drag-and-drop does not.
+ * Nothing is persisted until "Save order".
+ */
+function ReorderList({
+  entries,
+  grouped,
+  onSave,
+  onCancel,
+}: {
+  entries: TodayEntry[];
+  grouped: boolean;
+  onSave: (habitIds: number[]) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [order, setOrder] = useState<TodayEntry[]>(entries);
+  const [draggingId, setDraggingId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  function move(from: number, to: number) {
+    setOrder((current) => {
+      if (to < 0 || to >= current.length || from === to) return current;
+      const next = [...current];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }
+
+  const changed = order.some((entry, i) => entry.habitId !== entries[i].habitId);
+
+  async function save() {
+    setSaving(true);
+    try {
+      await onSave(order.map((entry) => entry.habitId));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div>
+      <p className="mb-3 text-sm text-stone-500 dark:text-stone-400">
+        Put your habits in the order you live your day — drag a handle or use the arrows.
+        {grouped && " Grouping still splits the list; your order applies inside each group."}
+      </p>
+
+      <ul className="space-y-1.5">
+        {order.map((entry, index) => (
+          <li
+            key={entry.habitId}
+            draggable
+            onDragStart={() => setDraggingId(entry.habitId)}
+            onDragEnd={() => setDraggingId(null)}
+            onDragOver={(event) => {
+              event.preventDefault();
+              if (draggingId === null || draggingId === entry.habitId) return;
+              move(
+                order.findIndex((other) => other.habitId === draggingId),
+                index,
+              );
+            }}
+            className={`flex items-center gap-2 rounded-lg border bg-white dark:bg-stone-900 px-2 py-2 shadow-sm ${
+              draggingId === entry.habitId
+                ? "border-amber-400 opacity-60"
+                : "border-stone-200 dark:border-stone-800"
+            } ${entry.todayStatus === "PENDING" ? "" : "opacity-60"}`}
+          >
+            <GripVertical size={16} className="shrink-0 cursor-grab text-stone-400" />
+            <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm">
+              {entry.habitType === "QUIT" && <Ban size={13} className="text-red-500" />}
+              <span className="truncate">{entry.name}</span>
+            </span>
+            <span className="flex shrink-0 gap-1">
+              <button
+                onClick={() => move(index, index - 1)}
+                disabled={index === 0}
+                aria-label={`Move ${entry.name} up`}
+                className="rounded-md p-1.5 text-stone-500 dark:text-stone-400 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-30 disabled:hover:bg-transparent"
+              >
+                <ChevronUp size={15} />
+              </button>
+              <button
+                onClick={() => move(index, index + 1)}
+                disabled={index === order.length - 1}
+                aria-label={`Move ${entry.name} down`}
+                className="rounded-md p-1.5 text-stone-500 dark:text-stone-400 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-30 disabled:hover:bg-transparent"
+              >
+                <ChevronDown size={15} />
+              </button>
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-4 flex gap-2">
+        <button
+          onClick={save}
+          disabled={saving || !changed}
+          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-500 active:scale-95 disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save order"}
+        </button>
+        <button
+          onClick={onCancel}
+          disabled={saving}
+          className="rounded-lg border border-stone-300 dark:border-stone-700 px-4 py-2 text-sm hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }
