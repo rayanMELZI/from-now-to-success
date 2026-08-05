@@ -1,21 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
 import { habitVerbs, type CheckinResult, type TodayEntry, type TodayResponse } from "@/lib/types";
 import { GaugeBar } from "@/components/GaugeBar";
-import {
-  Ban,
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Flame,
-  GripVertical,
-  ListOrdered,
-  Snowflake,
-  X,
-} from "lucide-react";
+import { Ban, Check, Flame, GripVertical, Snowflake, X } from "lucide-react";
 
 interface MissDraft {
   habitId: number;
@@ -55,6 +45,18 @@ function groupEntries(
     .filter((g) => g.items.length > 0);
 }
 
+/** Which section an entry lands in — dragging never crosses those. */
+function groupKey(entry: TodayEntry, mode: GroupBy): string {
+  return mode === "rhythm" ? entry.schedule : mode === "goal" ? entry.habitType : "all";
+}
+
+/** Immutably moves the item at `from` to index `to`. */
+function moveItem<T>(items: T[], from: number, to: number): T[] {
+  const next = [...items];
+  next.splice(to, 0, next.splice(from, 1)[0]);
+  return next;
+}
+
 function CheckinPage() {
   const { refreshUser } = useAuth();
   const [today, setToday] = useState<TodayResponse | null>(null);
@@ -62,7 +64,12 @@ function CheckinPage() {
   const [result, setResult] = useState<CheckinResult | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [reordering, setReordering] = useState(false);
+
+  // Manual ordering. `dragOrder` holds the pending ids while the user is
+  // rearranging them; null means "show the order the server sent".
+  const [dragOrder, setDragOrder] = useState<number[] | null>(null);
+  const [draggingId, setDraggingId] = useState<number | null>(null);
+  const rowRefs = useRef(new Map<number, HTMLDivElement>());
 
   // Remembered grouping choice (lazy init avoids a setState-in-effect).
   const [groupBy, setGroupByState] = useState<GroupBy>(() =>
@@ -78,7 +85,12 @@ function CheckinPage() {
   // setState happens in the promise callback, never in the effect body itself
   // (react-hooks/set-state-in-effect).
   const reload = useCallback(
-    () => api<TodayResponse>("/api/checkins/today").then(setToday),
+    () =>
+      api<TodayResponse>("/api/checkins/today").then((data) => {
+        setToday(data);
+        // The server's order is now the truth; drop the local arrangement.
+        setDragOrder(null);
+      }),
     [],
   );
 
@@ -115,11 +127,11 @@ function CheckinPage() {
     setError(null);
     try {
       await api("/api/habits/order", { method: "PUT", body: { habitIds } });
-      await reload();
-      setReordering(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save the order");
     }
+    // Either way, fall back to whatever the server now holds.
+    await reload();
   }
 
   if (!today) {
@@ -128,8 +140,58 @@ function CheckinPage() {
     );
   }
 
-  const pending = today.entries.filter((e) => e.todayStatus === "PENDING");
   const answered = today.entries.filter((e) => e.todayStatus !== "PENDING");
+  const serverPending = today.entries.filter((e) => e.todayStatus === "PENDING");
+  // Only the pending rows are draggable, so only they get rearranged locally.
+  const pending = dragOrder
+    ? dragOrder.flatMap((id) => serverPending.filter((e) => e.habitId === id))
+    : serverPending;
+
+  function beginDrag(habitId: number) {
+    setDraggingId(habitId);
+    setDragOrder(pending.map((e) => e.habitId));
+  }
+
+  /** Slots the dragged habit into whichever row the pointer is over. */
+  function dragTo(clientY: number) {
+    if (draggingId === null || dragOrder === null) return;
+    const from = dragOrder.indexOf(draggingId);
+    const dragged = pending[from];
+    if (!dragged) return;
+
+    for (const entry of pending) {
+      const row = rowRefs.current.get(entry.habitId);
+      // Sections stay intact: a habit can only move inside its own group.
+      if (!row || groupKey(entry, groupBy) !== groupKey(dragged, groupBy)) continue;
+      const box = row.getBoundingClientRect();
+      if (clientY < box.top || clientY > box.bottom) continue;
+
+      const to = dragOrder.indexOf(entry.habitId);
+      if (to !== from && to >= 0) setDragOrder(moveItem(dragOrder, from, to));
+      return;
+    }
+  }
+
+  function endDrag() {
+    if (draggingId === null) return;
+    setDraggingId(null);
+    if (!dragOrder) return;
+    const unchanged = dragOrder.every((id, i) => id === serverPending[i]?.habitId);
+    if (unchanged) setDragOrder(null);
+    else saveOrder(dragOrder);
+  }
+
+  /** Arrow keys move a focused handle — dragging alone excludes keyboards. */
+  function moveWithKeyboard(habitId: number, delta: number) {
+    const ids = pending.map((e) => e.habitId);
+    const from = ids.indexOf(habitId);
+    const to = from + delta;
+    if (to < 0 || to >= ids.length) return;
+    if (groupKey(pending[to], groupBy) !== groupKey(pending[from], groupBy)) return;
+    const next = moveItem(ids, from, to);
+    setDragOrder(next);
+    saveOrder(next);
+  }
 
   return (
     <div className="mx-auto w-full max-w-2xl flex-1 p-4">
@@ -196,89 +258,79 @@ function CheckinPage() {
         </div>
       )}
 
-      {!reordering && today.entries.length > 1 && (
-        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
-          {pending.length > 1 && (
-            <span className="flex items-center gap-2">
-              <span className="text-stone-500 dark:text-stone-400">Group by</span>
-              <span className="flex rounded-lg bg-stone-100 dark:bg-stone-800 p-0.5">
-                {GROUP_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.key}
-                    onClick={() => setGroupBy(opt.key)}
-                    className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
-                      groupBy === opt.key
-                        ? "bg-white dark:bg-stone-600 text-stone-800 dark:text-stone-100 shadow-sm"
-                        : "text-stone-500 dark:text-stone-400"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </span>
-            </span>
-          )}
-          <button
-            onClick={() => setReordering(true)}
-            className="ml-auto flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-medium text-stone-500 dark:text-stone-400 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800"
-          >
-            <ListOrdered size={13} />
-            Reorder
-          </button>
+      {pending.length > 1 && (
+        <div className="mb-3 flex items-center gap-2 text-xs">
+          <span className="text-stone-500 dark:text-stone-400">Group by</span>
+          <div className="flex rounded-lg bg-stone-100 dark:bg-stone-800 p-0.5">
+            {GROUP_OPTIONS.map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => setGroupBy(opt.key)}
+                className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+                  groupBy === opt.key
+                    ? "bg-white dark:bg-stone-600 text-stone-800 dark:text-stone-100 shadow-sm"
+                    : "text-stone-500 dark:text-stone-400"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
-      {reordering ? (
-        <ReorderList
-          entries={today.entries}
-          grouped={groupBy !== "none"}
-          onSave={saveOrder}
-          onCancel={() => setReordering(false)}
-        />
-      ) : (
-        <div className="space-y-5">
-          {groupEntries(pending, groupBy).map((group) => (
-            <div key={group.key} className="space-y-2">
-              {group.label && (
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-400">
-                  {group.label}
-                  <span className="ml-1 text-stone-300 dark:text-stone-600">
-                    · {group.items.length}
-                  </span>
-                </h3>
-              )}
-              {group.items.map((entry) => (
-                <PendingRow
-                  key={entry.habitId}
-                  entry={entry}
-                  busy={busyId === entry.habitId}
-                  missDraft={missDraft?.habitId === entry.habitId ? missDraft : null}
-                  freezesLeft={today.freezesLeft}
-                  deepFreezesLeft={today.deepFreezesLeft}
-                  onDone={() => answer(entry.habitId, true)}
-                  onMissClick={(freeze) =>
-                    setMissDraft({ habitId: entry.habitId, reason: "", freeze })
-                  }
-                  onMissConfirm={(draft) =>
-                    answer(entry.habitId, false, draft.reason, draft.freeze)
-                  }
-                  onMissCancel={() => setMissDraft(null)}
-                  onDraftChange={setMissDraft}
-                />
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="space-y-5">
+        {groupEntries(pending, groupBy).map((group) => (
+          <div key={group.key} className="space-y-2">
+            {group.label && (
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-400">
+                {group.label}
+                <span className="ml-1 text-stone-300 dark:text-stone-600">
+                  · {group.items.length}
+                </span>
+              </h3>
+            )}
+            {group.items.map((entry) => (
+              <PendingRow
+                key={entry.habitId}
+                entry={entry}
+                busy={busyId === entry.habitId}
+                missDraft={missDraft?.habitId === entry.habitId ? missDraft : null}
+                freezesLeft={today.freezesLeft}
+                deepFreezesLeft={today.deepFreezesLeft}
+                draggable={pending.length > 1}
+                dragging={draggingId === entry.habitId}
+                rowRef={(el) => {
+                  if (el) rowRefs.current.set(entry.habitId, el);
+                  else rowRefs.current.delete(entry.habitId);
+                }}
+                onDragBegin={() => beginDrag(entry.habitId)}
+                onDragMove={dragTo}
+                onDragEnd={endDrag}
+                onKeyboardMove={(delta) => moveWithKeyboard(entry.habitId, delta)}
+                onDone={() => answer(entry.habitId, true)}
+                onMissClick={(freeze) =>
+                  setMissDraft({ habitId: entry.habitId, reason: "", freeze })
+                }
+                onMissConfirm={(draft) =>
+                  answer(entry.habitId, false, draft.reason, draft.freeze)
+                }
+                onMissCancel={() => setMissDraft(null)}
+                onDraftChange={setMissDraft}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
 
-      {!reordering && pending.length === 0 && today.entries.length > 0 && (
+      {pending.length === 0 && today.entries.length > 0 && (
         <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/50 p-6 text-center text-emerald-800 dark:text-emerald-300">
           ✓ All answered for now ({today.pointsToday >= 0 ? "+" : ""}
           {today.pointsToday} points today). See you tomorrow!
         </div>
       )}
 
-      {!reordering && answered.length > 0 && (
+      {answered.length > 0 && (
         <div className="mt-6">
           <h2 className="mb-2 text-sm font-medium text-stone-500 dark:text-stone-400">
             Answered
@@ -301,122 +353,6 @@ function CheckinPage() {
           </ul>
         </div>
       )}
-    </div>
-  );
-}
-
-/**
- * Manual ordering. Drag the handle with a mouse, or use the arrows — those
- * also cover touch and keyboard, which HTML5 drag-and-drop does not.
- * Nothing is persisted until "Save order".
- */
-function ReorderList({
-  entries,
-  grouped,
-  onSave,
-  onCancel,
-}: {
-  entries: TodayEntry[];
-  grouped: boolean;
-  onSave: (habitIds: number[]) => Promise<void>;
-  onCancel: () => void;
-}) {
-  const [order, setOrder] = useState<TodayEntry[]>(entries);
-  const [draggingId, setDraggingId] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  function move(from: number, to: number) {
-    setOrder((current) => {
-      if (to < 0 || to >= current.length || from === to) return current;
-      const next = [...current];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      return next;
-    });
-  }
-
-  const changed = order.some((entry, i) => entry.habitId !== entries[i].habitId);
-
-  async function save() {
-    setSaving(true);
-    try {
-      await onSave(order.map((entry) => entry.habitId));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div>
-      <p className="mb-3 text-sm text-stone-500 dark:text-stone-400">
-        Put your habits in the order you live your day — drag a handle or use the arrows.
-        {grouped && " Grouping still splits the list; your order applies inside each group."}
-      </p>
-
-      <ul className="space-y-1.5">
-        {order.map((entry, index) => (
-          <li
-            key={entry.habitId}
-            draggable
-            onDragStart={() => setDraggingId(entry.habitId)}
-            onDragEnd={() => setDraggingId(null)}
-            onDragOver={(event) => {
-              event.preventDefault();
-              if (draggingId === null || draggingId === entry.habitId) return;
-              move(
-                order.findIndex((other) => other.habitId === draggingId),
-                index,
-              );
-            }}
-            className={`flex items-center gap-2 rounded-lg border bg-white dark:bg-stone-900 px-2 py-2 shadow-sm ${
-              draggingId === entry.habitId
-                ? "border-amber-400 opacity-60"
-                : "border-stone-200 dark:border-stone-800"
-            } ${entry.todayStatus === "PENDING" ? "" : "opacity-60"}`}
-          >
-            <GripVertical size={16} className="shrink-0 cursor-grab text-stone-400" />
-            <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm">
-              {entry.habitType === "QUIT" && <Ban size={13} className="text-red-500" />}
-              <span className="truncate">{entry.name}</span>
-            </span>
-            <span className="flex shrink-0 gap-1">
-              <button
-                onClick={() => move(index, index - 1)}
-                disabled={index === 0}
-                aria-label={`Move ${entry.name} up`}
-                className="rounded-md p-1.5 text-stone-500 dark:text-stone-400 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-30 disabled:hover:bg-transparent"
-              >
-                <ChevronUp size={15} />
-              </button>
-              <button
-                onClick={() => move(index, index + 1)}
-                disabled={index === order.length - 1}
-                aria-label={`Move ${entry.name} down`}
-                className="rounded-md p-1.5 text-stone-500 dark:text-stone-400 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-30 disabled:hover:bg-transparent"
-              >
-                <ChevronDown size={15} />
-              </button>
-            </span>
-          </li>
-        ))}
-      </ul>
-
-      <div className="mt-4 flex gap-2">
-        <button
-          onClick={save}
-          disabled={saving || !changed}
-          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-500 active:scale-95 disabled:opacity-50"
-        >
-          {saving ? "Saving…" : "Save order"}
-        </button>
-        <button
-          onClick={onCancel}
-          disabled={saving}
-          className="rounded-lg border border-stone-300 dark:border-stone-700 px-4 py-2 text-sm hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-50"
-        >
-          Cancel
-        </button>
-      </div>
     </div>
   );
 }
@@ -527,6 +463,13 @@ function PendingRow({
   missDraft,
   freezesLeft,
   deepFreezesLeft,
+  draggable,
+  dragging,
+  rowRef,
+  onDragBegin,
+  onDragMove,
+  onDragEnd,
+  onKeyboardMove,
   onDone,
   onMissClick,
   onMissConfirm,
@@ -538,6 +481,13 @@ function PendingRow({
   missDraft: MissDraft | null;
   freezesLeft: number;
   deepFreezesLeft: number;
+  draggable: boolean;
+  dragging: boolean;
+  rowRef: (el: HTMLDivElement | null) => void;
+  onDragBegin: () => void;
+  onDragMove: (clientY: number) => void;
+  onDragEnd: () => void;
+  onKeyboardMove: (delta: number) => void;
   onDone: () => void;
   onMissClick: (freeze: boolean) => void;
   onMissConfirm: (draft: MissDraft) => void;
@@ -551,8 +501,47 @@ function PendingRow({
   const periodNoun = entry.schedule === "WEEKLY" ? "week" : "month";
 
   return (
-    <div className="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-4 shadow-sm">
+    <div
+      ref={rowRef}
+      className={`rounded-xl border bg-white dark:bg-stone-900 p-4 shadow-sm transition-shadow ${
+        dragging
+          ? "border-amber-400 shadow-lg select-none"
+          : "border-stone-200 dark:border-stone-800"
+      }`}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
+        {draggable && (
+          <button
+            type="button"
+            aria-label={`Reorder ${entry.name} — drag, or use the arrow keys`}
+            title="Drag to reorder"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              // Capture keeps the moves coming once the pointer leaves the
+              // small handle; not every browser grants it, hence the guard.
+              try {
+                event.currentTarget.setPointerCapture(event.pointerId);
+              } catch {
+                /* drag still works while the pointer stays on the handle */
+              }
+              event.currentTarget.focus();
+              onDragBegin();
+            }}
+            onPointerMove={(event) => onDragMove(event.clientY)}
+            onPointerUp={onDragEnd}
+            onPointerCancel={onDragEnd}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+              event.preventDefault();
+              onKeyboardMove(event.key === "ArrowUp" ? -1 : 1);
+            }}
+            className={`-ml-2 shrink-0 touch-none rounded-md p-1 text-stone-300 dark:text-stone-700 transition-colors hover:text-stone-500 dark:hover:text-stone-400 focus-visible:text-stone-500 focus-visible:outline-none ${
+              dragging ? "cursor-grabbing text-stone-500" : "cursor-grab"
+            }`}
+          >
+            <GripVertical size={16} />
+          </button>
+        )}
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-1.5 font-medium">
             {entry.habitType === "QUIT" && <Ban size={14} className="text-red-500" />}
