@@ -3,17 +3,24 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { RequireAuth } from "@/lib/auth";
-import { scheduleLabel, type Habit, type HabitRequest } from "@/lib/types";
+import {
+  formatDuration,
+  scheduleLabel,
+  type Habit,
+  type HabitRequest,
+} from "@/lib/types";
 import { IslandMap } from "@/components/IslandMap";
 import { HabitForm } from "@/components/HabitForm";
 import { GaugeBar } from "@/components/GaugeBar";
 import { Modal } from "@/components/Modal";
-import { Ban, Flame, Lock } from "lucide-react";
+import { Ban, Flame, Lock, TimerReset, Trophy } from "lucide-react";
 
 function RoadmapPage() {
   const [habits, setHabits] = useState<Habit[] | null>(null);
   const [selected, setSelected] = useState<Habit | null>(null);
   const [mode, setMode] = useState<"closed" | "view" | "create" | "edit">("closed");
+  // Timer habits show a running clock; it only needs to tick while one is open.
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   // setState happens in the promise callback, never in the effect body itself
   // (react-hooks/set-state-in-effect).
@@ -29,6 +36,14 @@ function RoadmapPage() {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  const tickingClock = mode === "view" && selected?.trackingMode === "TIMER";
+
+  useEffect(() => {
+    if (!tickingClock) return;
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [tickingClock]);
 
   async function createHabit(request: HabitRequest) {
     await api("/api/habits", { method: "POST", body: request });
@@ -131,7 +146,7 @@ function RoadmapPage() {
 
             <div>
               <p className="mb-1 text-xs font-medium uppercase tracking-wide text-stone-400">
-                Validation gauge
+                {selected.trackingMode === "TIMER" ? "Milestones" : "Validation gauge"}
               </p>
               <GaugeBar
                 gauge={selected.gauge}
@@ -143,18 +158,44 @@ function RoadmapPage() {
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               <dt className="text-stone-500 dark:text-stone-400">Status</dt>
               <dd className="font-medium">{selected.status.toLowerCase()}</dd>
-              <dt className="text-stone-500 dark:text-stone-400">Rhythm</dt>
-              <dd>
-                {scheduleLabel[selected.schedule]}
-                {selected.schedule !== "DAILY" && ` · ${selected.timesPerPeriod}×`}
-              </dd>
-              <dt className="text-stone-500 dark:text-stone-400">Streak</dt>
-              <dd className="flex items-center gap-1">
-                <Flame size={14} className="text-orange-500" /> {selected.currentStreak}
-                <span className="ml-1 text-xs text-stone-400">
-                  (best {selected.bestStreak})
-                </span>
-              </dd>
+              {selected.trackingMode === "TIMER" ? (
+                <>
+                  <dt className="text-stone-500 dark:text-stone-400">Goal</dt>
+                  <dd>{formatDuration(selected.goalSeconds ?? 0)} clean</dd>
+                  <dt className="text-stone-500 dark:text-stone-400">Running for</dt>
+                  <dd className="flex items-center gap-1">
+                    <TimerReset size={14} className="text-sky-500" />
+                    {selected.clockStartedAt
+                      ? formatDuration(
+                          (nowMs - Date.parse(selected.clockStartedAt)) / 1000,
+                        )
+                      : "not started"}
+                  </dd>
+                  <dt className="text-stone-500 dark:text-stone-400">Best run</dt>
+                  <dd className="flex items-center gap-1">
+                    <Trophy size={14} className="text-amber-500" />
+                    {selected.bestCleanSeconds > 0
+                      ? formatDuration(selected.bestCleanSeconds)
+                      : "—"}
+                  </dd>
+                </>
+              ) : (
+                <>
+                  <dt className="text-stone-500 dark:text-stone-400">Rhythm</dt>
+                  <dd>
+                    {scheduleLabel[selected.schedule]}
+                    {selected.schedule !== "DAILY" && ` · ${selected.timesPerPeriod}×`}
+                  </dd>
+                  <dt className="text-stone-500 dark:text-stone-400">Streak</dt>
+                  <dd className="flex items-center gap-1">
+                    <Flame size={14} className="text-orange-500" />{" "}
+                    {selected.currentStreak}
+                    <span className="ml-1 text-xs text-stone-400">
+                      (best {selected.bestStreak})
+                    </span>
+                  </dd>
+                </>
+              )}
               <dt className="text-stone-500 dark:text-stone-400">Points</dt>
               <dd>{selected.basePoints}</dd>
             </dl>

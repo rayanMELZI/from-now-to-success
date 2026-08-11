@@ -1,7 +1,7 @@
 package com.fnts.habit;
 
+import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -15,6 +15,8 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fnts.checkin.GameRules;
+import com.fnts.checkin.Milestones;
 import com.fnts.common.ApiException;
 import com.fnts.habit.HabitDtos.HabitRequest;
 import com.fnts.habit.HabitDtos.HabitResponse;
@@ -24,6 +26,9 @@ import com.fnts.user.UserRepository;
 @Service
 public class HabitService {
 
+    private static final List<HabitStatus> TRACKABLE =
+            List.of(HabitStatus.ACTIVE, HabitStatus.VALID);
+
     private final HabitRepository habitRepository;
     private final UserRepository userRepository;
 
@@ -32,11 +37,47 @@ public class HabitService {
         this.userRepository = userRepository;
     }
 
-    @Transactional(readOnly = true)
+    /** What the running clocks earned while nobody was looking. */
+    public record TimerCatchUp(int points, List<String> becameValid) {}
+
+    // Not readOnly: reading the roadmap also banks any milestone the running
+    // clocks passed since the last request.
+    @Transactional
     public List<HabitResponse> list(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> ApiException.notFound("User not found"));
+        advanceTimers(user, Instant.now());
         return habitRepository.findByUserIdOrderBySortOrderAscIdAsc(userId).stream()
                 .map(HabitDtos::toResponse)
                 .toList();
+    }
+
+    /**
+     * Banks the milestones every running timer has passed. Timer habits have
+     * nothing to answer, so this is what moves them: it runs before any read
+     * or write, exactly like the check-in catch-up does for scheduled habits.
+     */
+    @Transactional
+    public TimerCatchUp advanceTimers(User user, Instant now) {
+        int earned = 0;
+        List<String> becameValid = new ArrayList<>();
+
+        for (Habit habit : habitRepository
+                .findByUserIdAndTrackingModeAndStatusInOrderBySortOrderAscIdAsc(
+                        user.getId(), TrackingMode.TIMER, TRACKABLE)) {
+            GameRules.TimerResult result = GameRules.advanceTimer(habit, now);
+            earned += result.points();
+            if (result.becameValid()) {
+                becameValid.add(habit.getName());
+            }
+        }
+        if (earned != 0) {
+            user.setTotalPoints(Math.max(0, user.getTotalPoints() + earned));
+        }
+        if (!becameValid.isEmpty()) {
+            syncLockStates(user.getId(), today(user));
+        }
+        return new TimerCatchUp(earned, becameValid);
     }
 
     @Transactional
@@ -52,6 +93,9 @@ public class HabitService {
                 .allMatch(p -> p.getStatus() == HabitStatus.VALID);
         habit.setStatus(unlocked ? HabitStatus.ACTIVE : HabitStatus.LOCKED);
         habit.setStartDate(today(user));
+        if (unlocked) {
+            startClock(habit);
+        }
         // New habits land at the bottom of the user's manual order.
         habit.setSortOrder(habitRepository.findTopByUserIdOrderBySortOrderDesc(userId)
                 .map(last -> last.getSortOrder() + 1)
@@ -66,6 +110,13 @@ public class HabitService {
         applyRequest(habit, request, userId);
         assertNoCycle(habit);
         syncLockStates(userId, today(habit.getUser()));
+        // A habit that just turned into a timer starts ticking right away —
+        // unless it is locked, where unlock() will start it later.
+        if (habit.getTrackingMode() == TrackingMode.TIMER
+                && habit.getStatus() != HabitStatus.LOCKED
+                && habit.getClockStartedAt() == null) {
+            startClock(habit);
+        }
         return HabitDtos.toResponse(habit);
     }
 
@@ -156,6 +207,46 @@ public class HabitService {
         habit.setStatus(HabitStatus.ACTIVE);
         // Tracking (and therefore missing) only starts on the unlock day.
         habit.setStartDate(today);
+        startClock(habit);
+    }
+
+    /**
+     * The timer half of a habit request. The gauge of a timer habit counts
+     * milestones, so the goal — not the user — decides how tall it is.
+     */
+    private void applyTimerRequest(Habit habit, HabitRequest request, TrackingMode wasMode) {
+        if (request.goalSeconds() != null) {
+            habit.setGoalSeconds(request.goalSeconds());
+        } else if (habit.getGoalSeconds() == null) {
+            throw ApiException.badRequest("A timer habit needs a goal duration");
+        }
+        habit.setRequiredStreak(Milestones.ladder(habit.getGoalSeconds()).size());
+        habit.setTimesPerPeriod(1);
+
+        if (wasMode != TrackingMode.TIMER) {
+            // Fresh clock: create() and unlock() start it once the habit is tracked.
+            habit.setClockStartedAt(null);
+            resetProgress(habit);
+        } else {
+            // A changed goal reshapes the ladder — never leave the gauge past its top.
+            habit.setGauge(Math.min(habit.getGauge(), habit.getRequiredStreak()));
+        }
+    }
+
+    private void resetProgress(Habit habit) {
+        habit.setGauge(0);
+        habit.setCurrentStreak(0);
+        habit.setRecordBonusPaid(false);
+    }
+
+    /** A timer habit's clock only runs while the habit is actually tracked. */
+    private void startClock(Habit habit) {
+        if (habit.getTrackingMode() != TrackingMode.TIMER) {
+            return;
+        }
+        habit.setClockStartedAt(Instant.now());
+        habit.setGauge(0);
+        habit.setRecordBonusPaid(false);
     }
 
     private void applyRequest(Habit habit, HabitRequest request, Long userId) {
@@ -163,9 +254,6 @@ public class HabitService {
         habit.setDescription(request.description());
         if (request.basePoints() != null) {
             habit.setBasePoints(request.basePoints());
-        }
-        if (request.requiredStreak() != null) {
-            habit.setRequiredStreak(request.requiredStreak());
         }
         if (request.schedule() != null) {
             habit.setSchedule(request.schedule());
@@ -176,6 +264,27 @@ public class HabitService {
         if (request.timesPerPeriod() != null) {
             habit.setTimesPerPeriod(request.timesPerPeriod());
         }
+
+        TrackingMode wasMode = habit.getTrackingMode();
+        if (request.trackingMode() != null) {
+            habit.setTrackingMode(request.trackingMode());
+        }
+        if (habit.getTrackingMode() == TrackingMode.TIMER) {
+            applyTimerRequest(habit, request, wasMode);
+        } else {
+            if (wasMode == TrackingMode.TIMER) {
+                // Back to a scheduled habit: the clock and its ladder are void.
+                habit.setClockStartedAt(null);
+                habit.setGoalSeconds(null);
+                resetProgress(habit);
+            }
+            if (request.requiredStreak() != null) {
+                habit.setRequiredStreak(request.requiredStreak());
+            } else if (wasMode == TrackingMode.TIMER) {
+                habit.setRequiredStreak(7);
+            }
+        }
+
         // A daily habit is by definition once per day.
         if (habit.getSchedule() == HabitSchedule.DAILY) {
             habit.setTimesPerPeriod(1);

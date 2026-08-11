@@ -14,5 +14,9 @@ public interface HabitRepository extends JpaRepository<Habit, Long> {
 
     List<Habit> findByUserIdAndStatusInOrderBySortOrderAscIdAsc(Long userId, List<HabitStatus> statuses);
 
+    /** Scheduled and timer habits never share a code path — always ask for one. */
+    List<Habit> findByUserIdAndTrackingModeAndStatusInOrderBySortOrderAscIdAsc(
+            Long userId, TrackingMode trackingMode, List<HabitStatus> statuses);
+
     Optional<Habit> findTopByUserIdOrderBySortOrderDesc(Long userId);
 }

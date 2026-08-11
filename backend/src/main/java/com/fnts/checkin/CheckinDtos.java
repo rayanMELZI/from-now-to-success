@@ -1,5 +1,6 @@
 package com.fnts.checkin;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -39,13 +40,35 @@ public class CheckinDtos {
             int doneThisPeriod,
             String todayStatus /* DONE | MISSED | PENDING | DONE_TODAY */) {}
 
+    /**
+     * One timer habit's live card. The client ticks the clock itself from
+     * clockStartedAt; serverNow on the response lets it correct for a device
+     * clock that disagrees with the server.
+     */
+    public record TimerEntry(
+            Long habitId,
+            String name,
+            String description,
+            HabitStatus status,
+            HabitType habitType,
+            Instant clockStartedAt,
+            long goalSeconds,
+            long bestCleanSeconds,
+            /** The rung being climbed now; 0 once the goal is behind you. */
+            long nextMilestoneSeconds,
+            int gauge,
+            int requiredStreak,
+            int basePoints) {}
+
     public record TodayResponse(
             LocalDate date,
+            Instant serverNow,
             boolean allChecked,
             int pointsToday,
             int freezesLeft,
             int deepFreezesLeft,
-            List<TodayEntry> entries) {}
+            List<TodayEntry> entries,
+            List<TimerEntry> timers) {}
 
     public record CheckinResult(
             int earnedPoints,
