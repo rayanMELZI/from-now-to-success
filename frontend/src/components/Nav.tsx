@@ -31,7 +31,9 @@ export function Nav() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-stone-300 dark:border-stone-700 bg-white/90 dark:bg-stone-900/90 backdrop-blur">
+      {/* stickiness lives on the wrapper in layout.tsx, shared with the
+          offline banner so the two never overlap */}
+      <header className="border-b border-stone-300 dark:border-stone-700 bg-white/90 dark:bg-stone-900/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-3">
           <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
             {/* eslint-disable-next-line @next/next/no-img-element */}

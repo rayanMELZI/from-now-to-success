@@ -6,7 +6,9 @@ import { useEffect } from "react";
 export function RegisterSW() {
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {
+      // updateViaCache:"none" stops the HTTP cache from pinning an old worker —
+      // and with it, the offline cache logic that worker ships.
+      navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {
         /* not fatal: the app works without offline/push support */
       });
     }
