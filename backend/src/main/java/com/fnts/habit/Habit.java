@@ -65,6 +65,26 @@ public class Habit {
     @Column(name = "habit_type", nullable = false)
     private HabitType habitType = HabitType.BUILD;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "tracking_mode", nullable = false)
+    private TrackingMode trackingMode = TrackingMode.SCHEDULED;
+
+    /** TIMER only: the clean duration that validates the habit. */
+    @Column(name = "goal_seconds")
+    private Long goalSeconds;
+
+    /** TIMER only: when the running clock started (creation, unlock or relapse). */
+    @Column(name = "clock_started_at")
+    private Instant clockStartedAt;
+
+    /** TIMER only: the longest run ever — the record to beat. */
+    @Column(name = "best_clean_seconds", nullable = false)
+    private long bestCleanSeconds = 0;
+
+    /** TIMER only: the record bonus is paid once per run. */
+    @Column(name = "record_bonus_paid", nullable = false)
+    private boolean recordBonusPaid = false;
+
     /** Completions needed per week/month (always 1 for daily habits). */
     @Column(name = "times_per_period", nullable = false)
     private int timesPerPeriod = 1;

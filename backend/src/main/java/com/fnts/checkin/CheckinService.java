@@ -1,6 +1,7 @@
 package com.fnts.checkin;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -15,6 +16,7 @@ import com.fnts.checkin.CheckinDtos.CheckinRequest;
 import com.fnts.checkin.CheckinDtos.CheckinResult;
 import com.fnts.checkin.CheckinDtos.Entry;
 import com.fnts.checkin.CheckinDtos.HistoryDay;
+import com.fnts.checkin.CheckinDtos.TimerEntry;
 import com.fnts.checkin.CheckinDtos.TodayEntry;
 import com.fnts.checkin.CheckinDtos.TodayResponse;
 import com.fnts.common.ApiException;
@@ -23,6 +25,7 @@ import com.fnts.habit.HabitRepository;
 import com.fnts.habit.HabitSchedule;
 import com.fnts.habit.HabitService;
 import com.fnts.habit.HabitStatus;
+import com.fnts.habit.TrackingMode;
 import com.fnts.user.Levels;
 import com.fnts.user.User;
 import com.fnts.user.UserRepository;
@@ -57,9 +60,12 @@ public class CheckinService {
         User user = loadUser(userId);
         LocalDate today = Periods.logicalToday(user);
         DayOfWeek weekStart = DayOfWeek.of(user.getWeekStartDay());
+        Instant now = Instant.now();
         catchUpMissedPeriods(user, today);
+        // Running clocks bank whatever they passed while the user was away.
+        habitService.advanceTimers(user, now);
 
-        List<Habit> habits = habitRepository.findByUserIdAndStatusInOrderBySortOrderAscIdAsc(userId, TRACKABLE);
+        List<Habit> habits = scheduledHabits(userId);
 
         int pointsToday = 0;
         List<TodayEntry> entries = new ArrayList<>();
@@ -90,8 +96,26 @@ public class CheckinService {
         }
 
         boolean allChecked = !entries.isEmpty() && !anyBlockingPending;
-        return new TodayResponse(today, allChecked, pointsToday,
-                freezesLeft(userId, today), deepFreezesLeft(userId, today), entries);
+        return new TodayResponse(today, now, allChecked, pointsToday,
+                freezesLeft(userId, today), deepFreezesLeft(userId, today),
+                entries, timers(userId, now));
+    }
+
+    /** Timer habits have no question to answer — only a clock and a record. */
+    private List<TimerEntry> timers(Long userId, Instant now) {
+        List<TimerEntry> timers = new ArrayList<>();
+        for (Habit habit : habitRepository
+                .findByUserIdAndTrackingModeAndStatusInOrderBySortOrderAscIdAsc(
+                        userId, TrackingMode.TIMER, TRACKABLE)) {
+            long goal = habit.getGoalSeconds() == null ? 0 : habit.getGoalSeconds();
+            long elapsed = GameRules.elapsedSeconds(habit, now);
+            timers.add(new TimerEntry(habit.getId(), habit.getName(), habit.getDescription(),
+                    habit.getStatus(), habit.getHabitType(), habit.getClockStartedAt(),
+                    goal, habit.getBestCleanSeconds(),
+                    Milestones.next(Milestones.ladder(goal), elapsed),
+                    habit.getGauge(), habit.getRequiredStreak(), habit.getBasePoints()));
+        }
+        return timers;
     }
 
     @Transactional
@@ -101,7 +125,7 @@ public class CheckinService {
         DayOfWeek weekStart = DayOfWeek.of(user.getWeekStartDay());
         catchUpMissedPeriods(user, today);
 
-        List<Habit> habits = habitRepository.findByUserIdAndStatusInOrderBySortOrderAscIdAsc(userId, TRACKABLE);
+        List<Habit> habits = scheduledHabits(userId);
         // The engagement bonus goes to the day's FIRST done answer, so
         // answering habits one by one through the day still earns it once.
         boolean noDoneYet = habits.stream()
@@ -231,8 +255,7 @@ public class CheckinService {
         DayOfWeek weekStart = DayOfWeek.of(user.getWeekStartDay());
         int penalties = 0;
 
-        for (Habit habit : habitRepository.findByUserIdAndStatusInOrderBySortOrderAscIdAsc(
-                user.getId(), TRACKABLE)) {
+        for (Habit habit : scheduledHabits(user.getId())) {
             if (habit.getSchedule() == HabitSchedule.DAILY) {
                 penalties += catchUpDaily(habit, today);
             } else {
@@ -338,6 +361,15 @@ public class CheckinService {
         int used = logRepository.countFrozenBySchedule(
                 userId, quarterStart, HabitSchedule.MONTHLY);
         return Math.max(0, GameRules.DEEP_FREEZES_PER_QUARTER - used);
+    }
+
+    /**
+     * Timer habits are deliberately absent from every path in here: they have
+     * no daily question, so the catch-up must never mark them missed.
+     */
+    private List<Habit> scheduledHabits(Long userId) {
+        return habitRepository.findByUserIdAndTrackingModeAndStatusInOrderBySortOrderAscIdAsc(
+                userId, TrackingMode.SCHEDULED, TRACKABLE);
     }
 
     private User loadUser(Long userId) {

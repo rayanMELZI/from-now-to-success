@@ -1,8 +1,18 @@
 "use client";
 
 import { useState, type FormEvent, type ReactNode } from "react";
-import type { Habit, HabitRequest, HabitSchedule, HabitType } from "@/lib/types";
-import { Ban, Sprout } from "lucide-react";
+import {
+  GOAL_PRESETS,
+  formatDuration,
+  type Habit,
+  type HabitRequest,
+  type HabitSchedule,
+  type HabitType,
+  type TrackingMode,
+} from "@/lib/types";
+import { Ban, CalendarCheck, Sprout, TimerReset } from "lucide-react";
+
+const DAY_SECONDS = 86400;
 
 /* ---------- small polished controls ---------- */
 
@@ -90,6 +100,12 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
   const [schedule, setSchedule] = useState<HabitSchedule>(initial?.schedule ?? "DAILY");
   const [habitType, setHabitType] = useState<HabitType>(initial?.habitType ?? "BUILD");
   const [timesPerPeriod, setTimesPerPeriod] = useState(initial?.timesPerPeriod ?? 1);
+  const [trackingMode, setTrackingMode] = useState<TrackingMode>(
+    initial?.trackingMode ?? "SCHEDULED",
+  );
+  const [goalSeconds, setGoalSeconds] = useState(
+    initial?.goalSeconds ?? 30 * DAY_SECONDS,
+  );
   const [prereqIds, setPrereqIds] = useState<number[]>(initial?.prerequisiteIds ?? []);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -98,6 +114,8 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
   const periodNoun = schedule === "WEEKLY" ? "week" : "month";
   const streakNoun =
     schedule === "DAILY" ? "days" : schedule === "WEEKLY" ? "weeks" : "months";
+  const timer = trackingMode === "TIMER";
+  const goalDays = Math.max(1, Math.round(goalSeconds / DAY_SECONDS));
 
   function togglePrereq(id: number) {
     setPrereqIds((current) =>
@@ -114,11 +132,18 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
         name,
         description: description || undefined,
         basePoints,
-        requiredStreak,
-        schedule,
-        habitType,
-        timesPerPeriod: schedule === "DAILY" ? 1 : timesPerPeriod,
+        trackingMode,
         prerequisiteIds: prereqIds,
+        // A timer is always about staying away from something, and its gauge
+        // is the milestone ladder — the server sizes it from the goal.
+        ...(timer
+          ? { habitType: "QUIT" as const, goalSeconds }
+          : {
+              habitType,
+              requiredStreak,
+              schedule,
+              timesPerPeriod: schedule === "DAILY" ? 1 : timesPerPeriod,
+            }),
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -141,50 +166,116 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="w-full rounded-lg border border-stone-300 dark:border-stone-700 px-3 py-2.5 text-base focus:border-amber-500 focus:ring-2 focus:ring-amber-200 focus:outline-none"
-          placeholder={habitType === "QUIT" ? "e.g. doomscrolling at night" : "e.g. 5 prayers"}
+          placeholder={
+            timer
+              ? "e.g. smoking"
+              : habitType === "QUIT"
+                ? "e.g. doomscrolling at night"
+                : "e.g. 5 prayers"
+          }
         />
       </label>
 
       <div className="space-y-1">
         <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
-          Goal
+          Tracking
         </span>
         <Segmented
-          value={habitType}
-          onChange={setHabitType}
+          value={trackingMode}
+          onChange={setTrackingMode}
           options={[
-            { value: "BUILD", label: <span className="flex items-center justify-center gap-1.5"><Sprout size={14} className="text-emerald-600" />Build it</span> },
-            { value: "QUIT", label: <span className="flex items-center justify-center gap-1.5"><Ban size={14} className="text-red-500" />Quit it</span> },
+            { value: "SCHEDULED", label: <span className="flex items-center justify-center gap-1.5"><CalendarCheck size={14} className="text-amber-600" />Check-in</span> },
+            { value: "TIMER", label: <span className="flex items-center justify-center gap-1.5"><TimerReset size={14} className="text-sky-500" />Timer</span> },
           ]}
         />
-      </div>
-
-      <div className="space-y-1">
-        <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
-          Rhythm
-        </span>
-        <Segmented
-          value={schedule}
-          onChange={setSchedule}
-          options={[
-            { value: "DAILY", label: "Daily" },
-            { value: "WEEKLY", label: "Weekly" },
-            { value: "MONTHLY", label: "Monthly" },
-          ]}
-        />
-        {schedule !== "DAILY" && (
-          <div className="flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-400/10 px-3 py-2">
-            <span className="text-sm text-stone-600 dark:text-stone-300">Times per {periodNoun}</span>
-            <Stepper
-              value={timesPerPeriod}
-              min={1}
-              max={30}
-              onChange={setTimesPerPeriod}
-              suffix="×"
-            />
-          </div>
+        {timer && (
+          <p className="text-xs text-stone-500 dark:text-stone-400">
+            A clock that runs until you slip and reset it. No daily question — you
+            just try to make each run longer than the last.
+          </p>
         )}
       </div>
+
+      {!timer && (
+        <div className="space-y-1">
+          <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
+            Goal
+          </span>
+          <Segmented
+            value={habitType}
+            onChange={setHabitType}
+            options={[
+              { value: "BUILD", label: <span className="flex items-center justify-center gap-1.5"><Sprout size={14} className="text-emerald-600" />Build it</span> },
+              { value: "QUIT", label: <span className="flex items-center justify-center gap-1.5"><Ban size={14} className="text-red-500" />Quit it</span> },
+            ]}
+          />
+        </div>
+      )}
+
+      {timer ? (
+        <div className="space-y-1">
+          <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
+            Stay clean for
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {GOAL_PRESETS.map((preset) => (
+              <button
+                key={preset.seconds}
+                type="button"
+                onClick={() => setGoalSeconds(preset.seconds)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
+                  goalSeconds === preset.seconds
+                    ? "border-sky-500 bg-sky-100 dark:bg-sky-400/15 text-sky-900 dark:text-sky-200"
+                    : "border-stone-300 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:border-stone-400"
+                }`}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center justify-between rounded-lg bg-sky-50 dark:bg-sky-400/10 px-3 py-2">
+            <span className="text-sm text-stone-600 dark:text-stone-300">Days</span>
+            <Stepper
+              value={goalDays}
+              min={1}
+              max={1825}
+              onChange={(days) => setGoalSeconds(days * DAY_SECONDS)}
+            />
+          </div>
+          <p className="text-xs text-stone-500 dark:text-stone-400">
+            Reaching {formatDuration(goalSeconds)} clean validates the habit. Shorter
+            milestones along the way (a day, a week, a month…) pay points as you pass
+            them.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
+            Rhythm
+          </span>
+          <Segmented
+            value={schedule}
+            onChange={setSchedule}
+            options={[
+              { value: "DAILY", label: "Daily" },
+              { value: "WEEKLY", label: "Weekly" },
+              { value: "MONTHLY", label: "Monthly" },
+            ]}
+          />
+          {schedule !== "DAILY" && (
+            <div className="flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-400/10 px-3 py-2">
+              <span className="text-sm text-stone-600 dark:text-stone-300">Times per {periodNoun}</span>
+              <Stepper
+                value={timesPerPeriod}
+                min={1}
+                max={30}
+                onChange={setTimesPerPeriod}
+                suffix="×"
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center justify-between gap-3">
         <div className="space-y-1">
@@ -193,12 +284,14 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
           </span>
           <Stepper value={basePoints} min={1} max={100} onChange={setBasePoints} />
         </div>
-        <div className="space-y-1">
-          <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
-            {streakNoun} to validate
-          </span>
-          <Stepper value={requiredStreak} min={2} max={90} onChange={setRequiredStreak} />
-        </div>
+        {!timer && (
+          <div className="space-y-1">
+            <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
+              {streakNoun} to validate
+            </span>
+            <Stepper value={requiredStreak} min={2} max={90} onChange={setRequiredStreak} />
+          </div>
+        )}
       </div>
 
       <label className="block">

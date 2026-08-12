@@ -1,16 +1,40 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
-import { habitVerbs, type CheckinResult, type TodayEntry, type TodayResponse } from "@/lib/types";
+import {
+  formatClock,
+  formatDuration,
+  habitVerbs,
+  type CheckinResult,
+  type FallResult,
+  type TimerEntry,
+  type TodayEntry,
+  type TodayResponse,
+} from "@/lib/types";
 import { GaugeBar } from "@/components/GaugeBar";
-import { Ban, Check, Flame, GripVertical, Snowflake, X } from "lucide-react";
+import {
+  Ban,
+  Check,
+  Flame,
+  GripVertical,
+  Snowflake,
+  TimerReset,
+  Trophy,
+  X,
+} from "lucide-react";
 
 interface MissDraft {
   habitId: number;
   reason: string;
   freeze: boolean;
+}
+
+/** Owning up to a relapse: the same shape as a miss, minus the freeze. */
+interface FallDraft {
+  habitId: number;
+  reason: string;
 }
 
 type GroupBy = "none" | "rhythm" | "goal";
@@ -50,6 +74,11 @@ function groupKey(entry: TodayEntry, mode: GroupBy): string {
   return mode === "rhythm" ? entry.schedule : mode === "goal" ? entry.habitType : "all";
 }
 
+/** Seconds the current run has been going, on the server's clock. */
+function elapsedOf(timer: TimerEntry, serverNowMs: number): number {
+  return Math.max(0, Math.floor((serverNowMs - Date.parse(timer.clockStartedAt)) / 1000));
+}
+
 /** Immutably moves the item at `from` to index `to`. */
 function moveItem<T>(items: T[], from: number, to: number): T[] {
   const next = [...items];
@@ -61,9 +90,17 @@ function CheckinPage() {
   const { refreshUser } = useAuth();
   const [today, setToday] = useState<TodayResponse | null>(null);
   const [missDraft, setMissDraft] = useState<MissDraft | null>(null);
+  const [fallDraft, setFallDraft] = useState<FallDraft | null>(null);
   const [result, setResult] = useState<CheckinResult | null>(null);
+  const [fallResult, setFallResult] = useState<FallResult | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // The clocks tick locally; skew keeps them honest when the device clock
+  // disagrees with the server that owns the real elapsed time.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [skewMs, setSkewMs] = useState(0);
+  const bankedRef = useRef("");
 
   // Manual ordering. `dragOrder` holds the pending ids while the user is
   // rearranging them; null means "show the order the server sent".
@@ -87,6 +124,7 @@ function CheckinPage() {
   const reload = useCallback(
     () =>
       api<TodayResponse>("/api/checkins/today").then((data) => {
+        setSkewMs(Date.parse(data.serverNow) - Date.now());
         setToday(data);
         // The server's order is now the truth; drop the local arrangement.
         setDragOrder(null);
@@ -97,6 +135,32 @@ function CheckinPage() {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  const timers = useMemo(() => today?.timers ?? [], [today]);
+  const hasTimers = timers.length > 0;
+
+  useEffect(() => {
+    if (!hasTimers) return;
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [hasTimers]);
+
+  // A milestone only pays once the server sees it, so ask again the moment a
+  // clock ticks past one — each (habit, milestone) pair triggers a single reload.
+  useEffect(() => {
+    const due = timers
+      .filter(
+        (timer) =>
+          timer.nextMilestoneSeconds > 0 &&
+          elapsedOf(timer, nowMs + skewMs) >= timer.nextMilestoneSeconds,
+      )
+      .map((timer) => `${timer.habitId}:${timer.nextMilestoneSeconds}`)
+      .join(",");
+    if (due && due !== bankedRef.current) {
+      bankedRef.current = due;
+      reload();
+    }
+  }, [timers, nowMs, skewMs, reload]);
 
   /** Answer ONE habit immediately — no need to wait for the end of the day. */
   async function answer(
@@ -114,6 +178,27 @@ function CheckinPage() {
       });
       setResult(submission);
       setMissDraft(null);
+      await Promise.all([reload(), refreshUser()]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  /** Own up to a relapse: the run ends, the record stands, the clock restarts. */
+  async function confirmFall(draft: FallDraft) {
+    setBusyId(draft.habitId);
+    setError(null);
+    try {
+      const submission = await api<FallResult>(`/api/timers/${draft.habitId}/fall`, {
+        method: "POST",
+        body: { reason: draft.reason || undefined },
+      });
+      setFallResult(submission);
+      setResult(null);
+      setFallDraft(null);
+      bankedRef.current = "";
       await Promise.all([reload(), refreshUser()]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -246,13 +331,62 @@ function CheckinPage() {
         </div>
       )}
 
+      {fallResult && (
+        <div className="mb-4 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-4">
+          <p className="font-medium">
+            Clock restarted — that run lasted{" "}
+            {formatDuration(fallResult.lastRunSeconds)}.
+          </p>
+          <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
+            {fallResult.earnedPoints >= 0 ? "+" : ""}
+            {fallResult.earnedPoints} points · Total: {fallResult.totalPoints} (level{" "}
+            {fallResult.level})
+          </p>
+          {fallResult.newRecord && (
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-amber-700 dark:text-amber-300">
+              <Trophy size={14} /> A new personal best — beat{" "}
+              {formatDuration(fallResult.bestCleanSeconds)} next time.
+            </p>
+          )}
+          {fallResult.relocked.length > 0 && (
+            <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
+              Locked again: {fallResult.relocked.join(", ")}
+            </p>
+          )}
+        </div>
+      )}
+
       {error && (
         <p className="mb-4 rounded-md bg-red-50 dark:bg-red-950/50 px-3 py-2 text-sm text-red-700 dark:text-red-300">
           {error}
         </p>
       )}
 
-      {today.entries.length === 0 && (
+      {timers.length > 0 && (
+        <div className="mb-5 space-y-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-400">
+            Timers
+            <span className="ml-1 text-stone-300 dark:text-stone-600">
+              · {timers.length}
+            </span>
+          </h3>
+          {timers.map((timer) => (
+            <TimerCard
+              key={timer.habitId}
+              entry={timer}
+              elapsed={elapsedOf(timer, nowMs + skewMs)}
+              busy={busyId === timer.habitId}
+              draft={fallDraft?.habitId === timer.habitId ? fallDraft : null}
+              onSlipClick={() => setFallDraft({ habitId: timer.habitId, reason: "" })}
+              onDraftChange={setFallDraft}
+              onConfirm={confirmFall}
+              onCancel={() => setFallDraft(null)}
+            />
+          ))}
+        </div>
+      )}
+
+      {today.entries.length === 0 && timers.length === 0 && (
         <div className="rounded-xl border border-dashed border-stone-300 dark:border-stone-700 p-8 text-center text-stone-500 dark:text-stone-400">
           No active habits yet — add some on your roadmap first.
         </div>
@@ -379,6 +513,155 @@ function AnsweredStatus({ entry }: { entry: TodayEntry }) {
           ? "avoided ✓"
           : "done ✓"}
     </span>
+  );
+}
+
+/**
+ * A timer habit: a clock that has been running since the last relapse, the
+ * record it is chasing, and the one button that ends the run.
+ */
+function TimerCard({
+  entry,
+  elapsed,
+  busy,
+  draft,
+  onSlipClick,
+  onDraftChange,
+  onConfirm,
+  onCancel,
+}: {
+  entry: TimerEntry;
+  elapsed: number;
+  busy: boolean;
+  draft: FallDraft | null;
+  onSlipClick: () => void;
+  onDraftChange: (draft: FallDraft) => void;
+  onConfirm: (draft: FallDraft) => void;
+  onCancel: () => void;
+}) {
+  const { days, time } = formatClock(elapsed);
+  const record = entry.bestCleanSeconds;
+  const beatingRecord = record > 0 && elapsed > record;
+  const goalReached = entry.nextMilestoneSeconds === 0;
+  const toNext = entry.nextMilestoneSeconds - elapsed;
+
+  return (
+    <div className="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-4 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-1.5 font-medium">
+            <Ban size={14} className="text-red-500" />
+            {entry.name}
+          </p>
+
+          <p className="mt-1 flex items-baseline gap-1.5 tabular-nums">
+            {days > 0 && (
+              <span className="text-2xl font-semibold">
+                {days}
+                <span className="text-base font-normal text-stone-400">d</span>
+              </span>
+            )}
+            <span
+              className={`text-2xl font-semibold ${
+                beatingRecord ? "text-amber-600 dark:text-amber-400" : ""
+              }`}
+            >
+              {time}
+            </span>
+          </p>
+
+          <div className="mt-2 flex items-center gap-2">
+            <GaugeBar
+              gauge={entry.gauge}
+              max={entry.requiredStreak}
+              valid={entry.status === "VALID"}
+              className="max-w-40"
+            />
+            <span className="text-xs text-stone-400">
+              {entry.gauge}/{entry.requiredStreak} milestones
+            </span>
+          </div>
+
+          <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+            <span
+              className={`flex items-center gap-1 ${
+                beatingRecord
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-stone-400"
+              }`}
+            >
+              <Trophy size={12} />
+              {record === 0
+                ? "First run — you are setting the bar"
+                : beatingRecord
+                  ? `Past your best of ${formatDuration(record)}`
+                  : `Best: ${formatDuration(record)}`}
+            </span>
+            {goalReached ? (
+              <span className="text-emerald-600 dark:text-emerald-400">
+                Goal reached ✓
+              </span>
+            ) : (
+              toNext > 0 && (
+                <span className="text-stone-400">
+                  Next milestone in {formatDuration(toNext)}
+                </span>
+              )
+            )}
+          </p>
+        </div>
+
+        <button
+          onClick={onSlipClick}
+          disabled={busy}
+          className="shrink-0 rounded-lg border border-rose-300 dark:border-rose-800 px-4 py-2.5 text-sm text-rose-600 dark:text-rose-400 transition-all hover:bg-rose-50 dark:hover:bg-rose-950/40 active:scale-95 disabled:opacity-50"
+        >
+          <span className="flex items-center gap-1.5">
+            <TimerReset size={15} />
+            I slipped
+          </span>
+        </button>
+      </div>
+
+      {draft && (
+        <div className="mt-3 space-y-3 rounded-lg bg-stone-50 dark:bg-stone-950/50 p-3">
+          <p className="text-sm font-medium">Reset the clock?</p>
+          <p className="text-xs text-stone-500 dark:text-stone-400">
+            This run ends at {formatDuration(elapsed)}
+            {beatingRecord ? " — your new record" : ""}. The gauge empties and the
+            clock starts from zero.
+          </p>
+          <label className="block text-sm">
+            <span className="text-stone-600 dark:text-stone-300">
+              What happened? (a reason halves the point loss)
+            </span>
+            <textarea
+              value={draft.reason}
+              maxLength={500}
+              rows={2}
+              onChange={(e) => onDraftChange({ ...draft, reason: e.target.value })}
+              className="mt-1 w-full rounded-md border border-stone-300 dark:border-stone-700 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none"
+              placeholder="e.g. stressed after work, someone offered…"
+            />
+          </label>
+          <div className="flex gap-2">
+            <button
+              onClick={() => onConfirm(draft)}
+              disabled={busy}
+              className="rounded-lg bg-rose-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-rose-400 active:scale-95 disabled:opacity-50"
+            >
+              {busy ? "…" : "Yes, restart it"}
+            </button>
+            <button
+              onClick={onCancel}
+              className="rounded-lg border border-stone-300 dark:border-stone-700 px-4 py-2 text-sm hover:bg-stone-100 dark:hover:bg-stone-800"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

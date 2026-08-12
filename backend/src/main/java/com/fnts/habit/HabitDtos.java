@@ -1,5 +1,6 @@
 package com.fnts.habit;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -12,6 +13,11 @@ import jakarta.validation.constraints.Size;
 
 public class HabitDtos {
 
+    /** One hour — the shortest goal a timer habit can be given. */
+    public static final long MIN_GOAL_SECONDS = 3600L;
+    /** Five years. */
+    public static final long MAX_GOAL_SECONDS = 5L * 365 * 24 * 3600;
+
     public record HabitRequest(
             @NotBlank @Size(max = 100) String name,
             @Size(max = 500) String description,
@@ -19,6 +25,8 @@ public class HabitDtos {
             @Min(2) @Max(90) Integer requiredStreak,
             HabitSchedule schedule,
             HabitType habitType,
+            TrackingMode trackingMode,
+            @Min(MIN_GOAL_SECONDS) @Max(MAX_GOAL_SECONDS) Long goalSeconds,
             @Min(1) @Max(30) Integer timesPerPeriod,
             List<Long> prerequisiteIds) {}
 
@@ -33,6 +41,10 @@ public class HabitDtos {
             int requiredStreak,
             HabitSchedule schedule,
             HabitType habitType,
+            TrackingMode trackingMode,
+            Long goalSeconds,
+            Instant clockStartedAt,
+            long bestCleanSeconds,
             int timesPerPeriod,
             HabitStatus status,
             int gauge,
@@ -52,6 +64,10 @@ public class HabitDtos {
                 habit.getRequiredStreak(),
                 habit.getSchedule(),
                 habit.getHabitType(),
+                habit.getTrackingMode(),
+                habit.getGoalSeconds(),
+                habit.getClockStartedAt(),
+                habit.getBestCleanSeconds(),
                 habit.getTimesPerPeriod(),
                 habit.getStatus(),
                 habit.getGauge(),
