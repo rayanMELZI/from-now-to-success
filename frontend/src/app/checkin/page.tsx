@@ -19,6 +19,7 @@ import {
   Check,
   Flame,
   GripVertical,
+  Replace,
   Snowflake,
   TimerReset,
   Trophy,
@@ -35,6 +36,16 @@ interface MissDraft {
 interface FallDraft {
   habitId: number;
   reason: string;
+}
+
+/**
+ * The moment the pairing exists for: the bad habit just won, so point the
+ * user straight at the good habit that was supposed to take its place.
+ */
+interface SwapPrompt {
+  quitName: string;
+  replacementId: number;
+  replacementName: string;
 }
 
 type GroupBy = "none" | "rhythm" | "goal";
@@ -93,6 +104,7 @@ function CheckinPage() {
   const [fallDraft, setFallDraft] = useState<FallDraft | null>(null);
   const [result, setResult] = useState<CheckinResult | null>(null);
   const [fallResult, setFallResult] = useState<FallResult | null>(null);
+  const [swapPrompt, setSwapPrompt] = useState<SwapPrompt | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -162,6 +174,26 @@ function CheckinPage() {
     }
   }, [timers, nowMs, skewMs, reload]);
 
+  /** Whether a paired replacement has already been ticked off today. */
+  function isDoneToday(habitId: number | null): boolean {
+    if (habitId === null) return false;
+    const status = today?.entries.find((e) => e.habitId === habitId)?.todayStatus;
+    return status === "DONE" || status === "DONE_TODAY";
+  }
+
+  /** The pairing of a habit that just slipped, if it was given one. */
+  function replacementPromptFor(habitId: number): SwapPrompt | null {
+    const slipped =
+      today?.entries.find((e) => e.habitId === habitId) ??
+      today?.timers.find((t) => t.habitId === habitId);
+    if (!slipped?.replacementHabitId || !slipped.replacementName) return null;
+    return {
+      quitName: slipped.name,
+      replacementId: slipped.replacementHabitId,
+      replacementName: slipped.replacementName,
+    };
+  }
+
   /** Answer ONE habit immediately — no need to wait for the end of the day. */
   async function answer(
     habitId: number,
@@ -178,6 +210,8 @@ function CheckinPage() {
       });
       setResult(submission);
       setMissDraft(null);
+      setFallResult(null);
+      setSwapPrompt(done ? null : replacementPromptFor(habitId));
       await Promise.all([reload(), refreshUser()]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -198,6 +232,7 @@ function CheckinPage() {
       setFallResult(submission);
       setResult(null);
       setFallDraft(null);
+      setSwapPrompt(replacementPromptFor(draft.habitId));
       bankedRef.current = "";
       await Promise.all([reload(), refreshUser()]);
     } catch (err) {
@@ -328,6 +363,11 @@ function CheckinPage() {
               🔓 Unlocked: {result.unlocked.join(", ")}
             </p>
           )}
+          {result.swaps.length > 0 && (
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-300">
+              <Replace size={14} /> Swap bonus: {result.swaps.join(", ")}
+            </p>
+          )}
         </div>
       )}
 
@@ -356,6 +396,18 @@ function CheckinPage() {
         </div>
       )}
 
+      {swapPrompt && (
+        <SwapNudge
+          prompt={swapPrompt}
+          target={
+            today.entries.find((e) => e.habitId === swapPrompt.replacementId) ?? null
+          }
+          busy={busyId === swapPrompt.replacementId}
+          onDo={() => answer(swapPrompt.replacementId, true)}
+          onDismiss={() => setSwapPrompt(null)}
+        />
+      )}
+
       {error && (
         <p className="mb-4 rounded-md bg-red-50 dark:bg-red-950/50 px-3 py-2 text-sm text-red-700 dark:text-red-300">
           {error}
@@ -376,6 +428,7 @@ function CheckinPage() {
               entry={timer}
               elapsed={elapsedOf(timer, nowMs + skewMs)}
               busy={busyId === timer.habitId}
+              replacementDone={isDoneToday(timer.replacementHabitId)}
               draft={fallDraft?.habitId === timer.habitId ? fallDraft : null}
               onSlipClick={() => setFallDraft({ habitId: timer.habitId, reason: "" })}
               onDraftChange={setFallDraft}
@@ -430,6 +483,7 @@ function CheckinPage() {
                 entry={entry}
                 busy={busyId === entry.habitId}
                 missDraft={missDraft?.habitId === entry.habitId ? missDraft : null}
+                replacementDone={isDoneToday(entry.replacementHabitId)}
                 freezesLeft={today.freezesLeft}
                 deepFreezesLeft={today.deepFreezesLeft}
                 draggable={pending.length > 1}
@@ -491,6 +545,82 @@ function CheckinPage() {
   );
 }
 
+/**
+ * Shown right after a slip: the bad habit won, so the good habit that was
+ * meant to take its place is put one tap away, while the urge is still there.
+ */
+function SwapNudge({
+  prompt,
+  target,
+  busy,
+  onDo,
+  onDismiss,
+}: {
+  prompt: SwapPrompt;
+  target: TodayEntry | null;
+  busy: boolean;
+  onDo: () => void;
+  onDismiss: () => void;
+}) {
+  const pending = target?.todayStatus === "PENDING";
+
+  return (
+    <div className="mb-4 rounded-xl border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 p-4">
+      <p className="flex items-start gap-2 font-medium text-emerald-900 dark:text-emerald-200">
+        <Replace size={16} className="mt-0.5 shrink-0" />
+        <span>
+          {prompt.quitName} won this round — do {prompt.replacementName} instead.
+        </span>
+      </p>
+      <p className="mt-1 text-sm text-emerald-800/80 dark:text-emerald-300/80">
+        {pending
+          ? "That is what the pairing is for: fill the slot the old habit just took."
+          : target
+            ? `You already have ${prompt.replacementName} down for today — the slot is filled.`
+            : `${prompt.replacementName} is not on today's list.`}
+      </p>
+      <div className="mt-3 flex gap-2">
+        {pending && (
+          <button
+            onClick={onDo}
+            disabled={busy}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-500 active:scale-95 disabled:opacity-50"
+          >
+            <span className="flex items-center gap-1.5">
+              <Check size={15} />
+              {busy ? "…" : `Did ${prompt.replacementName}`}
+            </span>
+          </button>
+        )}
+        <button
+          onClick={onDismiss}
+          className="rounded-lg border border-emerald-300 dark:border-emerald-800 px-4 py-2 text-sm text-emerald-800 dark:text-emerald-300 transition-colors hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
+        >
+          {pending ? "Not now" : "Close"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** "Instead: X" — the good habit paired with a habit being quit. */
+function InsteadChip({ name, done }: { name: string; done: boolean }) {
+  return (
+    <span
+      className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
+        done
+          ? "bg-emerald-100 dark:bg-emerald-400/15 text-emerald-800 dark:text-emerald-300"
+          : "bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400"
+      }`}
+      title={`Instead of this habit, do "${name}"`}
+    >
+      <Replace size={11} />
+      {name}
+      {done && " ✓"}
+    </span>
+  );
+}
+
 function AnsweredStatus({ entry }: { entry: TodayEntry }) {
   if (entry.todayStatus === "FROZEN") {
     const deep = entry.schedule === "MONTHLY";
@@ -524,6 +654,7 @@ function TimerCard({
   entry,
   elapsed,
   busy,
+  replacementDone,
   draft,
   onSlipClick,
   onDraftChange,
@@ -533,6 +664,7 @@ function TimerCard({
   entry: TimerEntry;
   elapsed: number;
   busy: boolean;
+  replacementDone: boolean;
   draft: FallDraft | null;
   onSlipClick: () => void;
   onDraftChange: (draft: FallDraft) => void;
@@ -549,9 +681,12 @@ function TimerCard({
     <div className="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-1.5 font-medium">
+          <p className="flex flex-wrap items-center gap-1.5 font-medium">
             <Ban size={14} className="text-red-500" />
             {entry.name}
+            {entry.replacementName && (
+              <InsteadChip name={entry.replacementName} done={replacementDone} />
+            )}
           </p>
 
           <p className="mt-1 flex items-baseline gap-1.5 tabular-nums">
@@ -744,6 +879,7 @@ function PendingRow({
   entry,
   busy,
   missDraft,
+  replacementDone,
   freezesLeft,
   deepFreezesLeft,
   draggable,
@@ -762,6 +898,7 @@ function PendingRow({
   entry: TodayEntry;
   busy: boolean;
   missDraft: MissDraft | null;
+  replacementDone: boolean;
   freezesLeft: number;
   deepFreezesLeft: number;
   draggable: boolean;
@@ -840,6 +977,9 @@ function PendingRow({
                 {entry.doneThisPeriod}/{entry.timesPerPeriod} this {periodNoun} ·{" "}
                 {entry.daysLeftInPeriod} day{entry.daysLeftInPeriod === 1 ? "" : "s"} left
               </span>
+            )}
+            {entry.replacementName && (
+              <InsteadChip name={entry.replacementName} done={replacementDone} />
             )}
           </p>
           <div className="mt-1 flex items-center gap-2">

@@ -10,7 +10,7 @@ import {
   type HabitType,
   type TrackingMode,
 } from "@/lib/types";
-import { Ban, CalendarCheck, Sprout, TimerReset } from "lucide-react";
+import { Ban, CalendarCheck, Replace, Sprout, TimerReset } from "lucide-react";
 
 const DAY_SECONDS = 86400;
 
@@ -107,6 +107,9 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
     initial?.goalSeconds ?? 30 * DAY_SECONDS,
   );
   const [prereqIds, setPrereqIds] = useState<number[]>(initial?.prerequisiteIds ?? []);
+  const [replacementId, setReplacementId] = useState<number | null>(
+    initial?.replacementHabitId ?? null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -116,6 +119,9 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
     schedule === "DAILY" ? "days" : schedule === "WEEKLY" ? "weeks" : "months";
   const timer = trackingMode === "TIMER";
   const goalDays = Math.max(1, Math.round(goalSeconds / DAY_SECONDS));
+  // A timer habit is always about quitting something, so it can be paired too.
+  const quitting = timer || habitType === "QUIT";
+  const replacements = candidates.filter((h) => h.habitType === "BUILD");
 
   function togglePrereq(id: number) {
     setPrereqIds((current) =>
@@ -134,6 +140,8 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
         basePoints,
         trackingMode,
         prerequisiteIds: prereqIds,
+        // Only a habit you are quitting can be replaced by another.
+        replacementHabitId: quitting ? replacementId : null,
         // A timer is always about staying away from something, and its gauge
         // is the milestone ladder — the server sizes it from the goal.
         ...(timer
@@ -273,6 +281,48 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
                 suffix="×"
               />
             </div>
+          )}
+        </div>
+      )}
+
+      {quitting && (
+        <div className="space-y-1">
+          <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-stone-400">
+            <Replace size={13} className="text-emerald-600" />
+            Do this instead (optional)
+          </span>
+          {replacements.length === 0 ? (
+            <p className="text-xs text-stone-500 dark:text-stone-400">
+              Add a habit you are building first, then come back and pair it with
+              this one.
+            </p>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-1.5">
+                {replacements.map((habit) => {
+                  const on = replacementId === habit.id;
+                  return (
+                    <button
+                      key={habit.id}
+                      type="button"
+                      onClick={() => setReplacementId(on ? null : habit.id)}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
+                        on
+                          ? "border-emerald-500 bg-emerald-100 dark:bg-emerald-400/15 text-emerald-900 dark:text-emerald-200"
+                          : "border-stone-300 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:border-stone-400"
+                      }`}
+                    >
+                      {on ? "✓ " : ""}
+                      {habit.name}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-stone-500 dark:text-stone-400">
+                Quitting is easier when something fills the gap. Avoid this habit
+                and do its replacement on the same day for a bonus.
+              </p>
+            </>
           )}
         </div>
       )}

@@ -114,6 +114,14 @@ public class Habit {
     @Column(name = "sort_order", nullable = false)
     private int sortOrder = 0;
 
+    /**
+     * QUIT habits only: the BUILD habit done in place of this one. Avoiding
+     * the bad habit and doing its replacement on the same day pays a bonus.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "replacement_habit_id")
+    private Habit replacement;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "habit_prerequisites",
             joinColumns = @JoinColumn(name = "habit_id"),

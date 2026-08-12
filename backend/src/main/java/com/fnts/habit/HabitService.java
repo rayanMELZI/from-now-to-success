@@ -109,6 +109,13 @@ public class HabitService {
         Habit habit = getOwned(userId, habitId);
         applyRequest(habit, request, userId);
         assertNoCycle(habit);
+        // A habit that stopped being a BUILD habit cannot stand in for anything
+        // anymore — drop the pairings that named it as a replacement.
+        if (habit.getHabitType() != HabitType.BUILD) {
+            for (Habit other : habitRepository.findByUserIdAndReplacementId(userId, habitId)) {
+                other.setReplacement(null);
+            }
+        }
         syncLockStates(userId, today(habit.getUser()));
         // A habit that just turned into a timer starts ticking right away —
         // unless it is locked, where unlock() will start it later.
@@ -164,9 +171,14 @@ public class HabitService {
     @Transactional
     public void delete(Long userId, Long habitId) {
         Habit habit = getOwned(userId, habitId);
-        // Other habits may reference this one as a prerequisite; detach those links first.
+        // Other habits may reference this one as a prerequisite or as their
+        // replacement; detach those links first.
         for (Habit other : habitRepository.findByUserIdOrderBySortOrderAscIdAsc(userId)) {
             other.getPrerequisites().remove(habit);
+            if (other.getReplacement() != null
+                    && habitId.equals(other.getReplacement().getId())) {
+                other.setReplacement(null);
+            }
         }
         habitRepository.delete(habit);
         syncLockStates(userId, today(habit.getUser()));
@@ -289,6 +301,7 @@ public class HabitService {
         if (habit.getSchedule() == HabitSchedule.DAILY) {
             habit.setTimesPerPeriod(1);
         }
+        applyReplacement(habit, request.replacementHabitId(), userId);
         if (request.prerequisiteIds() != null) {
             Set<Habit> prerequisites = new HashSet<>();
             for (Long prereqId : request.prerequisiteIds()) {
@@ -299,6 +312,31 @@ public class HabitService {
             }
             habit.setPrerequisites(prerequisites);
         }
+    }
+
+    /**
+     * The habit you do instead. Only a habit you are QUITting can name one,
+     * and only a BUILD habit can be one — the pair reads "stop X, do Y in its
+     * place", so it can never chain or loop. A null id clears the pairing.
+     */
+    private void applyReplacement(Habit habit, Long replacementId, Long userId) {
+        if (replacementId == null) {
+            habit.setReplacement(null);
+            return;
+        }
+        if (habit.getHabitType() != HabitType.QUIT) {
+            throw ApiException.badRequest(
+                    "Only a habit you are quitting can have a replacement");
+        }
+        if (replacementId.equals(habit.getId())) {
+            throw ApiException.badRequest("A habit cannot replace itself");
+        }
+        Habit replacement = getOwned(userId, replacementId);
+        if (replacement.getHabitType() != HabitType.BUILD) {
+            throw ApiException.badRequest(
+                    "A replacement must be a habit you are building");
+        }
+        habit.setReplacement(replacement);
     }
 
     /** Rejects prerequisite chains that loop back to the habit itself. */

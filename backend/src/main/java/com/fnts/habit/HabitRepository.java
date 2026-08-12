@@ -19,4 +19,7 @@ public interface HabitRepository extends JpaRepository<Habit, Long> {
             Long userId, TrackingMode trackingMode, List<HabitStatus> statuses);
 
     Optional<Habit> findTopByUserIdOrderBySortOrderDesc(Long userId);
+
+    /** The quit habits this one stands in for — the pairing seen backwards. */
+    List<Habit> findByUserIdAndReplacementId(Long userId, Long replacementId);
 }

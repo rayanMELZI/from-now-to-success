@@ -13,7 +13,7 @@ import { IslandMap } from "@/components/IslandMap";
 import { HabitForm } from "@/components/HabitForm";
 import { GaugeBar } from "@/components/GaugeBar";
 import { Modal } from "@/components/Modal";
-import { Ban, Flame, Lock, TimerReset, Trophy } from "lucide-react";
+import { Ban, Flame, Lock, Replace, TimerReset, Trophy } from "lucide-react";
 
 function RoadmapPage() {
   const [habits, setHabits] = useState<Habit[] | null>(null);
@@ -72,6 +72,14 @@ function RoadmapPage() {
       <div className="flex flex-1 items-center justify-center text-stone-400">Loading…</div>
     );
   }
+
+  // The pairing, seen from both ends: what this habit is replaced by, and the
+  // habits it stands in for.
+  const replacement =
+    habits.find((h) => h.id === selected?.replacementHabitId) ?? null;
+  const standsInFor = selected
+    ? habits.filter((h) => h.replacementHabitId === selected.id)
+    : [];
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col p-4">
@@ -199,6 +207,25 @@ function RoadmapPage() {
               <dt className="text-stone-500 dark:text-stone-400">Points</dt>
               <dd>{selected.basePoints}</dd>
             </dl>
+
+            {replacement && (
+              <p className="flex items-center gap-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-300">
+                <Replace size={13} className="shrink-0" />
+                <span>
+                  Do <strong>{replacement.name}</strong> instead. Avoiding this and
+                  doing that on the same day pays a bonus.
+                </span>
+              </p>
+            )}
+
+            {standsInFor.length > 0 && (
+              <p className="flex items-center gap-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-300">
+                <Replace size={13} className="shrink-0" />
+                <span>
+                  Stands in for {standsInFor.map((h) => h.name).join(", ")}.
+                </span>
+              </p>
+            )}
 
             {selected.status === "LOCKED" && (
               <p className="flex items-center gap-1.5 rounded-lg bg-stone-100 dark:bg-stone-800 px-3 py-2 text-xs text-stone-500 dark:text-stone-400">

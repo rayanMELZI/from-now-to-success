@@ -28,6 +28,8 @@ public class HabitDtos {
             TrackingMode trackingMode,
             @Min(MIN_GOAL_SECONDS) @Max(MAX_GOAL_SECONDS) Long goalSeconds,
             @Min(1) @Max(30) Integer timesPerPeriod,
+            /** QUIT habits only: the BUILD habit done instead. null clears it. */
+            Long replacementHabitId,
             List<Long> prerequisiteIds) {}
 
     /** The user's habit ids in the exact order they want to see them. */
@@ -53,6 +55,7 @@ public class HabitDtos {
             int consecutiveMisses,
             LocalDate startDate,
             int sortOrder,
+            Long replacementHabitId,
             List<Long> prerequisiteIds) {}
 
     public static HabitResponse toResponse(Habit habit) {
@@ -76,6 +79,7 @@ public class HabitDtos {
                 habit.getConsecutiveMisses(),
                 habit.getStartDate(),
                 habit.getSortOrder(),
+                habit.getReplacement() == null ? null : habit.getReplacement().getId(),
                 habit.getPrerequisites().stream().map(Habit::getId).sorted().toList());
     }
 

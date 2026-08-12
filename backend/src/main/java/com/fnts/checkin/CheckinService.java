@@ -4,10 +4,12 @@ import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -92,7 +94,8 @@ public class CheckinService {
                     habit.getStatus(), habit.getSchedule(), habit.getHabitType(),
                     habit.getGauge(), habit.getCurrentStreak(), habit.getRequiredStreak(),
                     habit.getBasePoints(), multiplier, daysLeft,
-                    habit.getTimesPerPeriod(), state.doneThisPeriod(), todayStatus));
+                    habit.getTimesPerPeriod(), state.doneThisPeriod(),
+                    replacementId(habit), replacementName(habit), todayStatus));
         }
 
         boolean allChecked = !entries.isEmpty() && !anyBlockingPending;
@@ -113,7 +116,8 @@ public class CheckinService {
                     habit.getStatus(), habit.getHabitType(), habit.getClockStartedAt(),
                     goal, habit.getBestCleanSeconds(),
                     Milestones.next(Milestones.ladder(goal), elapsed),
-                    habit.getGauge(), habit.getRequiredStreak(), habit.getBasePoints()));
+                    habit.getGauge(), habit.getRequiredStreak(), habit.getBasePoints(),
+                    replacementId(habit), replacementName(habit)));
         }
         return timers;
     }
@@ -137,6 +141,7 @@ public class CheckinService {
 
         int earned = 0;
         List<String> becameValid = new ArrayList<>();
+        Set<Long> answeredNow = new HashSet<>();
         int doneCount = 0;
 
         for (Entry entry : request.entries()) {
@@ -206,6 +211,7 @@ public class CheckinService {
             logRepository.save(log);
 
             earned += result.points();
+            answeredNow.add(habit.getId());
             if (entry.done()) {
                 doneCount++;
             }
@@ -217,6 +223,15 @@ public class CheckinService {
         if (noDoneYet && doneCount > 0) {
             earned += GameRules.CHECKIN_BONUS;
         }
+
+        // The swap: a bad habit avoided AND the good habit standing in for it
+        // done, on the same day. Paid once, when the second of the two lands.
+        List<String> swaps = new ArrayList<>();
+        for (Swaps.Pair pair : Swaps.completed(
+                habits, answeredNow, h -> isDoneToday(h, today))) {
+            earned += GameRules.SWAP_BONUS;
+            swaps.add(pair.quit().getName() + " → " + pair.replacement().getName());
+        }
         // Points can be lost on misses, but the total never goes negative.
         user.setTotalPoints(Math.max(0, user.getTotalPoints() + earned));
 
@@ -225,7 +240,7 @@ public class CheckinService {
 
         return new CheckinResult(earned, user.getTotalPoints(),
                 Levels.levelFor(user.getTotalPoints()), freezesLeft, deepFreezesLeft,
-                becameValid, unlocked);
+                becameValid, unlocked, swaps);
     }
 
     @Transactional
@@ -335,6 +350,21 @@ public class CheckinService {
         // A MISSED log inside the running period can only come from a freeze.
         boolean frozen = logRepository.countMissedInPeriod(habit.getId(), period, next) > 0;
         return new PeriodState(todayLog, done, done >= habit.getTimesPerPeriod(), frozen);
+    }
+
+    /** Ticked off today — the one thing a swap needs to know about a habit. */
+    private boolean isDoneToday(Habit habit, LocalDate today) {
+        return logRepository.findByHabitIdAndLogDate(habit.getId(), today)
+                .filter(log -> log.getStatus() == HabitLog.Status.DONE)
+                .isPresent();
+    }
+
+    private static Long replacementId(Habit habit) {
+        return habit.getReplacement() == null ? null : habit.getReplacement().getId();
+    }
+
+    private static String replacementName(Habit habit) {
+        return habit.getReplacement() == null ? null : habit.getReplacement().getName();
     }
 
     private String todayStatus(Habit habit, PeriodState state) {

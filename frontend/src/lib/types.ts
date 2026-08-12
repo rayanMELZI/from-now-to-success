@@ -39,6 +39,8 @@ export interface Habit {
   consecutiveMisses: number;
   startDate: string;
   sortOrder: number;
+  /** QUIT habits only: the BUILD habit done in its place. */
+  replacementHabitId: number | null;
   prerequisiteIds: number[];
 }
 
@@ -52,6 +54,8 @@ export interface HabitRequest {
   trackingMode?: TrackingMode;
   goalSeconds?: number;
   timesPerPeriod?: number;
+  /** null clears the pairing. */
+  replacementHabitId?: number | null;
   prerequisiteIds?: number[];
 }
 
@@ -70,6 +74,9 @@ export interface TodayEntry {
   daysLeftInPeriod: number;
   timesPerPeriod: number;
   doneThisPeriod: number;
+  /** QUIT habits: the habit to do instead, if one is paired. */
+  replacementHabitId: number | null;
+  replacementName: string | null;
   todayStatus: "DONE" | "MISSED" | "PENDING" | "DONE_TODAY" | "FROZEN";
 }
 
@@ -87,6 +94,9 @@ export interface TimerEntry {
   gauge: number;
   requiredStreak: number;
   basePoints: number;
+  /** The habit to reach for instead, if one is paired. */
+  replacementHabitId: number | null;
+  replacementName: string | null;
 }
 
 export interface TodayResponse {
@@ -127,6 +137,8 @@ export interface CheckinResult {
   deepFreezesLeft: number;
   becameValid: string[];
   unlocked: string[];
+  /** Pairs completed today, as "bad habit → replacement". */
+  swaps: string[];
 }
 
 export interface HistoryDay {

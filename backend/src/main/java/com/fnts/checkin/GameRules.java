@@ -27,11 +27,17 @@ import com.fnts.habit.TrackingMode;
  * full gauge still means VALID and still unlocks dependents. There is no
  * idle income — points come from climbing rungs and from beating your own
  * record. A relapse empties the gauge in one go.
+ *
+ * A QUIT habit may also name a BUILD habit as its REPLACEMENT: avoiding the
+ * one and doing the other on the same day pays SWAP_BONUS on top of both.
+ * See {@link Swaps}.
  */
 public final class GameRules {
 
     public static final int CHECKIN_BONUS = 5;
     public static final int VALIDATION_BONUS = 50;
+    /** Avoiding a bad habit AND doing its replacement on the same day. */
+    public static final int SWAP_BONUS = 10;
     public static final int MISSES_TO_RESET_STREAK = 2;
     /** A VALID habit is demoted when gauge < ceil(requiredStreak * ratio). */
     public static final float DEMOTION_RATIO = 0.6f;

@@ -267,27 +267,45 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
     return list;
   }, [habits, layout, selectedId]);
 
-  const edges = useMemo<Edge[]>(
-    () =>
-      habits.flatMap((habit) =>
-        habit.prerequisiteIds.map((prereqId) => {
-          const prereq = habits.find((h) => h.id === prereqId);
-          const flowing = prereq?.status === "VALID";
-          return {
-            id: `${prereqId}-${habit.id}`,
-            source: String(prereqId),
-            target: String(habit.id),
-            animated: flowing,
-            style: {
-              stroke: flowing ? "#d97706" : "#a8a29e",
-              strokeWidth: 1.5,
-              strokeDasharray: flowing ? undefined : "6 6",
-            },
-          };
-        }),
-      ),
-    [habits],
-  );
+  const edges = useMemo<Edge[]>(() => {
+    const links: Edge[] = habits.flatMap((habit) =>
+      habit.prerequisiteIds.map((prereqId) => {
+        const prereq = habits.find((h) => h.id === prereqId);
+        const flowing = prereq?.status === "VALID";
+        return {
+          id: `${prereqId}-${habit.id}`,
+          source: String(prereqId),
+          target: String(habit.id),
+          animated: flowing,
+          style: {
+            stroke: flowing ? "#d97706" : "#a8a29e",
+            strokeWidth: 1.5,
+            strokeDasharray: flowing ? undefined : "6 6",
+          },
+        };
+      }),
+    );
+
+    // "Do this instead" pairings are a different relationship from unlocking,
+    // so they get their own green dotted line and never touch the layout.
+    habits.forEach((habit) => {
+      const replacementId = habit.replacementHabitId;
+      if (replacementId == null || !habits.some((h) => h.id === replacementId)) {
+        return;
+      }
+      links.push({
+        id: `instead-${habit.id}-${replacementId}`,
+        source: String(habit.id),
+        target: String(replacementId),
+        label: "instead",
+        labelShowBg: false,
+        labelStyle: { fontSize: 10, fill: "#059669" },
+        style: { stroke: "#059669", strokeWidth: 1.5, strokeDasharray: "2 5" },
+      });
+    });
+
+    return links;
+  }, [habits]);
 
   return (
     // React Flow needs a concrete height, not just min/flex sizing.

@@ -38,6 +38,9 @@ public class CheckinDtos {
             int daysLeftInPeriod,
             int timesPerPeriod,
             int doneThisPeriod,
+            /** QUIT habits: the habit to do instead, if one is paired. */
+            Long replacementHabitId,
+            String replacementName,
             String todayStatus /* DONE | MISSED | PENDING | DONE_TODAY */) {}
 
     /**
@@ -58,7 +61,10 @@ public class CheckinDtos {
             long nextMilestoneSeconds,
             int gauge,
             int requiredStreak,
-            int basePoints) {}
+            int basePoints,
+            /** The habit to reach for instead, if one is paired. */
+            Long replacementHabitId,
+            String replacementName) {}
 
     public record TodayResponse(
             LocalDate date,
@@ -77,7 +83,9 @@ public class CheckinDtos {
             int freezesLeft,
             int deepFreezesLeft,
             List<String> becameValid,
-            List<String> unlocked) {}
+            List<String> unlocked,
+            /** Pairs completed today, as "bad habit → replacement". */
+            List<String> swaps) {}
 
     public record HistoryDay(LocalDate date, int done, int missed, int points) {}
 
