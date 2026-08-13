@@ -7,6 +7,7 @@ import { RequireAuth, useAuth } from "@/lib/auth";
 import {
   formatGap,
   formatMinute,
+  minuteOfUserDay,
   parseMinute,
   type CheckinResult,
   type Habit,
@@ -117,6 +118,11 @@ function PlanPage() {
   const blocks = useMemo(() => day?.blocks ?? [], [day]);
   const isToday = day != null && day.date === day.today;
   const doneCount = blocks.filter((b) => b.done).length;
+
+  // The timeline runs in the user's own day, not the clock's: with a day that
+  // ends at 04:00, a 01:00 block belongs at the bottom, not the top.
+  const position = (minute: number) => minuteOfUserDay(minute, user?.dayEndHour ?? 0);
+  const nowPosition = position(nowMinute);
 
   /** Today's check-in row for a linked habit — only meaningful on today's plan. */
   function entryFor(habitId: number | null): TodayEntry | null {
@@ -307,15 +313,14 @@ function PlanPage() {
         <ol className="mb-6">
           {blocks.map((block, index) => {
             const next = blocks[index + 1];
-            const gap = next ? next.startMinute - block.startMinute : null;
+            const at = position(block.startMinute);
+            const gap = next ? position(next.startMinute) - at : null;
             const current =
-              isToday &&
-              block.startMinute <= nowMinute &&
-              (next ? next.startMinute > nowMinute : true);
+              isToday && at <= nowPosition && (next ? position(next.startMinute) > nowPosition : true);
             const showNowLine =
               isToday &&
-              block.startMinute > nowMinute &&
-              (index === 0 || blocks[index - 1].startMinute <= nowMinute);
+              at > nowPosition &&
+              (index === 0 || position(blocks[index - 1].startMinute) <= nowPosition);
 
             return (
               <li key={block.id}>

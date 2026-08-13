@@ -29,6 +29,16 @@ public final class Periods {
                 .toLocalDate();
     }
 
+    /**
+     * Where a wall-clock minute falls inside the user's own day, counted from
+     * the hour their day begins (= the hour the previous one ends). With
+     * dayEndHour = 4, 01:00 is not the start of the day but its very last
+     * stretch, so it sorts after 23:00 rather than before 05:00.
+     */
+    public static int minuteOfUserDay(int minuteOfClock, int dayEndHour) {
+        return Math.floorMod(minuteOfClock - dayEndHour * 60, 24 * 60);
+    }
+
     public static LocalDate periodStart(HabitSchedule schedule, LocalDate day, DayOfWeek weekStart) {
         return switch (schedule) {
             case DAILY -> day;

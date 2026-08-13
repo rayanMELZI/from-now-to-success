@@ -213,6 +213,17 @@ export function formatMinute(minute: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
 
+/**
+ * Where a wall-clock minute falls inside the user's own day, counted from the
+ * hour their day begins (= the hour the previous one ends). With dayEndHour 4,
+ * 01:00 is the tail of the day, not its start — so it sorts after 23:00.
+ */
+export function minuteOfUserDay(minute: number, dayEndHour: number): number {
+  return (
+    (((minute - dayEndHour * 60) % MINUTES_IN_DAY) + MINUTES_IN_DAY) % MINUTES_IN_DAY
+  );
+}
+
 /** "12:10" → 730. Returns null for anything that is not a clock face. */
 export function parseMinute(value: string): number | null {
   const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
