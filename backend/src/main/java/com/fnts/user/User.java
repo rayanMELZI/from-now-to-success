@@ -51,6 +51,10 @@ public class User {
     @Column(name = "week_start_day", nullable = false)
     private int weekStartDay = 1;
 
+    /** Opt-in: the daily plan page stays hidden until the user asks for it. */
+    @Column(name = "planner_enabled", nullable = false)
+    private boolean plannerEnabled = false;
+
     @Column(name = "last_reminder_date")
     private LocalDate lastReminderDate;
 

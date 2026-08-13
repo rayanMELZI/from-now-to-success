@@ -7,6 +7,7 @@ import { useTheme } from "@/lib/theme";
 import { FeedbackButton } from "./FeedbackButton";
 import {
   BarChart3,
+  ClipboardList,
   ListChecks,
   Map,
   Moon,
@@ -15,12 +16,15 @@ import {
   Sun,
 } from "lucide-react";
 
-const links = [
+const baseLinks = [
   { href: "/", label: "Roadmap", Icon: Map },
   { href: "/checkin", label: "Check-in", Icon: ListChecks },
   { href: "/stats", label: "Stats", Icon: BarChart3 },
   { href: "/settings", label: "Settings", Icon: Settings },
 ];
+
+/** The daily plan is opt-in: no tab at all until the user turns it on. */
+const planLink = { href: "/plan", label: "Plan", Icon: ClipboardList };
 
 export function Nav() {
   const { user, logout } = useAuth();
@@ -28,6 +32,10 @@ export function Nav() {
   const pathname = usePathname();
 
   if (!user) return null;
+
+  const links = user.plannerEnabled
+    ? [...baseLinks.slice(0, 2), planLink, ...baseLinks.slice(2)]
+    : baseLinks;
 
   return (
     <>
@@ -88,7 +96,11 @@ export function Nav() {
       </header>
 
       {/* mobile bottom tab bar — the app-like navigation */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-stone-200 dark:border-stone-800 bg-white/95 dark:bg-stone-900/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden">
+      <nav
+        className={`fixed inset-x-0 bottom-0 z-40 grid border-t border-stone-200 dark:border-stone-800 bg-white/95 dark:bg-stone-900/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden ${
+          links.length === 5 ? "grid-cols-5" : "grid-cols-4"
+        }`}
+      >
         {links.map((link) => {
           const active = pathname === link.href;
           return (

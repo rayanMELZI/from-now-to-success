@@ -14,6 +14,8 @@ export interface UserInfo {
   reminderHour: number;
   dayEndHour: number;
   weekStartDay: number;
+  /** Opt-in: reveals the daily plan page and its nav tab. */
+  plannerEnabled: boolean;
 }
 
 export interface Habit {
@@ -136,6 +138,35 @@ export interface HistoryDay {
   points: number;
 }
 
+/** One line of the daily plan: a start time and what happens then. */
+export interface PlanBlock {
+  id: number;
+  date: string;
+  /** Minutes since midnight, 0..1439. */
+  startMinute: number;
+  title: string;
+  /** The habit this block stands for, if it was picked from the roadmap. */
+  habitId: number | null;
+  /** The linked habit's current name — it may have been renamed since. */
+  habitName: string | null;
+  done: boolean;
+}
+
+export interface PlanDay {
+  date: string;
+  /** The user's logical today, so the client can label the day it shows. */
+  today: string;
+  /** The most recent earlier day that has a plan, or null. */
+  lastPlannedDate: string | null;
+  blocks: PlanBlock[];
+}
+
+export interface PlanBlockRequest {
+  title: string;
+  startMinute: number;
+  habitId?: number | null;
+}
+
 /** Wording flips for QUIT habits: success = avoiding it. */
 export function habitVerbs(type: HabitType) {
   return type === "QUIT"
@@ -172,6 +203,33 @@ export function formatDuration(seconds: number): string {
   if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
   if (minutes > 0) return `${minutes}m`;
   return `${s}s`;
+}
+
+const MINUTES_IN_DAY = 24 * 60;
+
+/** Minutes since midnight as a clock face: 730 → "12:10". */
+export function formatMinute(minute: number): string {
+  const m = ((Math.round(minute) % MINUTES_IN_DAY) + MINUTES_IN_DAY) % MINUTES_IN_DAY;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+
+/** "12:10" → 730. Returns null for anything that is not a clock face. */
+export function parseMinute(value: string): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+/** How long a block lasts, worded for the timeline: "10 min", "1h 30". */
+export function formatGap(minutes: number): string {
+  if (minutes <= 0) return "";
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours === 0) return `${rest} min`;
+  return rest === 0 ? `${hours}h` : `${hours}h ${String(rest).padStart(2, "0")}`;
 }
 
 /** The ticking clock face: days alongside a padded hh:mm:ss. */

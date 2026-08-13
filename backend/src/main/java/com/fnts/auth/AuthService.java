@@ -115,7 +115,7 @@ public class AuthService {
         return new UserInfo(user.getId(), user.getUsername(), user.getEmail(),
                 user.getTotalPoints(), Levels.levelFor(user.getTotalPoints()),
                 user.getTimezone(), user.getReminderHour(),
-                user.getDayEndHour(), user.getWeekStartDay());
+                user.getDayEndHour(), user.getWeekStartDay(), user.isPlannerEnabled());
     }
 
     /** Refresh tokens are stored hashed so a DB leak doesn't leak usable tokens. */
