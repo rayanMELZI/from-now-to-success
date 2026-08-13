@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
 import { useOnboarding } from "@/lib/onboarding";
-import { BookOpen, MapPin, Monitor, Moon, Sun } from "lucide-react";
+import { BookOpen, ClipboardList, MapPin, Monitor, Moon, Sun } from "lucide-react";
 import {
   pushSupported,
   sendTestNotification,
@@ -27,6 +27,10 @@ function SettingsPage() {
 
   const [pushOn, setPushOn] = useState<boolean | null>(null);
   const [pushBusy, setPushBusy] = useState(false);
+
+  // The daily plan is opt-in, so the switch reads straight from the account.
+  const plannerOn = user?.plannerEnabled ?? false;
+  const [plannerBusy, setPlannerBusy] = useState(false);
 
   useEffect(() => {
     // Also re-saves the browser subscription to the backend (self-healing).
@@ -52,6 +56,22 @@ function SettingsPage() {
       setSaved(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
+    }
+  }
+
+  async function togglePlanner() {
+    setPlannerBusy(true);
+    setError(null);
+    try {
+      await api("/api/users/me/settings", {
+        method: "PATCH",
+        body: { plannerEnabled: !plannerOn },
+      });
+      await refreshUser();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save that");
+    } finally {
+      setPlannerBusy(false);
     }
   }
 
@@ -179,6 +199,53 @@ function SettingsPage() {
           className="rounded-md bg-stone-800 dark:bg-stone-600 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700 dark:hover:bg-stone-500"
         >
           Save
+        </button>
+      </section>
+
+      <section className="mt-4 space-y-3 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-5 shadow-sm">
+        <h2 className="font-medium">Extras</h2>
+        <button
+          onClick={togglePlanner}
+          disabled={plannerBusy}
+          className={`flex w-full items-center gap-3 rounded-xl border-2 p-3 text-left transition-all disabled:opacity-50 ${
+            plannerOn
+              ? "border-amber-400 bg-amber-50 shadow-sm dark:bg-amber-400/10"
+              : "border-stone-200 hover:border-stone-300 dark:border-stone-700 dark:hover:border-stone-600"
+          }`}
+        >
+          <span
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all ${
+              plannerOn
+                ? "scale-110 bg-amber-500 text-white"
+                : "bg-amber-100 text-amber-600 dark:bg-amber-900/50"
+            }`}
+          >
+            <ClipboardList size={18} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span
+              className={`block text-sm font-semibold ${
+                plannerOn ? "text-amber-800 dark:text-amber-300" : ""
+              }`}
+            >
+              Daily plan
+            </span>
+            <span className="block text-xs text-stone-500 dark:text-stone-400">
+              A timeline of your day — add a &ldquo;Plan&rdquo; tab and pull habits
+              straight into it.
+            </span>
+          </span>
+          <span
+            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+              plannerOn ? "bg-amber-500" : "bg-stone-300 dark:bg-stone-600"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                plannerOn ? "left-5.5" : "left-0.5"
+              }`}
+            />
+          </span>
         </button>
       </section>
 
