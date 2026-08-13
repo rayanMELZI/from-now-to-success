@@ -13,7 +13,7 @@ const SHELL_CACHE = `fnts-shell-${VERSION}`;
 const DATA_CACHE = `fnts-data-${VERSION}`;
 
 /** Warmed at install so every tab opens offline, even one never visited. */
-const ROUTES = ["/", "/checkin", "/stats", "/settings", "/login"];
+const ROUTES = ["/", "/checkin", "/plan", "/stats", "/settings", "/login"];
 
 /**
  * Stamped onto any response that came from the cache because the network was
