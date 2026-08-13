@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import * as apiClient from "./api";
+import { recallUser, rememberUser } from "./offline";
 import type { UserInfo } from "./types";
 
 interface AuthState {
@@ -32,13 +33,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     apiClient
       .tryRefresh()
-      .then(setUser)
+      .then((restored) => {
+        setUser(restored);
+        rememberUser(restored);
+      })
+      .catch(() => {
+        // No network: fall back to the last account this device showed, so the
+        // app opens on cached data instead of bouncing everyone to /login.
+        setUser(recallUser());
+      })
       .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback(
     async (email: string, password: string) => {
-      setUser(await apiClient.login(email, password));
+      const loggedIn = await apiClient.login(email, password);
+      setUser(loggedIn);
+      rememberUser(loggedIn);
       router.push("/");
     },
     [router],
@@ -46,7 +57,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(
     async (username: string, email: string, password: string) => {
-      setUser(await apiClient.register(username, email, password));
+      const registered = await apiClient.register(username, email, password);
+      setUser(registered);
+      rememberUser(registered);
       router.push("/");
     },
     [router],
@@ -54,12 +67,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await apiClient.logout();
+    rememberUser(null);
     setUser(null);
     router.push("/login");
   }, [router]);
 
   const refreshUser = useCallback(async () => {
-    setUser(await apiClient.api<UserInfo>("/api/users/me"));
+    const fresh = await apiClient.api<UserInfo>("/api/users/me");
+    setUser(fresh);
+    rememberUser(fresh);
   }, []);
 
   return (

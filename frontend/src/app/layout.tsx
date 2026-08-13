@@ -5,6 +5,7 @@ import { AuthProvider } from "@/lib/auth";
 import { ThemeProvider } from "@/lib/theme";
 import { OnboardingProvider } from "@/lib/onboarding";
 import { Nav } from "@/components/Nav";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import { RegisterSW } from "@/components/RegisterSW";
 
 const geistSans = Geist({
@@ -50,7 +51,10 @@ export default function RootLayout({
           <AuthProvider>
             <OnboardingProvider>
               <RegisterSW />
-              <Nav />
+              <div className="sticky top-0 z-40">
+                <OfflineBanner />
+                <Nav />
+              </div>
               {/* bottom padding clears the mobile tab bar */}
               <main className="flex flex-1 flex-col pb-16 sm:pb-0">{children}</main>
             </OnboardingProvider>
