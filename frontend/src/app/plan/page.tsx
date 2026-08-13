@@ -70,6 +70,22 @@ function dayLabel(iso: string, today: string): string {
   });
 }
 
+/** Everything that starts at the same minute, drawn as one attached stack. */
+interface Slot {
+  startMinute: number;
+  items: PlanBlock[];
+}
+
+function toSlots(blocks: PlanBlock[]): Slot[] {
+  const slots: Slot[] = [];
+  for (const block of blocks) {
+    const last = slots[slots.length - 1];
+    if (last && last.startMinute === block.startMinute) last.items.push(block);
+    else slots.push({ startMinute: block.startMinute, items: [block] });
+  }
+  return slots;
+}
+
 /* ---------- the page ---------- */
 
 function PlanPage() {
@@ -116,6 +132,7 @@ function PlanPage() {
   }, [load, user?.plannerEnabled]);
 
   const blocks = useMemo(() => day?.blocks ?? [], [day]);
+  const slots = useMemo(() => toSlots(blocks), [blocks]);
   const isToday = day != null && day.date === day.today;
   const doneCount = blocks.filter((b) => b.done).length;
 
@@ -311,43 +328,78 @@ function PlanPage() {
         />
       ) : (
         <ol className="mb-6">
-          {blocks.map((block, index) => {
-            const next = blocks[index + 1];
-            const at = position(block.startMinute);
+          {slots.map((slot, index) => {
+            const next = slots[index + 1];
+            const at = position(slot.startMinute);
             const gap = next ? position(next.startMinute) - at : null;
             const current =
-              isToday && at <= nowPosition && (next ? position(next.startMinute) > nowPosition : true);
+              isToday &&
+              at <= nowPosition &&
+              (next ? position(next.startMinute) > nowPosition : true);
             const showNowLine =
               isToday &&
               at > nowPosition &&
-              (index === 0 || position(blocks[index - 1].startMinute) <= nowPosition);
+              (index === 0 || position(slots[index - 1].startMinute) <= nowPosition);
 
             return (
-              <li key={block.id}>
+              <li key={slot.startMinute}>
                 {showNowLine && <NowLine minute={nowMinute} />}
-                <BlockRow
-                  block={block}
-                  gap={gap}
-                  current={current}
-                  last={index === blocks.length - 1}
-                  habits={habits}
-                  entry={entryFor(block.habitId)}
-                  editing={editingId === block.id}
-                  busy={busy}
-                  onToggleDone={() => toggleDone(block)}
-                  onEdit={() => setEditingId(block.id)}
-                  onCancelEdit={() => setEditingId(null)}
-                  onSave={(title, startMinute, habitId) =>
-                    saveBlock(block.id, title, startMinute, habitId)
-                  }
-                  onDelete={() => removeBlock(block.id)}
-                  onCheckIn={checkInHabit}
-                />
+                <div className="flex gap-3">
+                  {/* one time label for everything that starts at this minute */}
+                  <div className="w-12 shrink-0 pt-1.5 text-right">
+                    <div
+                      className={`text-sm font-semibold tabular-nums ${
+                        current ? "text-amber-600 dark:text-amber-400" : ""
+                      }`}
+                    >
+                      {formatMinute(slot.startMinute)}
+                    </div>
+                    {gap !== null && gap > 0 && (
+                      <div className="text-[11px] text-stone-400">{formatGap(gap)}</div>
+                    )}
+                    {slot.items.length > 1 && (
+                      <div className="text-[11px] text-stone-300 dark:text-stone-600">
+                        ×{slot.items.length}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    {slot.items.map((block, itemIndex) => (
+                      <BlockRow
+                        key={block.id}
+                        block={block}
+                        current={current}
+                        last={
+                          index === slots.length - 1 &&
+                          itemIndex === slot.items.length - 1
+                        }
+                        // Blocks sharing a start time are drawn as one stack:
+                        // square the touching corners and let their borders
+                        // overlap into a single divider.
+                        attachedAbove={itemIndex > 0}
+                        attachedBelow={itemIndex < slot.items.length - 1}
+                        habits={habits}
+                        entry={entryFor(block.habitId)}
+                        editing={editingId === block.id}
+                        busy={busy}
+                        onToggleDone={() => toggleDone(block)}
+                        onEdit={() => setEditingId(block.id)}
+                        onCancelEdit={() => setEditingId(null)}
+                        onSave={(title, startMinute, habitId) =>
+                          saveBlock(block.id, title, startMinute, habitId)
+                        }
+                        onDelete={() => removeBlock(block.id)}
+                        onCheckIn={checkInHabit}
+                      />
+                    ))}
+                  </div>
+                </div>
               </li>
             );
           })}
           {/* the day is over: the marker belongs after the last block */}
-          {isToday && blocks[blocks.length - 1].startMinute <= nowMinute && (
+          {isToday && position(slots[slots.length - 1].startMinute) <= nowPosition && (
             <li>
               <NowLine minute={nowMinute} />
             </li>
@@ -469,9 +521,10 @@ function HabitChip({ name, quit }: { name: string; quit: boolean }) {
 
 function BlockRow({
   block,
-  gap,
   current,
   last,
+  attachedAbove,
+  attachedBelow,
   habits,
   entry,
   editing,
@@ -484,9 +537,10 @@ function BlockRow({
   onCheckIn,
 }: {
   block: PlanBlock;
-  gap: number | null;
   current: boolean;
   last: boolean;
+  attachedAbove: boolean;
+  attachedBelow: boolean;
   habits: Habit[];
   entry: TodayEntry | null;
   editing: boolean;
@@ -507,7 +561,6 @@ function BlockRow({
   if (editing) {
     return (
       <div className="flex gap-3 pb-3">
-        <span className="w-12 shrink-0" />
         <span className="w-4 shrink-0" />
         <BlockFields
           habits={habits}
@@ -523,20 +576,6 @@ function BlockRow({
 
   return (
     <div className="flex gap-3">
-      {/* time gutter */}
-      <div className="w-12 shrink-0 pt-1.5 text-right">
-        <div
-          className={`text-sm font-semibold tabular-nums ${
-            current ? "text-amber-600 dark:text-amber-400" : ""
-          }`}
-        >
-          {formatMinute(block.startMinute)}
-        </div>
-        {gap !== null && gap > 0 && (
-          <div className="text-[11px] text-stone-400">{formatGap(gap)}</div>
-        )}
-      </div>
-
       {/* rail: the dot doubles as the done switch */}
       <div className="flex w-4 shrink-0 flex-col items-center pt-1.5">
         <button
@@ -558,7 +597,12 @@ function BlockRow({
 
       {/* the block itself */}
       <div
-        className={`group mb-2 min-w-0 flex-1 rounded-xl border px-3 py-2 transition-colors ${
+        className={`group min-w-0 flex-1 border px-3 py-2 transition-colors ${
+          attachedBelow ? "rounded-b-none" : "mb-2 rounded-b-xl"
+        } ${
+          // -mt-px folds the two borders into one hairline divider
+          attachedAbove ? "-mt-px rounded-t-none" : "rounded-t-xl"
+        } ${
           current
             ? "border-amber-300 bg-amber-50/60 dark:border-amber-500/40 dark:bg-amber-400/10"
             : "border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-900"
