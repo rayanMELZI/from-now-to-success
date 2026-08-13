@@ -17,7 +17,8 @@ public class AuthDtos {
 
     public record UserInfo(Long id, String username, String email,
                            int totalPoints, int level, String timezone, int reminderHour,
-                           int dayEndHour, int weekStartDay, boolean plannerEnabled) {}
+                           int dayEndHour, int weekStartDay, boolean plannerEnabled,
+                           boolean planRepeatDaily) {}
 
     public record AuthResponse(String accessToken, UserInfo user) {}
 

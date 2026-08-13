@@ -16,6 +16,8 @@ export interface UserInfo {
   weekStartDay: number;
   /** Opt-in: reveals the daily plan page and its nav tab. */
   plannerEnabled: boolean;
+  /** Each new day opens with a copy of the last plan — the routine. */
+  planRepeatDaily: boolean;
 }
 
 export interface Habit {

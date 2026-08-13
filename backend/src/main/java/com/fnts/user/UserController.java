@@ -24,7 +24,8 @@ public class UserController {
                                   @Min(0) @Max(23) Integer reminderHour,
                                   @Min(0) @Max(23) Integer dayEndHour,
                                   @Min(1) @Max(7) Integer weekStartDay,
-                                  Boolean plannerEnabled) {}
+                                  Boolean plannerEnabled,
+                                  Boolean planRepeatDaily) {}
 
     private final UserRepository userRepository;
 
@@ -60,6 +61,9 @@ public class UserController {
         }
         if (request.plannerEnabled() != null) {
             user.setPlannerEnabled(request.plannerEnabled());
+        }
+        if (request.planRepeatDaily() != null) {
+            user.setPlanRepeatDaily(request.planRepeatDaily());
         }
         return AuthService.toUserInfo(userRepository.save(user));
     }

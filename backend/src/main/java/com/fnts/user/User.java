@@ -55,6 +55,14 @@ public class User {
     @Column(name = "planner_enabled", nullable = false)
     private boolean plannerEnabled = false;
 
+    /** Each new day opens with a copy of the last plan — the routine. */
+    @Column(name = "plan_repeat_daily", nullable = false)
+    private boolean planRepeatDaily = false;
+
+    /** The last day seeded from the routine; a day cleared on purpose stays clear. */
+    @Column(name = "plan_seeded_date")
+    private LocalDate planSeededDate;
+
     @Column(name = "last_reminder_date")
     private LocalDate lastReminderDate;
 

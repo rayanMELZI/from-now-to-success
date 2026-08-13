@@ -26,6 +26,7 @@ import {
   Copy,
   Pencil,
   Plus,
+  Repeat,
   Sparkles,
   Trash2,
   X,
@@ -134,6 +135,7 @@ function PlanPage() {
   const blocks = useMemo(() => day?.blocks ?? [], [day]);
   const slots = useMemo(() => toSlots(blocks), [blocks]);
   const isToday = day != null && day.date === day.today;
+  const repeatOn = user?.planRepeatDaily ?? false;
   const doneCount = blocks.filter((b) => b.done).length;
 
   // The timeline runs in the user's own day, not the clock's: with a day that
@@ -220,6 +222,22 @@ function PlanPage() {
     });
   }
 
+  /**
+   * Turning the routine on seeds today straight away when it is still empty —
+   * the server does that on the next read, so a reload is the whole trick.
+   */
+  async function toggleRepeat() {
+    if (!day) return;
+    await run(async () => {
+      await api("/api/users/me/settings", {
+        method: "PATCH",
+        body: { planRepeatDaily: !repeatOn },
+      });
+      await refreshUser();
+      await load(day.date);
+    });
+  }
+
   async function copyFrom(from: string) {
     if (!day) return;
     await run(async () => {
@@ -271,13 +289,32 @@ function PlanPage() {
         <div>
           <h1 className="text-lg font-semibold">Daily plan</h1>
           <p className="text-sm text-stone-500 dark:text-stone-400">
-            {dayLabel(day.date, day.today)} ·{" "}
+            {/* "Today · jeudi 13 août", but never "sam. 15 août · samedi 15 août" */}
+            {Math.abs(daysBetween(day.today, day.date)) <= 1 &&
+              `${dayLabel(day.date, day.today)} · `}
             {parseIso(day.date).toLocaleDateString(undefined, {
               weekday: "long",
               day: "numeric",
               month: "long",
             })}
           </p>
+          <button
+            onClick={toggleRepeat}
+            disabled={busy}
+            title={
+              repeatOn
+                ? "Every new day starts as a copy of your last plan"
+                : "Start every new day with a copy of your last plan"
+            }
+            className={`mt-1.5 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-all disabled:opacity-50 ${
+              repeatOn
+                ? "border-amber-400 bg-amber-100 text-amber-900 dark:bg-amber-400/15 dark:text-amber-200"
+                : "border-stone-300 text-stone-500 hover:border-stone-400 dark:border-stone-700 dark:text-stone-400"
+            }`}
+          >
+            <Repeat size={12} />
+            {repeatOn ? "Repeating daily" : "Repeat daily"}
+          </button>
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -339,6 +376,7 @@ function PlanPage() {
         <EmptyDay
           lastPlannedDate={day.lastPlannedDate}
           today={day.today}
+          ahead={repeatOn && daysBetween(day.today, day.date) > 0}
           busy={busy}
           onCopy={copyFrom}
         />
@@ -469,11 +507,14 @@ function PlannerOff() {
 function EmptyDay({
   lastPlannedDate,
   today,
+  ahead,
   busy,
   onCopy,
 }: {
   lastPlannedDate: string | null;
   today: string;
+  /** Repeat is on and this day has not arrived yet. */
+  ahead: boolean;
   busy: boolean;
   onCopy: (from: string) => void;
 }) {
@@ -482,8 +523,9 @@ function EmptyDay({
       <CalendarDays size={28} className="mx-auto text-stone-300 dark:text-stone-600" />
       <p className="mt-2 font-medium">Nothing planned yet</p>
       <p className="mx-auto mt-1 max-w-sm text-sm text-stone-500 dark:text-stone-400">
-        Add the first line below — a time and what happens then. Each block runs until
-        the next one starts.
+        {ahead
+          ? "Your routine lands here on its own when this day arrives — or lay it out now and it will be waiting."
+          : "Add the first line below — a time and what happens then. Each block runs until the next one starts."}
       </p>
       <p className="mt-3 font-mono text-xs leading-relaxed text-stone-400">
         (12:00) Planning

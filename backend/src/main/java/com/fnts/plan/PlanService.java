@@ -38,11 +38,34 @@ public class PlanService {
         this.habitService = habitService;
     }
 
-    @Transactional(readOnly = true)
+    // Not readOnly: opening today is what lays the routine down for the day,
+    // the same way reading the roadmap banks what the timers earned.
+    @Transactional
     public PlanDayResponse getDay(Long userId, LocalDate date) {
         User user = load(userId);
-        LocalDate day = date != null ? date : Periods.logicalToday(user);
+        LocalDate today = Periods.logicalToday(user);
+        LocalDate day = date != null ? date : today;
+        if (day.equals(today)) {
+            seedRoutine(user, today);
+        }
         return day(user, day);
+    }
+
+    /**
+     * The routine: with repeat on, a new day opens as a copy of the last day
+     * that had a plan, so a morning does not start by retyping it. Guarded on
+     * every side — only today, never over blocks that are already there, and
+     * only once per day, so a day emptied on purpose stays empty.
+     */
+    private void seedRoutine(User user, LocalDate today) {
+        if (!user.isPlanRepeatDaily() || today.equals(user.getPlanSeededDate())) {
+            return;
+        }
+        if (blockRepository.countByUserIdAndPlanDate(user.getId(), today) == 0) {
+            blockRepository.findLastPlannedDateBefore(user.getId(), today)
+                    .ifPresent(from -> copyBlocks(user, from, today));
+        }
+        user.setPlanSeededDate(today);
     }
 
     @Transactional
@@ -97,13 +120,17 @@ public class PlanService {
             throw ApiException.badRequest("This day already has a plan");
         }
 
-        List<PlanBlock> source =
-                blockRepository.findByUserIdAndPlanDateOrderByStartMinuteAscIdAsc(userId, from);
-        if (source.isEmpty()) {
+        if (blockRepository.countByUserIdAndPlanDate(userId, from) == 0) {
             throw ApiException.badRequest("That day has nothing to copy");
         }
+        copyBlocks(user, from, target);
+        return day(user, target);
+    }
 
-        for (PlanBlock original : source) {
+    /** Lifts one day's blocks onto another, unticked — the target must be empty. */
+    private void copyBlocks(User user, LocalDate from, LocalDate target) {
+        for (PlanBlock original : blockRepository
+                .findByUserIdAndPlanDateOrderByStartMinuteAscIdAsc(user.getId(), from)) {
             PlanBlock copy = new PlanBlock();
             copy.setUser(user);
             copy.setPlanDate(target);
@@ -114,7 +141,6 @@ public class PlanService {
             copy.setDone(false);
             blockRepository.save(copy);
         }
-        return day(user, target);
     }
 
     /**
