@@ -190,13 +190,24 @@ function PlanPage() {
     });
   }
 
+  /**
+   * Ticking a block off is the answer to its habit's daily question, so it
+   * counts right there — a planned habit should never have to be ticked twice.
+   * Only ever on today's plan, and only for a habit still unanswered: the
+   * check-in cannot be taken back, so un-ticking the block leaves it standing.
+   */
   async function toggleDone(block: PlanBlock) {
     if (!day) return;
+    const done = !block.done;
+    const entry = entryFor(block.habitId);
     await run(async () => {
       await api<PlanBlock>(`/api/plan/${block.id}/done`, {
         method: "PUT",
-        body: { done: !block.done },
+        body: { done },
       });
+      if (done && entry?.todayStatus === "PENDING") {
+        await checkIn(entry.habitId, entry.name);
+      }
       await load(day.date);
     });
   }
@@ -220,22 +231,27 @@ function PlanPage() {
     });
   }
 
-  /** The one bridge to the game: check a planned habit off for today. */
-  async function checkInHabit(habitId: number, name: string) {
-    await run(async () => {
-      const result = await api<CheckinResult>("/api/checkins", {
-        method: "POST",
-        body: { entries: [{ habitId, done: true }] },
-      });
-      setNotice(
-        `${name} checked in · ${result.earnedPoints >= 0 ? "+" : ""}${result.earnedPoints} points`,
-      );
-      const [fresh] = await Promise.all([
-        api<TodayResponse>("/api/checkins/today"),
-        refreshUser(),
-      ]);
-      setToday(fresh);
+  /**
+   * The one bridge to the game. Runs inside an existing run() call, so it
+   * reports through the notice banner and lets errors bubble to that handler.
+   */
+  async function checkIn(habitId: number, name: string) {
+    const result = await api<CheckinResult>("/api/checkins", {
+      method: "POST",
+      body: { entries: [{ habitId, done: true }] },
     });
+    setNotice(
+      // A habit answered elsewhere since this page loaded earns nothing here;
+      // saying "+0 points" would read like the check-in failed.
+      result.earnedPoints === 0
+        ? `${name} was already counted for today`
+        : `${name} checked in · ${result.earnedPoints > 0 ? "+" : ""}${result.earnedPoints} points`,
+    );
+    const [fresh] = await Promise.all([
+      api<TodayResponse>("/api/checkins/today"),
+      refreshUser(),
+    ]);
+    setToday(fresh);
   }
 
   if (!user?.plannerEnabled) {
@@ -390,7 +406,6 @@ function PlanPage() {
                           saveBlock(block.id, title, startMinute, habitId)
                         }
                         onDelete={() => removeBlock(block.id)}
-                        onCheckIn={checkInHabit}
                       />
                     ))}
                   </div>
@@ -534,7 +549,6 @@ function BlockRow({
   onCancelEdit,
   onSave,
   onDelete,
-  onCheckIn,
 }: {
   block: PlanBlock;
   current: boolean;
@@ -550,11 +564,8 @@ function BlockRow({
   onCancelEdit: () => void;
   onSave: (title: string, startMinute: number, habitId: number | null) => void;
   onDelete: () => void;
-  onCheckIn: (habitId: number, name: string) => void;
 }) {
-  const habitId = block.habitId;
-  const habit = habits.find((h) => h.id === habitId) ?? null;
-  const pending = entry?.todayStatus === "PENDING";
+  const habit = habits.find((h) => h.id === block.habitId) ?? null;
   const checkedIn =
     entry?.todayStatus === "DONE" || entry?.todayStatus === "DONE_TODAY";
 
@@ -650,17 +661,6 @@ function BlockRow({
           </div>
         </div>
 
-        {/* the habit is planned AND still unanswered — one tap closes the loop */}
-        {block.done && pending && habitId !== null && entry && (
-          <button
-            onClick={() => onCheckIn(habitId, entry.name)}
-            disabled={busy}
-            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-1.5 text-xs font-semibold text-white transition-all hover:bg-emerald-500 active:scale-[0.99] disabled:opacity-50"
-          >
-            <Check size={13} />
-            Also check in &quot;{entry.name}&quot; for today
-          </button>
-        )}
       </div>
     </div>
   );
