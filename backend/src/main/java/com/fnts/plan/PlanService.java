@@ -1,6 +1,7 @@
 package com.fnts.plan;
 
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -116,9 +117,19 @@ public class PlanService {
         return day(user, target);
     }
 
+    /**
+     * A day is listed in the order the user lives it, not in clock order: with
+     * a day that ends at 04:00, a 01:00 block is the last thing on the plan,
+     * not the first. Ties keep insertion order so two blocks at the same time
+     * stay put.
+     */
     private PlanDayResponse day(User user, LocalDate date) {
         List<BlockResponse> blocks = blockRepository
                 .findByUserIdAndPlanDateOrderByStartMinuteAscIdAsc(user.getId(), date).stream()
+                .sorted(Comparator
+                        .comparingInt((PlanBlock block) -> Periods.minuteOfUserDay(
+                                block.getStartMinute(), user.getDayEndHour()))
+                        .thenComparing(PlanBlock::getId))
                 .map(PlanDtos::toResponse)
                 .toList();
         return new PlanDayResponse(

@@ -7,6 +7,7 @@ import { RequireAuth, useAuth } from "@/lib/auth";
 import {
   formatGap,
   formatMinute,
+  minuteOfUserDay,
   parseMinute,
   type CheckinResult,
   type Habit,
@@ -69,6 +70,22 @@ function dayLabel(iso: string, today: string): string {
   });
 }
 
+/** Everything that starts at the same minute, drawn as one attached stack. */
+interface Slot {
+  startMinute: number;
+  items: PlanBlock[];
+}
+
+function toSlots(blocks: PlanBlock[]): Slot[] {
+  const slots: Slot[] = [];
+  for (const block of blocks) {
+    const last = slots[slots.length - 1];
+    if (last && last.startMinute === block.startMinute) last.items.push(block);
+    else slots.push({ startMinute: block.startMinute, items: [block] });
+  }
+  return slots;
+}
+
 /* ---------- the page ---------- */
 
 function PlanPage() {
@@ -115,8 +132,14 @@ function PlanPage() {
   }, [load, user?.plannerEnabled]);
 
   const blocks = useMemo(() => day?.blocks ?? [], [day]);
+  const slots = useMemo(() => toSlots(blocks), [blocks]);
   const isToday = day != null && day.date === day.today;
   const doneCount = blocks.filter((b) => b.done).length;
+
+  // The timeline runs in the user's own day, not the clock's: with a day that
+  // ends at 04:00, a 01:00 block belongs at the bottom, not the top.
+  const position = (minute: number) => minuteOfUserDay(minute, user?.dayEndHour ?? 0);
+  const nowPosition = position(nowMinute);
 
   /** Today's check-in row for a linked habit — only meaningful on today's plan. */
   function entryFor(habitId: number | null): TodayEntry | null {
@@ -167,13 +190,24 @@ function PlanPage() {
     });
   }
 
+  /**
+   * Ticking a block off is the answer to its habit's daily question, so it
+   * counts right there — a planned habit should never have to be ticked twice.
+   * Only ever on today's plan, and only for a habit still unanswered: the
+   * check-in cannot be taken back, so un-ticking the block leaves it standing.
+   */
   async function toggleDone(block: PlanBlock) {
     if (!day) return;
+    const done = !block.done;
+    const entry = entryFor(block.habitId);
     await run(async () => {
       await api<PlanBlock>(`/api/plan/${block.id}/done`, {
         method: "PUT",
-        body: { done: !block.done },
+        body: { done },
       });
+      if (done && entry?.todayStatus === "PENDING") {
+        await checkIn(entry.habitId, entry.name);
+      }
       await load(day.date);
     });
   }
@@ -197,22 +231,27 @@ function PlanPage() {
     });
   }
 
-  /** The one bridge to the game: check a planned habit off for today. */
-  async function checkInHabit(habitId: number, name: string) {
-    await run(async () => {
-      const result = await api<CheckinResult>("/api/checkins", {
-        method: "POST",
-        body: { entries: [{ habitId, done: true }] },
-      });
-      setNotice(
-        `${name} checked in · ${result.earnedPoints >= 0 ? "+" : ""}${result.earnedPoints} points`,
-      );
-      const [fresh] = await Promise.all([
-        api<TodayResponse>("/api/checkins/today"),
-        refreshUser(),
-      ]);
-      setToday(fresh);
+  /**
+   * The one bridge to the game. Runs inside an existing run() call, so it
+   * reports through the notice banner and lets errors bubble to that handler.
+   */
+  async function checkIn(habitId: number, name: string) {
+    const result = await api<CheckinResult>("/api/checkins", {
+      method: "POST",
+      body: { entries: [{ habitId, done: true }] },
     });
+    setNotice(
+      // A habit answered elsewhere since this page loaded earns nothing here;
+      // saying "+0 points" would read like the check-in failed.
+      result.earnedPoints === 0
+        ? `${name} was already counted for today`
+        : `${name} checked in · ${result.earnedPoints > 0 ? "+" : ""}${result.earnedPoints} points`,
+    );
+    const [fresh] = await Promise.all([
+      api<TodayResponse>("/api/checkins/today"),
+      refreshUser(),
+    ]);
+    setToday(fresh);
   }
 
   if (!user?.plannerEnabled) {
@@ -305,44 +344,77 @@ function PlanPage() {
         />
       ) : (
         <ol className="mb-6">
-          {blocks.map((block, index) => {
-            const next = blocks[index + 1];
-            const gap = next ? next.startMinute - block.startMinute : null;
+          {slots.map((slot, index) => {
+            const next = slots[index + 1];
+            const at = position(slot.startMinute);
+            const gap = next ? position(next.startMinute) - at : null;
             const current =
               isToday &&
-              block.startMinute <= nowMinute &&
-              (next ? next.startMinute > nowMinute : true);
+              at <= nowPosition &&
+              (next ? position(next.startMinute) > nowPosition : true);
             const showNowLine =
               isToday &&
-              block.startMinute > nowMinute &&
-              (index === 0 || blocks[index - 1].startMinute <= nowMinute);
+              at > nowPosition &&
+              (index === 0 || position(slots[index - 1].startMinute) <= nowPosition);
 
             return (
-              <li key={block.id}>
+              <li key={slot.startMinute}>
                 {showNowLine && <NowLine minute={nowMinute} />}
-                <BlockRow
-                  block={block}
-                  gap={gap}
-                  current={current}
-                  last={index === blocks.length - 1}
-                  habits={habits}
-                  entry={entryFor(block.habitId)}
-                  editing={editingId === block.id}
-                  busy={busy}
-                  onToggleDone={() => toggleDone(block)}
-                  onEdit={() => setEditingId(block.id)}
-                  onCancelEdit={() => setEditingId(null)}
-                  onSave={(title, startMinute, habitId) =>
-                    saveBlock(block.id, title, startMinute, habitId)
-                  }
-                  onDelete={() => removeBlock(block.id)}
-                  onCheckIn={checkInHabit}
-                />
+                <div className="flex gap-3">
+                  {/* one time label for everything that starts at this minute */}
+                  <div className="w-12 shrink-0 pt-1.5 text-right">
+                    <div
+                      className={`text-sm font-semibold tabular-nums ${
+                        current ? "text-amber-600 dark:text-amber-400" : ""
+                      }`}
+                    >
+                      {formatMinute(slot.startMinute)}
+                    </div>
+                    {gap !== null && gap > 0 && (
+                      <div className="text-[11px] text-stone-400">{formatGap(gap)}</div>
+                    )}
+                    {slot.items.length > 1 && (
+                      <div className="text-[11px] text-stone-300 dark:text-stone-600">
+                        ×{slot.items.length}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    {slot.items.map((block, itemIndex) => (
+                      <BlockRow
+                        key={block.id}
+                        block={block}
+                        current={current}
+                        last={
+                          index === slots.length - 1 &&
+                          itemIndex === slot.items.length - 1
+                        }
+                        // Blocks sharing a start time are drawn as one stack:
+                        // square the touching corners and let their borders
+                        // overlap into a single divider.
+                        attachedAbove={itemIndex > 0}
+                        attachedBelow={itemIndex < slot.items.length - 1}
+                        habits={habits}
+                        entry={entryFor(block.habitId)}
+                        editing={editingId === block.id}
+                        busy={busy}
+                        onToggleDone={() => toggleDone(block)}
+                        onEdit={() => setEditingId(block.id)}
+                        onCancelEdit={() => setEditingId(null)}
+                        onSave={(title, startMinute, habitId) =>
+                          saveBlock(block.id, title, startMinute, habitId)
+                        }
+                        onDelete={() => removeBlock(block.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
               </li>
             );
           })}
           {/* the day is over: the marker belongs after the last block */}
-          {isToday && blocks[blocks.length - 1].startMinute <= nowMinute && (
+          {isToday && position(slots[slots.length - 1].startMinute) <= nowPosition && (
             <li>
               <NowLine minute={nowMinute} />
             </li>
@@ -464,9 +536,10 @@ function HabitChip({ name, quit }: { name: string; quit: boolean }) {
 
 function BlockRow({
   block,
-  gap,
   current,
   last,
+  attachedAbove,
+  attachedBelow,
   habits,
   entry,
   editing,
@@ -476,12 +549,12 @@ function BlockRow({
   onCancelEdit,
   onSave,
   onDelete,
-  onCheckIn,
 }: {
   block: PlanBlock;
-  gap: number | null;
   current: boolean;
   last: boolean;
+  attachedAbove: boolean;
+  attachedBelow: boolean;
   habits: Habit[];
   entry: TodayEntry | null;
   editing: boolean;
@@ -491,18 +564,14 @@ function BlockRow({
   onCancelEdit: () => void;
   onSave: (title: string, startMinute: number, habitId: number | null) => void;
   onDelete: () => void;
-  onCheckIn: (habitId: number, name: string) => void;
 }) {
-  const habitId = block.habitId;
-  const habit = habits.find((h) => h.id === habitId) ?? null;
-  const pending = entry?.todayStatus === "PENDING";
+  const habit = habits.find((h) => h.id === block.habitId) ?? null;
   const checkedIn =
     entry?.todayStatus === "DONE" || entry?.todayStatus === "DONE_TODAY";
 
   if (editing) {
     return (
       <div className="flex gap-3 pb-3">
-        <span className="w-12 shrink-0" />
         <span className="w-4 shrink-0" />
         <BlockFields
           habits={habits}
@@ -518,20 +587,6 @@ function BlockRow({
 
   return (
     <div className="flex gap-3">
-      {/* time gutter */}
-      <div className="w-12 shrink-0 pt-1.5 text-right">
-        <div
-          className={`text-sm font-semibold tabular-nums ${
-            current ? "text-amber-600 dark:text-amber-400" : ""
-          }`}
-        >
-          {formatMinute(block.startMinute)}
-        </div>
-        {gap !== null && gap > 0 && (
-          <div className="text-[11px] text-stone-400">{formatGap(gap)}</div>
-        )}
-      </div>
-
       {/* rail: the dot doubles as the done switch */}
       <div className="flex w-4 shrink-0 flex-col items-center pt-1.5">
         <button
@@ -553,7 +608,12 @@ function BlockRow({
 
       {/* the block itself */}
       <div
-        className={`group mb-2 min-w-0 flex-1 rounded-xl border px-3 py-2 transition-colors ${
+        className={`group min-w-0 flex-1 border px-3 py-2 transition-colors ${
+          attachedBelow ? "rounded-b-none" : "mb-2 rounded-b-xl"
+        } ${
+          // -mt-px folds the two borders into one hairline divider
+          attachedAbove ? "-mt-px rounded-t-none" : "rounded-t-xl"
+        } ${
           current
             ? "border-amber-300 bg-amber-50/60 dark:border-amber-500/40 dark:bg-amber-400/10"
             : "border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-900"
@@ -601,17 +661,6 @@ function BlockRow({
           </div>
         </div>
 
-        {/* the habit is planned AND still unanswered — one tap closes the loop */}
-        {block.done && pending && habitId !== null && entry && (
-          <button
-            onClick={() => onCheckIn(habitId, entry.name)}
-            disabled={busy}
-            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-1.5 text-xs font-semibold text-white transition-all hover:bg-emerald-500 active:scale-[0.99] disabled:opacity-50"
-          >
-            <Check size={13} />
-            Also check in &quot;{entry.name}&quot; for today
-          </button>
-        )}
       </div>
     </div>
   );
