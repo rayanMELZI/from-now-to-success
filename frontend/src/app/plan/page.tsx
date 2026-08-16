@@ -70,9 +70,9 @@ function dayLabel(iso: string, today: string): string {
   });
 }
 
-/** Everything that starts at the same minute, drawn as one attached stack. */
+/** Everything finishing at the same minute, drawn as one attached stack. */
 interface Slot {
-  startMinute: number;
+  endMinute: number;
   items: PlanBlock[];
 }
 
@@ -80,8 +80,8 @@ function toSlots(blocks: PlanBlock[]): Slot[] {
   const slots: Slot[] = [];
   for (const block of blocks) {
     const last = slots[slots.length - 1];
-    if (last && last.startMinute === block.startMinute) last.items.push(block);
-    else slots.push({ startMinute: block.startMinute, items: [block] });
+    if (last && last.endMinute === block.endMinute) last.items.push(block);
+    else slots.push({ endMinute: block.endMinute, items: [block] });
   }
   return slots;
 }
@@ -141,6 +141,12 @@ function PlanPage() {
   const position = (minute: number) => minuteOfUserDay(minute, user?.dayEndHour ?? 0);
   const nowPosition = position(nowMinute);
 
+  // Blocks are back to back, so "now" is always INSIDE one of them rather than
+  // between two: the first block not yet finished is the one being lived.
+  const currentIndex = isToday
+    ? slots.findIndex((slot) => position(slot.endMinute) > nowPosition)
+    : -1;
+
   /** Today's check-in row for a linked habit — only meaningful on today's plan. */
   function entryFor(habitId: number | null): TodayEntry | null {
     if (habitId === null || !isToday) return null;
@@ -162,12 +168,12 @@ function PlanPage() {
 
   const goTo = (date: string) => run(() => load(date));
 
-  async function addBlock(title: string, startMinute: number, habitId: number | null) {
+  async function addBlock(title: string, endMinute: number, habitId: number | null) {
     if (!day) return;
     await run(async () => {
       await api<PlanBlock>(`/api/plan?date=${day.date}`, {
         method: "POST",
-        body: { title, startMinute, habitId },
+        body: { title, endMinute, habitId },
       });
       await load(day.date);
     });
@@ -176,14 +182,14 @@ function PlanPage() {
   async function saveBlock(
     id: number,
     title: string,
-    startMinute: number,
+    endMinute: number,
     habitId: number | null,
   ) {
     if (!day) return;
     await run(async () => {
       await api<PlanBlock>(`/api/plan/${id}`, {
         method: "PUT",
-        body: { title, startMinute, habitId },
+        body: { title, endMinute, habitId },
       });
       await load(day.date);
       setEditingId(null);
@@ -345,33 +351,46 @@ function PlanPage() {
       ) : (
         <ol className="mb-6">
           {slots.map((slot, index) => {
-            const next = slots[index + 1];
-            const at = position(slot.startMinute);
-            const gap = next ? position(next.startMinute) - at : null;
-            const current =
-              isToday &&
-              at <= nowPosition &&
-              (next ? position(next.startMinute) > nowPosition : true);
-            const showNowLine =
-              isToday &&
-              at > nowPosition &&
-              (index === 0 || position(slots[index - 1].startMinute) <= nowPosition);
+            const previous = slots[index - 1];
+            // Each line says when it is FINISHED, so it begins where the one
+            // above it ended — and the first line of the day simply has no
+            // known start.
+            const startsAt = previous ? previous.endMinute : null;
+            const length =
+              previous === undefined
+                ? null
+                : position(slot.endMinute) - position(previous.endMinute);
+            const current = index === currentIndex;
+            const leftOfIt = position(slot.endMinute) - nowPosition;
 
             return (
-              <li key={slot.startMinute}>
-                {showNowLine && <NowLine minute={nowMinute} />}
+              <li key={slot.endMinute}>
                 <div className="flex gap-3">
-                  {/* one time label for everything that starts at this minute */}
+                  {/* when this begins: the end of the line above it */}
                   <div className="w-12 shrink-0 pt-1.5 text-right">
                     <div
                       className={`text-sm font-semibold tabular-nums ${
                         current ? "text-amber-600 dark:text-amber-400" : ""
                       }`}
                     >
-                      {formatMinute(slot.startMinute)}
+                      {startsAt === null ? (
+                        <span
+                          className="text-stone-300 dark:text-stone-600"
+                          title="The first thing on the plan — nothing says when it began"
+                        >
+                          —
+                        </span>
+                      ) : (
+                        formatMinute(startsAt)
+                      )}
                     </div>
-                    {gap !== null && gap > 0 && (
-                      <div className="text-[11px] text-stone-400">{formatGap(gap)}</div>
+                    {length !== null && length > 0 && (
+                      <div className="text-[11px] text-stone-400">{formatGap(length)}</div>
+                    )}
+                    {current && leftOfIt > 0 && (
+                      <div className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                        {formatGap(leftOfIt)} left
+                      </div>
                     )}
                     {slot.items.length > 1 && (
                       <div className="text-[11px] text-stone-300 dark:text-stone-600">
@@ -390,9 +409,9 @@ function PlanPage() {
                           index === slots.length - 1 &&
                           itemIndex === slot.items.length - 1
                         }
-                        // Blocks sharing a start time are drawn as one stack:
-                        // square the touching corners and let their borders
-                        // overlap into a single divider.
+                        // Blocks finishing at the same time are drawn as one
+                        // stack: square the touching corners and let their
+                        // borders overlap into a single divider.
                         attachedAbove={itemIndex > 0}
                         attachedBelow={itemIndex < slot.items.length - 1}
                         habits={habits}
@@ -402,8 +421,8 @@ function PlanPage() {
                         onToggleDone={() => toggleDone(block)}
                         onEdit={() => setEditingId(block.id)}
                         onCancelEdit={() => setEditingId(null)}
-                        onSave={(title, startMinute, habitId) =>
-                          saveBlock(block.id, title, startMinute, habitId)
+                        onSave={(title, endMinute, habitId) =>
+                          saveBlock(block.id, title, endMinute, habitId)
                         }
                         onDelete={() => removeBlock(block.id)}
                       />
@@ -413,9 +432,20 @@ function PlanPage() {
               </li>
             );
           })}
-          {/* the day is over: the marker belongs after the last block */}
-          {isToday && position(slots[slots.length - 1].startMinute) <= nowPosition && (
-            <li>
+          {/* Every row is labelled with the end of the row above it, so the
+              last line's own finish time needs a closing marker of its own. */}
+          <li className="flex gap-3">
+            <div className="w-12 shrink-0 text-right text-sm font-semibold tabular-nums text-stone-400">
+              {formatMinute(slots[slots.length - 1].endMinute)}
+            </div>
+            <div className="flex w-4 shrink-0 justify-center pt-1.5">
+              <span className="h-2 w-2 rounded-full border-2 border-stone-300 dark:border-stone-600" />
+            </div>
+            <div className="text-xs text-stone-400">plan ends</div>
+          </li>
+          {/* Nothing left to be inside of: now sits past the whole plan. */}
+          {isToday && currentIndex === -1 && (
+            <li className="mt-1">
               <NowLine minute={nowMinute} />
             </li>
           )}
@@ -432,7 +462,7 @@ function PlanPage() {
         suggestedMinute={
           blocks.length === 0
             ? Math.min(DAY_MINUTES - 1, Math.ceil(nowMinute / 5) * 5)
-            : Math.min(DAY_MINUTES - 1, blocks[blocks.length - 1].startMinute + 10)
+            : Math.min(DAY_MINUTES - 1, blocks[blocks.length - 1].endMinute + 10)
         }
         plannedHabitIds={blocks.map((b) => b.habitId).filter((id): id is number => id !== null)}
         onAdd={addBlock}
@@ -482,8 +512,8 @@ function EmptyDay({
       <CalendarDays size={28} className="mx-auto text-stone-300 dark:text-stone-600" />
       <p className="mt-2 font-medium">Nothing planned yet</p>
       <p className="mx-auto mt-1 max-w-sm text-sm text-stone-500 dark:text-stone-400">
-        Add the first line below — a time and what happens then. Each block runs until
-        the next one starts.
+        Add the first line below — what you are doing and the time it is done. Each
+        line runs from the end of the one above it.
       </p>
       <p className="mt-3 font-mono text-xs leading-relaxed text-stone-400">
         (12:00) Planning
@@ -562,7 +592,7 @@ function BlockRow({
   onToggleDone: () => void;
   onEdit: () => void;
   onCancelEdit: () => void;
-  onSave: (title: string, startMinute: number, habitId: number | null) => void;
+  onSave: (title: string, endMinute: number, habitId: number | null) => void;
   onDelete: () => void;
 }) {
   const habit = habits.find((h) => h.id === block.habitId) ?? null;
@@ -687,11 +717,11 @@ function BlockFields({
   plannedHabitIds?: number[];
   today?: TodayResponse | null;
   isToday?: boolean;
-  onSubmit: (title: string, startMinute: number, habitId: number | null) => void;
+  onSubmit: (title: string, endMinute: number, habitId: number | null) => void;
   onCancel?: () => void;
 }) {
   const [time, setTime] = useState(
-    formatMinute(initial?.startMinute ?? suggestedMinute ?? 8 * 60),
+    formatMinute(initial?.endMinute ?? suggestedMinute ?? 8 * 60),
   );
   const [title, setTitle] = useState(initial?.title ?? "");
   const [habitId, setHabitId] = useState<number | null>(initial?.habitId ?? null);
@@ -734,25 +764,35 @@ function BlockFields({
   return (
     <div className="min-w-0 flex-1 rounded-xl border border-stone-200 bg-white p-3 shadow-sm dark:border-stone-800 dark:bg-stone-900">
       <div className="flex gap-2">
-        <input
-          type="time"
-          value={time}
-          onChange={(e) => setTime(e.target.value)}
-          aria-label="Start time"
-          className="w-28 shrink-0 rounded-lg border border-stone-300 px-2 py-2 text-sm tabular-nums focus:border-amber-500 focus:outline-none dark:border-stone-700 dark:bg-stone-900"
-        />
-        <input
-          value={title}
-          maxLength={120}
-          onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") submit();
-            if (e.key === "Escape") onCancel?.();
-          }}
-          placeholder="What happens then?"
-          aria-label="What happens then?"
-          className="min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none dark:border-stone-700 dark:bg-stone-900"
-        />
+        <div className="shrink-0">
+          <span className="mb-0.5 block text-[11px] font-medium uppercase tracking-wide text-stone-400">
+            Done at
+          </span>
+          <input
+            type="time"
+            value={time}
+            onChange={(e) => setTime(e.target.value)}
+            aria-label="The time this is finished"
+            className="w-28 rounded-lg border border-stone-300 px-2 py-2 text-sm tabular-nums focus:border-amber-500 focus:outline-none dark:border-stone-700 dark:bg-stone-900"
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <span className="mb-0.5 block text-[11px] font-medium uppercase tracking-wide text-stone-400">
+            What
+          </span>
+          <input
+            value={title}
+            maxLength={120}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit();
+              if (e.key === "Escape") onCancel?.();
+            }}
+            placeholder="Finished doing what?"
+            aria-label="What is finished by then"
+            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none dark:border-stone-700 dark:bg-stone-900"
+          />
+        </div>
       </div>
 
       {pickable.length > 0 && (
@@ -832,7 +872,7 @@ function Composer({
   busy: boolean;
   suggestedMinute: number;
   plannedHabitIds: number[];
-  onAdd: (title: string, startMinute: number, habitId: number | null) => void;
+  onAdd: (title: string, endMinute: number, habitId: number | null) => void;
 }) {
   return (
     <div className="flex gap-3">

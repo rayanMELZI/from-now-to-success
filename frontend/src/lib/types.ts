@@ -143,7 +143,7 @@ export interface PlanBlock {
   id: number;
   date: string;
   /** Minutes since midnight, 0..1439. */
-  startMinute: number;
+  endMinute: number;
   title: string;
   /** The habit this block stands for, if it was picked from the roadmap. */
   habitId: number | null;
@@ -163,7 +163,7 @@ export interface PlanDay {
 
 export interface PlanBlockRequest {
   title: string;
-  startMinute: number;
+  endMinute: number;
   habitId?: number | null;
 }
 
