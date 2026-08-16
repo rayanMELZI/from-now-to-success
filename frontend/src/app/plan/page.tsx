@@ -135,6 +135,14 @@ function PlanPage() {
   const slots = useMemo(() => toSlots(blocks), [blocks]);
   const isToday = day != null && day.date === day.today;
   const doneCount = blocks.filter((b) => b.done).length;
+  // 0% and 100% have to MEAN none and all — rounding must never claim a day
+  // is finished while a line is still open, or empty once one is ticked.
+  const donePercent =
+    doneCount === 0 || blocks.length === 0
+      ? 0
+      : doneCount === blocks.length
+        ? 100
+        : Math.min(99, Math.max(1, Math.round((doneCount / blocks.length) * 100)));
 
   // The timeline runs in the user's own day, not the clock's: with a day that
   // ends at 04:00, a 01:00 block belongs at the bottom, not the top.
@@ -320,6 +328,15 @@ function PlanPage() {
             />
           </div>
           <span className="text-xs tabular-nums text-stone-500 dark:text-stone-400">
+            <span
+              className={
+                donePercent === 100
+                  ? "font-semibold text-emerald-600 dark:text-emerald-400"
+                  : "font-semibold text-stone-600 dark:text-stone-300"
+              }
+            >
+              {donePercent}%
+            </span>{" "}
             {doneCount}/{blocks.length} done
           </span>
         </div>
