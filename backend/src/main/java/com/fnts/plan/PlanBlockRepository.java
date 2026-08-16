@@ -11,7 +11,7 @@ import org.springframework.data.repository.query.Param;
 public interface PlanBlockRepository extends JpaRepository<PlanBlock, Long> {
 
     /** A day's plan, in the order it happens; id breaks ties on equal times. */
-    List<PlanBlock> findByUserIdAndPlanDateOrderByStartMinuteAscIdAsc(Long userId, LocalDate planDate);
+    List<PlanBlock> findByUserIdAndPlanDateOrderByEndMinuteAscIdAsc(Long userId, LocalDate planDate);
 
     Optional<PlanBlock> findByIdAndUserId(Long id, Long userId);
 

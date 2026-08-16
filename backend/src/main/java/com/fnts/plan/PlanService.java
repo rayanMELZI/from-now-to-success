@@ -18,10 +18,10 @@ import com.fnts.user.User;
 import com.fnts.user.UserRepository;
 
 /**
- * The daily plan: a list of "at this time, do this" lines for one date. It
- * holds no game rules — nothing here touches points, gauges or streaks. A
- * block may point at a habit, but ticking the block is the check-in screen's
- * job, not this one's.
+ * The daily plan: a list of "this is finished by then" lines for one date.
+ * Each block runs from the end of the block before it, so the first line of a
+ * day has no known start. It holds no game rules — nothing here touches
+ * points, gauges or streaks.
  */
 @Service
 public class PlanService {
@@ -98,7 +98,7 @@ public class PlanService {
         }
 
         List<PlanBlock> source =
-                blockRepository.findByUserIdAndPlanDateOrderByStartMinuteAscIdAsc(userId, from);
+                blockRepository.findByUserIdAndPlanDateOrderByEndMinuteAscIdAsc(userId, from);
         if (source.isEmpty()) {
             throw ApiException.badRequest("That day has nothing to copy");
         }
@@ -107,7 +107,7 @@ public class PlanService {
             PlanBlock copy = new PlanBlock();
             copy.setUser(user);
             copy.setPlanDate(target);
-            copy.setStartMinute(original.getStartMinute());
+            copy.setEndMinute(original.getEndMinute());
             copy.setTitle(original.getTitle());
             copy.setHabit(original.getHabit());
             // A copied plan is a plan for the day ahead: nothing is done yet.
@@ -120,15 +120,15 @@ public class PlanService {
     /**
      * A day is listed in the order the user lives it, not in clock order: with
      * a day that ends at 04:00, a 01:00 block is the last thing on the plan,
-     * not the first. Ties keep insertion order so two blocks at the same time
-     * stay put.
+     * not the first. Ties keep insertion order so two blocks finishing at the
+     * same time stay put.
      */
     private PlanDayResponse day(User user, LocalDate date) {
         List<BlockResponse> blocks = blockRepository
-                .findByUserIdAndPlanDateOrderByStartMinuteAscIdAsc(user.getId(), date).stream()
+                .findByUserIdAndPlanDateOrderByEndMinuteAscIdAsc(user.getId(), date).stream()
                 .sorted(Comparator
                         .comparingInt((PlanBlock block) -> Periods.minuteOfUserDay(
-                                block.getStartMinute(), user.getDayEndHour()))
+                                block.getEndMinute(), user.getDayEndHour()))
                         .thenComparing(PlanBlock::getId))
                 .map(PlanDtos::toResponse)
                 .toList();
@@ -141,7 +141,7 @@ public class PlanService {
 
     private void apply(PlanBlock block, BlockRequest request, Long userId) {
         block.setTitle(request.title().trim());
-        block.setStartMinute(request.startMinute());
+        block.setEndMinute(request.endMinute());
         Habit habit = request.habitId() == null
                 ? null
                 : habitService.getOwned(userId, request.habitId());

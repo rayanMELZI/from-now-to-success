@@ -21,8 +21,9 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * One line of the day's plan: a start time and what happens then. A block ends
- * where the next one starts, so a plan is just an ordered list of starts.
+ * One line of the day's plan: a thing and the time it is FINISHED. A block
+ * runs from the end of the one before it, so a plan is an ordered list of
+ * finish times — and the first line's start is simply unknown.
  */
 @Getter
 @Setter
@@ -41,9 +42,9 @@ public class PlanBlock {
     @Column(name = "plan_date", nullable = false)
     private LocalDate planDate;
 
-    /** Minutes since midnight, 0..1439. */
-    @Column(name = "start_minute", nullable = false)
-    private int startMinute;
+    /** When this is done, in minutes since midnight, 0..1439. */
+    @Column(name = "end_minute", nullable = false)
+    private int endMinute;
 
     @Convert(converter = EncryptedStringConverter.class)
     @Column(nullable = false, columnDefinition = "text")

@@ -18,7 +18,8 @@ public class PlanDtos {
 
     public record BlockRequest(
             @NotBlank @Size(max = 120) String title,
-            @NotNull @Min(0) @Max(LAST_MINUTE) Integer startMinute,
+            /** When this is finished; the block runs from the end of the one before. */
+            @NotNull @Min(0) @Max(LAST_MINUTE) Integer endMinute,
             /** The habit this block stands for; null for a plain block. */
             Long habitId) {}
 
@@ -30,7 +31,7 @@ public class PlanDtos {
     public record BlockResponse(
             Long id,
             LocalDate date,
-            int startMinute,
+            int endMinute,
             String title,
             Long habitId,
             /** The linked habit's current name — it may have been renamed since. */
@@ -49,7 +50,7 @@ public class PlanDtos {
         return new BlockResponse(
                 block.getId(),
                 block.getPlanDate(),
-                block.getStartMinute(),
+                block.getEndMinute(),
                 block.getTitle(),
                 block.getHabit() == null ? null : block.getHabit().getId(),
                 block.getHabit() == null ? null : block.getHabit().getName(),
