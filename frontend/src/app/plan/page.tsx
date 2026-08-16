@@ -33,6 +33,14 @@ import {
 
 const DAY_MINUTES = 24 * 60;
 
+/**
+ * Dates are written in the APP's language, never the browser's. Left to the
+ * browser, a French device rendered "Today · dimanche 16 août" — half of it
+ * translated and half of it not. One constant, so a language switcher has a
+ * single place to take over.
+ */
+const DATE_LOCALE = "en-GB";
+
 /* ---------- dates: ISO strings in, ISO strings out (never UTC-shifted) ---------- */
 
 /** "2026-08-13" → a Date at LOCAL midnight (new Date(iso) would be UTC). */
@@ -63,7 +71,7 @@ function dayLabel(iso: string, today: string): string {
   if (delta === 0) return "Today";
   if (delta === -1) return "Yesterday";
   if (delta === 1) return "Tomorrow";
-  return parseIso(iso).toLocaleDateString(undefined, {
+  return parseIso(iso).toLocaleDateString(DATE_LOCALE, {
     weekday: "short",
     day: "numeric",
     month: "short",
@@ -272,7 +280,7 @@ function PlanPage() {
           <h1 className="text-lg font-semibold">Daily plan</h1>
           <p className="text-sm text-stone-500 dark:text-stone-400">
             {dayLabel(day.date, day.today)} ·{" "}
-            {parseIso(day.date).toLocaleDateString(undefined, {
+            {parseIso(day.date).toLocaleDateString(DATE_LOCALE, {
               weekday: "long",
               day: "numeric",
               month: "long",
