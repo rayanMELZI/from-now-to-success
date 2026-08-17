@@ -352,10 +352,9 @@ function PlanPage() {
         <ol className="mb-6">
           {slots.map((slot, index) => {
             const previous = slots[index - 1];
-            // Each line says when it is FINISHED, so it begins where the one
-            // above it ended — and the first line of the day simply has no
-            // known start.
-            const startsAt = previous ? previous.endMinute : null;
+            // The time beside a line is the one that was typed for it: when it
+            // is FINISHED. Its length comes from the line above — and the first
+            // line of the day has none, its start being unknown.
             const length =
               previous === undefined
                 ? null
@@ -366,23 +365,14 @@ function PlanPage() {
             return (
               <li key={slot.endMinute}>
                 <div className="flex gap-3">
-                  {/* when this begins: the end of the line above it */}
+                  {/* the time this is done by — exactly what was typed */}
                   <div className="w-12 shrink-0 pt-1.5 text-right">
                     <div
                       className={`text-sm font-semibold tabular-nums ${
                         current ? "text-amber-600 dark:text-amber-400" : ""
                       }`}
                     >
-                      {startsAt === null ? (
-                        <span
-                          className="text-stone-300 dark:text-stone-600"
-                          title="The first thing on the plan — nothing says when it began"
-                        >
-                          —
-                        </span>
-                      ) : (
-                        formatMinute(startsAt)
-                      )}
+                      {formatMinute(slot.endMinute)}
                     </div>
                     {length !== null && length > 0 && (
                       <div className="text-[11px] text-stone-400">{formatGap(length)}</div>
@@ -432,17 +422,6 @@ function PlanPage() {
               </li>
             );
           })}
-          {/* Every row is labelled with the end of the row above it, so the
-              last line's own finish time needs a closing marker of its own. */}
-          <li className="flex gap-3">
-            <div className="w-12 shrink-0 text-right text-sm font-semibold tabular-nums text-stone-400">
-              {formatMinute(slots[slots.length - 1].endMinute)}
-            </div>
-            <div className="flex w-4 shrink-0 justify-center pt-1.5">
-              <span className="h-2 w-2 rounded-full border-2 border-stone-300 dark:border-stone-600" />
-            </div>
-            <div className="text-xs text-stone-400">plan ends</div>
-          </li>
           {/* Nothing left to be inside of: now sits past the whole plan. */}
           {isToday && currentIndex === -1 && (
             <li className="mt-1">
