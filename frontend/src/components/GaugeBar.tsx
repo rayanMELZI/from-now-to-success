@@ -24,7 +24,7 @@ export function GaugeBar({
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-stone-200">
+      <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-track">
         <div
           className={`h-full rounded-full transition-all duration-700 ease-out ${
             full
@@ -37,7 +37,7 @@ export function GaugeBar({
         />
         {/* demotion floor tick */}
         <div
-          className="absolute top-0 h-full w-px bg-stone-400/70"
+          className="absolute top-0 h-full w-px bg-ink-faint/70"
           style={{ left: `${floorPct}%` }}
         />
         {full && (
@@ -46,7 +46,7 @@ export function GaugeBar({
       </div>
       <span
         className={`shrink-0 text-xs font-medium tabular-nums ${
-          full ? "text-emerald-600 dark:text-emerald-400" : "text-stone-500 dark:text-stone-400"
+          full ? "text-emerald-600 dark:text-emerald-400" : "text-ink-soft"
         }`}
       >
         {gauge}/{max}

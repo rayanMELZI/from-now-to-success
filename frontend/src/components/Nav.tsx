@@ -41,8 +41,8 @@ export function Nav() {
     <>
       {/* stickiness lives on the wrapper in layout.tsx, shared with the
           offline banner so the two never overlap */}
-      <header className="border-b border-stone-300 dark:border-stone-700 bg-white/90 dark:bg-stone-900/90 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-3">
+      <header className="border-b border-line-strong bg-surface/90 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3 sm:px-6">
           <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/icons/icon-192.png" alt="" className="h-7 w-7" />
@@ -60,36 +60,45 @@ export function Nav() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`rounded-md px-3 py-1.5 transition-colors ${
+                aria-current={pathname === link.href ? "page" : undefined}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-medium transition-colors ${
                   pathname === link.href
-                    ? "bg-stone-800 dark:bg-stone-600 text-white"
-                    : "text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+                    ? "bg-accent-soft text-accent-ink"
+                    : "text-ink-soft hover:bg-surface-sunken hover:text-ink"
                 }`}
               >
+                <link.Icon size={14} />
                 {link.label}
               </Link>
             ))}
           </nav>
 
-          <div className="ml-auto flex items-center gap-3 text-sm">
+          {/* Now that "Feedback" is a word and not just an icon, the right
+              cluster has to survive a 360px phone: tighter gaps, and the
+              level rides along with the points only once there is room. */}
+          <div className="ml-auto flex shrink-0 items-center gap-2 text-sm sm:gap-3">
             <FeedbackButton />
             <button
               onClick={() => setTheme(resolved === "dark" ? "light" : "dark")}
               title="Toggle dark mode"
-              className="rounded-full p-2 text-stone-500 dark:text-stone-400 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800"
+              aria-label="Toggle dark mode"
+              className="btn-icon rounded-full"
             >
               {resolved === "dark" ? <Sun size={17} /> : <Moon size={17} />}
             </button>
             <span
-              className="flex items-center gap-1.5 rounded-full bg-amber-100 dark:bg-amber-400/15 px-3 py-1 font-medium text-amber-800 dark:text-amber-300"
-              title={`${user.totalPoints} total points`}
+              className="flex shrink-0 items-center gap-1.5 rounded-full bg-amber-100 dark:bg-amber-400/15 px-2.5 py-1 font-medium text-amber-800 tabular-nums sm:px-3 dark:text-amber-300"
+              title={`${user.totalPoints} total points · level ${user.level}`}
             >
-              <Star size={13} fill="currentColor" /> {user.totalPoints} · Lv {user.level}
+              <Star size={13} fill="currentColor" /> {user.totalPoints}
+              <span className="max-[380px]:hidden">· Lv {user.level}</span>
             </span>
-            <span className="hidden text-stone-500 dark:text-stone-400 md:inline">{user.username}</span>
+            <span className="hidden text-ink-soft md:inline">{user.username}</span>
+            {/* Signing out is rare; on a phone it lives in Settings so the
+                bar keeps room for what you actually came for. */}
             <button
               onClick={logout}
-              className="text-stone-400 transition-colors hover:text-stone-700 dark:text-stone-200"
+              className="hidden text-ink-faint transition-colors hover:text-ink sm:inline"
             >
               Log out
             </button>
@@ -99,7 +108,7 @@ export function Nav() {
 
       {/* mobile bottom tab bar — the app-like navigation */}
       <nav
-        className={`fixed inset-x-0 bottom-0 z-40 grid border-t border-stone-200 dark:border-stone-800 bg-white/95 dark:bg-stone-900/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden ${
+        className={`fixed inset-x-0 bottom-0 z-40 grid border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden ${
           links.length === 5 ? "grid-cols-5" : "grid-cols-4"
         }`}
       >
@@ -110,9 +119,7 @@ export function Nav() {
               key={link.href}
               href={link.href}
               className={`flex flex-col items-center gap-1 py-2 text-[11px] font-medium transition-colors ${
-                active
-                  ? "text-amber-700 dark:text-amber-400"
-                  : "text-stone-400 dark:text-stone-500"
+                active ? "text-accent-ink" : "text-ink-faint"
               }`}
             >
               <link.Icon size={20} strokeWidth={active ? 2.4 : 1.8} />

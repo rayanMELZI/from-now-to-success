@@ -6,15 +6,17 @@ import { RequireAuth, useAuth } from "@/lib/auth";
 import type { Habit, HistoryDay } from "@/lib/types";
 import { GaugeBar } from "@/components/GaugeBar";
 import { Ban, Flame } from "lucide-react";
+import { PageHeader, PageShell } from "@/components/ui/Page";
+import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 
 const POINTS_PER_LEVEL = 500;
 
 function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-4 shadow-sm">
-      <p className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-stone-800 dark:text-stone-100">{value}</p>
-      {hint && <p className="text-xs text-stone-400">{hint}</p>}
+    <div className="card p-4">
+      <p className="field-label">{label}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
+      {hint && <p className="text-xs text-ink-faint">{hint}</p>}
     </div>
   );
 }
@@ -66,10 +68,10 @@ function HistoryChart({ history }: { history: HistoryDay[] }) {
     : 0;
 
   return (
-    <div className="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-4 shadow-sm">
+    <div className="card p-4">
       <div className="mb-2 flex items-center justify-between">
         <h2 className="font-medium">Last 30 days</h2>
-        <div className="flex gap-4 text-xs text-stone-500 dark:text-stone-400">
+        <div className="flex gap-4 text-xs text-ink-soft">
           <span className="flex items-center gap-1">
             <span className="inline-block h-2.5 w-2.5 rounded-sm bg-[#059669]" /> done
           </span>
@@ -170,7 +172,19 @@ function StatsPage() {
 
   if (!history || !habits || !user) {
     return (
-      <div className="flex flex-1 items-center justify-center text-stone-400">Loading…</div>
+      <div
+        className="mx-auto w-full max-w-6xl flex-1 space-y-4 px-4 py-4 sm:px-6"
+        role="status"
+        aria-label="Loading"
+      >
+        <Skeleton className="h-7 w-40" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {Array.from({ length: 4 }, (_, i) => (
+            <Skeleton key={i} className="h-20" />
+          ))}
+        </div>
+        <SkeletonCard />
+      </div>
     );
   }
 
@@ -179,8 +193,8 @@ function StatsPage() {
   const intoLevel = user.totalPoints % POINTS_PER_LEVEL;
 
   return (
-    <div className="mx-auto w-full max-w-3xl flex-1 space-y-4 p-4">
-      <h1 className="text-lg font-semibold">Your progress</h1>
+    <PageShell width="wide" className="space-y-4">
+      <PageHeader title="Your progress" subtitle="Points, streaks and the last 30 days." />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="Total points" value={String(user.totalPoints)} />
@@ -200,38 +214,45 @@ function StatsPage() {
       <HistoryChart history={history} />
 
       {habits.length > 0 && (
-        <div className="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-4 shadow-sm">
+        <div className="card p-4">
           <h2 className="mb-2 font-medium">Streaks</h2>
-          <ul className="divide-y divide-stone-100 dark:divide-stone-800 text-sm">
+          <ul className="divide-y divide-line text-sm">
             {habits
               .filter((h) => h.status !== "LOCKED")
               .map((habit) => (
-                <li key={habit.id} className="flex items-center justify-between gap-4 py-2">
-                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                    {habit.habitType === "QUIT" && <Ban size={13} className="shrink-0 text-red-500" />}
-                    {habit.name}
-                    {habit.status === "VALID" && (
-                      <span className="ml-2 rounded-full bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 text-xs text-emerald-800 dark:text-emerald-300">
-                        valid
+                  <li
+                    key={habit.id}
+                    className="flex flex-col gap-2 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                  >
+                    <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                      {habit.habitType === "QUIT" && <Ban size={13} className="shrink-0 text-red-500" />}
+                      {habit.name}
+                      {habit.status === "VALID" && (
+                        <span className="ml-2 rounded-full bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 text-xs text-emerald-800 dark:text-emerald-300">
+                          valid
+                        </span>
+                      )}
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <GaugeBar
+                        gauge={habit.gauge}
+                        max={habit.requiredStreak}
+                        valid={habit.status === "VALID"}
+                        className="min-w-0 flex-1 sm:w-36 sm:flex-none"
+                      />
+                      <span className="flex shrink-0 items-center gap-1 text-sm text-ink-soft">
+                        <Flame size={13} className="text-orange-500" /> {habit.currentStreak}
+                        <span className="ml-2 text-xs text-ink-faint">
+                          best {habit.bestStreak}
+                        </span>
                       </span>
-                    )}
-                  </span>
-                  <GaugeBar
-                    gauge={habit.gauge}
-                    max={habit.requiredStreak}
-                    valid={habit.status === "VALID"}
-                    className="w-36"
-                  />
-                  <span className="flex shrink-0 items-center gap-1 text-stone-500 dark:text-stone-400">
-                    <Flame size={13} className="text-orange-500" /> {habit.currentStreak}
-                    <span className="ml-2 text-xs text-stone-400">best {habit.bestStreak}</span>
-                  </span>
+                    </div>
                 </li>
               ))}
           </ul>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 

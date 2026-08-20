@@ -24,10 +24,13 @@ const useIsClient = () =>
 export function Modal({
   open,
   onClose,
+  size = "md",
   children,
 }: {
   open: boolean;
   onClose: () => void;
+  /** "lg" gives a form room for two columns on a desktop. */
+  size?: "md" | "lg";
   children: ReactNode;
 }) {
   // Portals need a DOM target, which doesn't exist during SSR.
@@ -59,8 +62,12 @@ export function Modal({
       />
       {/* dvh keeps the sheet inside the visible area when mobile browser
           chrome shows/hides; the safe-area padding clears the home bar. */}
-      <div className="animate-sheet-in relative max-h-[85dvh] w-full overflow-y-auto overscroll-contain rounded-t-2xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[90dvh] sm:max-w-md sm:rounded-2xl sm:pb-5 dark:bg-stone-900">
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-stone-300 dark:bg-stone-600 sm:hidden" />
+      <div
+        className={`animate-sheet-in relative max-h-[85dvh] w-full overflow-y-auto overscroll-contain rounded-t-2xl bg-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[90dvh] sm:rounded-2xl sm:pb-5 ${
+          size === "lg" ? "sm:max-w-2xl" : "sm:max-w-md"
+        }`}
+      >
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line-strong sm:hidden" />
         {children}
       </div>
     </div>,

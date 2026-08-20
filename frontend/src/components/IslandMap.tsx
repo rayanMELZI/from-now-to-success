@@ -149,11 +149,11 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
         selected
           ? "border-amber-500 shadow-lg shadow-amber-200/60"
           : locked
-            ? "border-stone-300 dark:border-stone-700"
+            ? "border-line-strong"
             : valid
               ? "border-emerald-700/60"
               : "border-amber-800/50"
-      } ${locked ? "bg-stone-200 dark:bg-stone-800" : "bg-amber-50 dark:bg-amber-400/10"}`}
+      } ${locked ? "bg-surface-sunken" : "bg-amber-50 dark:bg-amber-400/10"}`}
       style={{ borderRadius: blobRadius(habit.id) }}
     >
       {/* gauge liquid */}
@@ -168,7 +168,7 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
       <div className="relative flex h-full flex-col items-center justify-center gap-1 px-3 text-center">
         <p
           className={`flex max-w-full items-center gap-1 truncate text-sm font-semibold ${
-            locked ? "text-stone-500 dark:text-stone-400" : "text-stone-800 dark:text-stone-100"
+            locked ? "text-ink-soft" : "text-ink"
           }`}
         >
           {locked && <Lock size={12} className="shrink-0" />}
@@ -182,13 +182,13 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
         ) : (
           <p
             className={`flex items-center gap-1 text-xs ${
-              locked ? "text-stone-400" : "text-stone-600 dark:text-stone-300"
+              locked ? "text-stone-400" : "text-ink-soft"
             }`}
           >
             {valid && <Check size={12} className="text-emerald-600 dark:text-emerald-400" />}
             <Zap size={11} className="text-amber-600" />
             {habit.gauge}/{habit.requiredStreak}
-            <span className="text-stone-300 dark:text-stone-600">·</span>
+            <span className="text-ink-faint">·</span>
             <Flame size={11} className="text-orange-500" />
             {habit.currentStreak}
           </p>
@@ -291,7 +291,7 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
 
   return (
     // React Flow needs a concrete height, not just min/flex sizing.
-    <div className="h-[calc(100dvh-220px)] min-h-105 overflow-hidden rounded-xl border border-stone-300 dark:border-stone-700 bg-stone-50 dark:bg-stone-900">
+    <div className="h-[calc(100dvh-220px)] min-h-105 overflow-hidden rounded-xl border border-line-strong bg-surface-sunken">
       <ReactFlow
         nodes={nodes}
         edges={edges}

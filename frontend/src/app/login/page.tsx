@@ -28,14 +28,14 @@ export default function LoginPage() {
     <div className="flex flex-1 items-center justify-center p-4">
       <form
         onSubmit={onSubmit}
-        className="w-full max-w-sm space-y-4 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-8 shadow-sm"
+        className="w-full max-w-sm space-y-4 rounded-xl border border-line bg-surface p-8 shadow-sm"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/icons/icon-192.png" alt="fromNowToSuccess logo" className="mx-auto h-16 w-16" />
         <h1 className="text-center text-xl font-semibold">
           fromNow<span className="text-amber-600">To</span>Success
         </h1>
-        <p className="text-center text-sm text-stone-500 dark:text-stone-400">
+        <p className="text-center text-sm text-ink-soft">
           Welcome back. Your roadmap is waiting.
         </p>
 
@@ -44,35 +44,35 @@ export default function LoginPage() {
         )}
 
         <label className="block text-sm">
-          <span className="text-stone-600 dark:text-stone-300">Email</span>
+          <span className="text-ink-soft">Email</span>
           <input
             type="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded-md border border-stone-300 dark:border-stone-700 px-3 py-2 focus:border-amber-500 focus:outline-none"
+            className="field mt-1 py-2.5 text-base"
           />
         </label>
 
         <label className="block text-sm">
-          <span className="text-stone-600 dark:text-stone-300">Password</span>
+          <span className="text-ink-soft">Password</span>
           <input
             type="password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-md border border-stone-300 dark:border-stone-700 px-3 py-2 focus:border-amber-500 focus:outline-none"
+            className="field mt-1 py-2.5 text-base"
           />
         </label>
 
         <button
           disabled={busy}
-          className="w-full rounded-md bg-stone-800 dark:bg-stone-600 py-2 font-medium text-white transition-colors hover:bg-stone-700 dark:hover:bg-stone-500 disabled:opacity-50"
+          className="btn btn-primary w-full"
         >
           {busy ? "Signing in…" : "Sign in"}
         </button>
 
-        <p className="text-center text-sm text-stone-500 dark:text-stone-400">
+        <p className="text-center text-sm text-ink-soft">
           No account?{" "}
           <Link href="/register" className="text-amber-700 hover:underline">
             Register

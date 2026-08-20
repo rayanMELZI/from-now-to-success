@@ -52,12 +52,16 @@ export function FeedbackButton() {
 
   return (
     <>
+      {/* An icon on its own said nothing to anyone who had not already been
+          told what it was. The word does the explaining; same colours. */}
       <button
         onClick={() => setOpen(true)}
         title="Send feedback or request a feature"
-        className="rounded-full p-2 text-stone-500 dark:text-stone-400 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800"
+        aria-label="Send feedback"
+        className="flex items-center gap-1.5 rounded-full border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink-soft transition-colors hover:bg-surface-sunken hover:text-ink sm:px-3"
       >
-        <MessageSquarePlus size={17} />
+        <MessageSquarePlus size={15} />
+        Feedback
       </button>
 
       <Modal open={open} onClose={close}>
@@ -75,14 +79,14 @@ export function FeedbackButton() {
             <h2 className="text-base font-semibold">
               {sent.delivered ? "Thanks!" : "Saved!"}
             </h2>
-            <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
+            <p className="mt-1 text-sm text-ink-soft">
               {sent.delivered
                 ? "Your feedback reached the developer. Good ideas make it into the app."
                 : "Your feedback is safely stored. It couldn't be forwarded to the developer just yet — it'll be retried automatically."}
             </p>
             <button
               onClick={close}
-              className="mt-4 rounded-lg bg-stone-800 px-5 py-2 text-sm font-medium text-white hover:bg-stone-700 dark:bg-stone-600 dark:hover:bg-stone-500"
+              className="btn btn-primary mt-4"
             >
               Close
             </button>
@@ -93,7 +97,7 @@ export function FeedbackButton() {
               <MessageSquarePlus size={18} className="text-amber-600" />
               Feedback & feature ideas
             </h2>
-            <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
+            <p className="mt-1 text-sm text-ink-soft">
               Bug, rough edge, or a feature you wish existed — it goes straight to the
               developer.
             </p>
@@ -110,7 +114,7 @@ export function FeedbackButton() {
               onChange={(e) => setMessage(e.target.value.slice(0, MAX_LEN))}
               rows={5}
               placeholder="I'd love it if…"
-              className="mt-3 w-full resize-none rounded-lg border border-stone-300 bg-transparent px-3 py-2 text-base focus:border-amber-500 focus:outline-none dark:border-stone-700"
+              className="field mt-3 resize-none text-base"
             />
             <div className="mt-1 text-right text-xs text-stone-400">
               {message.length}/{MAX_LEN}
@@ -126,7 +130,7 @@ export function FeedbackButton() {
               </button>
               <button
                 onClick={close}
-                className="rounded-lg border border-stone-300 px-4 py-3 text-sm hover:bg-stone-100 dark:border-stone-700 dark:hover:bg-stone-800"
+                className="btn btn-ghost"
               >
                 Cancel
               </button>

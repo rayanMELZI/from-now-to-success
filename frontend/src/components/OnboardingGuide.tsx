@@ -156,7 +156,7 @@ export function OnboardingGuide({
           {step.icon}
         </span>
         <h2 className="text-lg font-semibold">{step.title}</h2>
-        <div className="mt-2 text-sm leading-relaxed text-stone-600 dark:text-stone-300">
+        <div className="mt-2 text-sm leading-relaxed text-ink-soft">
           {step.body}
         </div>
 
@@ -167,7 +167,7 @@ export function OnboardingGuide({
               className={`h-1.5 rounded-full transition-all ${
                 i === index
                   ? "w-5 bg-amber-500"
-                  : "w-1.5 bg-stone-200 dark:bg-stone-700"
+                  : "w-1.5 bg-line-strong"
               }`}
             />
           ))}
@@ -185,7 +185,7 @@ export function OnboardingGuide({
           {index > 0 && (
             <button
               onClick={() => setIndex((i) => i - 1)}
-              className="rounded-lg border border-stone-300 dark:border-stone-700 px-4 py-2 text-sm transition-colors hover:bg-stone-100 dark:hover:bg-stone-800"
+              className="rounded-lg border border-line-strong px-4 py-2 text-sm transition-colors hover:bg-surface-sunken"
             >
               Back
             </button>

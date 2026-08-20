@@ -25,7 +25,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#fffbeb",
+  // The browser/PWA chrome takes its colour from here, so it has to follow
+  // the theme or a dark install gets a bright bar above a dark app.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f5f5f4" },
+    { media: "(prefers-color-scheme: dark)", color: "#0c0a09" },
+  ],
 };
 
 export default function RootLayout({
@@ -39,7 +44,7 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-screen flex flex-col bg-stone-100 text-stone-800 transition-colors dark:bg-stone-950 dark:text-stone-200">
+      <body className="min-h-screen flex flex-col bg-page text-ink transition-colors">
         {/* set the theme class before first paint to avoid a flash */}
         <script
           dangerouslySetInnerHTML={{
