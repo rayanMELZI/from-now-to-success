@@ -5,7 +5,9 @@ import { api } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
 import { useOnboarding } from "@/lib/onboarding";
-import { BookOpen, ClipboardList, MapPin, Monitor, Moon, Sun } from "lucide-react";
+import { BookOpen, ClipboardList, LogOut, MapPin, Monitor, Moon, Sun } from "lucide-react";
+import { PageHeader, PageShell } from "@/components/ui/Page";
+import { Segmented } from "@/components/ui/Segmented";
 import {
   pushSupported,
   sendTestNotification,
@@ -15,7 +17,7 @@ import {
 } from "@/lib/push";
 
 function SettingsPage() {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const { show: showGuide } = useOnboarding();
   const [timezone, setTimezone] = useState(user?.timezone ?? "UTC");
@@ -98,8 +100,8 @@ function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-lg flex-1 p-4">
-      <h1 className="mb-4 text-lg font-semibold">Settings</h1>
+    <PageShell width="form">
+      <PageHeader title="Settings" subtitle="How the app fits around your day." />
 
       {error && (
         <p className="mb-4 rounded-md bg-red-50 dark:bg-red-950/50 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>
@@ -110,11 +112,11 @@ function SettingsPage() {
         </p>
       )}
 
-      <section className="space-y-4 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-5 shadow-sm">
+      <section className="card space-y-4 p-5">
         <h2 className="font-medium">Daily reminder</h2>
 
         <label className="block text-sm">
-          <span className="flex items-center justify-between text-stone-600 dark:text-stone-300">
+          <span className="flex items-center justify-between text-ink-soft">
             Your timezone
             <button
               type="button"
@@ -129,7 +131,7 @@ function SettingsPage() {
           <select
             value={timezone}
             onChange={(e) => setTimezone(e.target.value)}
-            className="mt-1 w-full rounded-md border border-stone-300 dark:border-stone-700 px-3 py-2 focus:border-amber-500 focus:outline-none"
+            className="field mt-1"
           >
             {timezones.map((tz) => (
               <option key={tz} value={tz}>
@@ -140,11 +142,11 @@ function SettingsPage() {
         </label>
 
         <label className="block text-sm">
-          <span className="text-stone-600 dark:text-stone-300">Ask me about my day at</span>
+          <span className="text-ink-soft">Ask me about my day at</span>
           <select
             value={reminderHour}
             onChange={(e) => setReminderHour(Number(e.target.value))}
-            className="mt-1 w-full rounded-md border border-stone-300 dark:border-stone-700 px-3 py-2 focus:border-amber-500 focus:outline-none"
+            className="field mt-1"
           >
             {Array.from({ length: 24 }, (_, h) => (
               <option key={h} value={h}>
@@ -155,11 +157,11 @@ function SettingsPage() {
         </label>
 
         <label className="block text-sm">
-          <span className="text-stone-600 dark:text-stone-300">My day ends at</span>
+          <span className="text-ink-soft">My day ends at</span>
           <select
             value={dayEndHour}
             onChange={(e) => setDayEndHour(Number(e.target.value))}
-            className="mt-1 w-full rounded-md border border-stone-300 dark:border-stone-700 px-3 py-2 focus:border-amber-500 focus:outline-none"
+            className="field mt-1"
           >
             {Array.from({ length: 24 }, (_, h) => (
               <option key={h} value={h}>
@@ -175,11 +177,11 @@ function SettingsPage() {
         </label>
 
         <label className="block text-sm">
-          <span className="text-stone-600 dark:text-stone-300">My week starts on</span>
+          <span className="text-ink-soft">My week starts on</span>
           <select
             value={weekStartDay}
             onChange={(e) => setWeekStartDay(Number(e.target.value))}
-            className="mt-1 w-full rounded-md border border-stone-300 dark:border-stone-700 px-3 py-2 focus:border-amber-500 focus:outline-none"
+            className="field mt-1"
           >
             {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map(
               (day, i) => (
@@ -196,13 +198,13 @@ function SettingsPage() {
 
         <button
           onClick={saveSettings}
-          className="rounded-md bg-stone-800 dark:bg-stone-600 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700 dark:hover:bg-stone-500"
+          className="btn btn-primary"
         >
           Save
         </button>
       </section>
 
-      <section className="mt-4 space-y-3 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-5 shadow-sm">
+      <section className="card mt-4 space-y-3 p-5">
         <h2 className="font-medium">Extras</h2>
         <button
           onClick={togglePlanner}
@@ -210,7 +212,7 @@ function SettingsPage() {
           className={`flex w-full items-center gap-3 rounded-xl border-2 p-3 text-left transition-all disabled:opacity-50 ${
             plannerOn
               ? "border-amber-400 bg-amber-50 shadow-sm dark:bg-amber-400/10"
-              : "border-stone-200 hover:border-stone-300 dark:border-stone-700 dark:hover:border-stone-600"
+              : "border-stone-200 hover:border-line-strong dark:hover:border-stone-600"
           }`}
         >
           <span
@@ -230,14 +232,14 @@ function SettingsPage() {
             >
               Daily plan
             </span>
-            <span className="block text-xs text-stone-500 dark:text-stone-400">
+            <span className="block text-xs text-ink-soft">
               A timeline of your day — add a &ldquo;Plan&rdquo; tab and pull habits
               straight into it.
             </span>
           </span>
           <span
             className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-              plannerOn ? "bg-amber-500" : "bg-stone-300 dark:bg-stone-600"
+              plannerOn ? "bg-amber-500" : "bg-line-strong"
             }`}
           >
             <span
@@ -249,31 +251,44 @@ function SettingsPage() {
         </button>
       </section>
 
-      <section className="mt-4 space-y-3 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-5 shadow-sm">
+      <section className="card mt-4 space-y-3 p-5">
         <h2 className="font-medium">Appearance</h2>
-        <div className="flex rounded-lg bg-stone-100 dark:bg-stone-800 p-1">
-          {(["light", "system", "dark"] as const).map((option) => (
-            <button
-              key={option}
-              onClick={() => setTheme(option)}
-              className={`flex-1 rounded-md px-2 py-1.5 text-sm font-medium capitalize transition-all ${
-                theme === option
-                  ? "bg-white dark:bg-stone-600 text-stone-800 dark:text-stone-100 shadow-sm"
-                  : "text-stone-500 dark:text-stone-400"
-              }`}
-            >
-              <span className="flex items-center justify-center gap-1.5">
-                {option === "light" ? <Sun size={14} /> : option === "dark" ? <Moon size={14} /> : <Monitor size={14} />}
-                {option}
-              </span>
-            </button>
-          ))}
-        </div>
+        <Segmented
+          value={theme}
+          onChange={setTheme}
+          ariaLabel="Colour theme"
+          options={[
+            {
+              value: "light",
+              label: (
+                <span className="flex items-center justify-center gap-1.5">
+                  <Sun size={14} /> Light
+                </span>
+              ),
+            },
+            {
+              value: "system",
+              label: (
+                <span className="flex items-center justify-center gap-1.5">
+                  <Monitor size={14} /> System
+                </span>
+              ),
+            },
+            {
+              value: "dark",
+              label: (
+                <span className="flex items-center justify-center gap-1.5">
+                  <Moon size={14} /> Dark
+                </span>
+              ),
+            },
+          ]}
+        />
       </section>
 
-      <section className="mt-4 space-y-3 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-5 shadow-sm">
+      <section className="card mt-4 space-y-3 p-5">
         <h2 className="font-medium">Browser notifications</h2>
-        <p className="text-sm text-stone-500 dark:text-stone-400">
+        <p className="text-sm text-ink-soft">
           Get a push notification on this device at your reminder hour — only on days
           you haven&apos;t checked in yet. It never nags twice.
         </p>
@@ -286,11 +301,7 @@ function SettingsPage() {
             <button
               onClick={togglePush}
               disabled={pushBusy || pushOn === null}
-              className={`rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
-                pushOn
-                  ? "border border-stone-300 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800"
-                  : "bg-amber-600 text-white hover:bg-amber-500"
-              }`}
+              className={`btn ${pushOn ? "btn-ghost" : "btn-primary"}`}
             >
               {pushBusy
                 ? "Working…"
@@ -308,7 +319,7 @@ function SettingsPage() {
                     setError(err instanceof Error ? err.message : "Test failed");
                   }
                 }}
-                className="rounded-md border border-stone-300 dark:border-stone-700 px-4 py-2 text-sm transition-colors hover:bg-stone-100 dark:hover:bg-stone-800"
+                className="btn btn-ghost"
               >
                 Send a test notification
               </button>
@@ -317,13 +328,25 @@ function SettingsPage() {
         )}
       </section>
 
+      <section className="card mt-4 space-y-3 p-5">
+        <h2 className="font-medium">Account</h2>
+        <p className="text-sm text-ink-soft">
+          Signed in as <span className="font-medium text-ink">{user?.username}</span>
+          {user?.email ? ` · ${user.email}` : ""}
+        </p>
+        {/* The nav bar only offers this on a desktop, so it has to be here. */}
+        <button onClick={logout} className="btn btn-ghost">
+          <LogOut size={15} /> Sign out
+        </button>
+      </section>
+
       <button
         onClick={showGuide}
-        className="mx-auto mt-4 flex items-center gap-1.5 text-xs text-stone-400 transition-colors hover:text-stone-600 dark:hover:text-stone-300"
+        className="mx-auto mt-4 flex items-center gap-1.5 text-xs text-ink-faint transition-colors hover:text-ink"
       >
         <BookOpen size={13} /> Replay the app guide
       </button>
-    </div>
+    </PageShell>
   );
 }
 

@@ -30,6 +30,9 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { PageHeader, PageShell } from "@/components/ui/Page";
+import { HabitPicker } from "@/components/ui/HabitPicker";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 const DAY_MINUTES = 24 * 60;
 
@@ -280,67 +283,66 @@ function PlanPage() {
     return <PlannerOff />;
   }
 
-  if (!day) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-stone-400">Loading…</div>
-    );
-  }
+  if (!day) return <PlanSkeleton />;
 
   return (
-    <div className="mx-auto w-full max-w-2xl flex-1 p-4">
-      {/* header: the day you are looking at */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold">Daily plan</h1>
-          <p className="text-sm text-stone-500 dark:text-stone-400">
-            {dayLabel(day.date, day.today)} ·{" "}
-            {parseIso(day.date).toLocaleDateString(DATE_LOCALE, {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-            })}
-          </p>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => goTo(shiftIso(day.date, -1))}
-            aria-label="Previous day"
-            className="rounded-lg border border-stone-300 p-2 text-stone-500 transition-colors hover:bg-stone-100 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          {!isToday && (
-            <button
-              onClick={() => goTo(day.today)}
-              className="rounded-lg border border-stone-300 px-3 py-2 text-sm transition-colors hover:bg-stone-100 dark:border-stone-700 dark:hover:bg-stone-800"
-            >
-              Today
-            </button>
-          )}
-          <button
-            onClick={() => goTo(shiftIso(day.date, 1))}
-            aria-label="Next day"
-            className="rounded-lg border border-stone-300 p-2 text-stone-500 transition-colors hover:bg-stone-100 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-stone-800"
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
-      </div>
+    <PageShell width="wide">
+      <PageHeader
+        title="Daily plan"
+        subtitle={`${dayLabel(day.date, day.today)} · ${parseIso(day.date).toLocaleDateString(
+          DATE_LOCALE,
+          { weekday: "long", day: "numeric", month: "long" },
+        )}`}
+        actions={
+          <>
+            {/* Stepping one day at a time is fine for tomorrow and hopeless
+                for next month — the date field jumps straight there. */}
+            <input
+              type="date"
+              value={day.date}
+              onChange={(e) => e.target.value && goTo(e.target.value)}
+              aria-label="Jump to a day"
+              className="field hidden w-auto py-2 text-xs tabular-nums sm:block"
+            />
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => goTo(shiftIso(day.date, -1))}
+                aria-label="Previous day"
+                className="btn-icon border border-line-strong"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              {!isToday && (
+                <button onClick={() => goTo(day.today)} className="btn btn-ghost h-9 min-h-0 px-3">
+                  Today
+                </button>
+              )}
+              <button
+                onClick={() => goTo(shiftIso(day.date, 1))}
+                aria-label="Next day"
+                className="btn-icon border border-line-strong"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </>
+        }
+      />
 
       {blocks.length > 0 && (
         <div className="mb-4 flex items-center gap-3">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-stone-200 dark:bg-stone-800">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-track">
             <div
               className="h-full rounded-full bg-emerald-500 transition-all duration-500"
               style={{ width: `${(doneCount / blocks.length) * 100}%` }}
             />
           </div>
-          <span className="text-xs tabular-nums text-stone-500 dark:text-stone-400">
+          <span className="text-xs tabular-nums text-ink-soft">
             <span
               className={
                 donePercent === 100
                   ? "font-semibold text-emerald-600 dark:text-emerald-400"
-                  : "font-semibold text-stone-600 dark:text-stone-300"
+                  : "font-semibold text-ink-soft"
               }
             >
               {donePercent}%
@@ -366,111 +368,137 @@ function PlanPage() {
         </p>
       )}
 
-      {blocks.length === 0 ? (
-        <EmptyDay
-          lastPlannedDate={day.lastPlannedDate}
-          today={day.today}
-          busy={busy}
-          onCopy={copyFrom}
-        />
-      ) : (
-        <ol className="mb-6">
-          {slots.map((slot, index) => {
-            const previous = slots[index - 1];
-            // The time beside a line is the one that was typed for it: when it
-            // is FINISHED. Its length comes from the line above — and the first
-            // line of the day has none, its start being unknown.
-            const length =
-              previous === undefined
-                ? null
-                : position(slot.endMinute) - position(previous.endMinute);
-            const current = index === currentIndex;
-            const leftOfIt = position(slot.endMinute) - nowPosition;
+      {/* On a wide screen the composer stops chasing the bottom of the
+          timeline and parks in a column of its own instead. */}
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start lg:gap-6">
+        <div className="min-w-0">
+        {blocks.length === 0 ? (
+          <EmptyDay
+            lastPlannedDate={day.lastPlannedDate}
+            today={day.today}
+            busy={busy}
+            onCopy={copyFrom}
+          />
+        ) : (
+          <ol className="mb-6">
+            {slots.map((slot, index) => {
+              const previous = slots[index - 1];
+              // The time beside a line is the one that was typed for it: when it
+              // is FINISHED. Its length comes from the line above — and the first
+              // line of the day has none, its start being unknown.
+              const length =
+                previous === undefined
+                  ? null
+                  : position(slot.endMinute) - position(previous.endMinute);
+              const current = index === currentIndex;
+              const leftOfIt = position(slot.endMinute) - nowPosition;
 
-            return (
-              <li key={slot.endMinute}>
-                <div className="flex gap-3">
-                  {/* the time this is done by — exactly what was typed */}
-                  <div className="w-12 shrink-0 pt-1.5 text-right">
-                    <div
-                      className={`text-sm font-semibold tabular-nums ${
-                        current ? "text-amber-600 dark:text-amber-400" : ""
-                      }`}
-                    >
-                      {formatMinute(slot.endMinute)}
+              return (
+                <li key={slot.endMinute}>
+                  <div className="flex gap-3">
+                    {/* the time this is done by — exactly what was typed */}
+                    <div className="w-12 shrink-0 pt-1.5 text-right">
+                      <div
+                        className={`text-sm font-semibold tabular-nums ${
+                          current ? "text-amber-600 dark:text-amber-400" : ""
+                        }`}
+                      >
+                        {formatMinute(slot.endMinute)}
+                      </div>
+                      {length !== null && length > 0 && (
+                        <div className="text-[11px] text-ink-faint">{formatGap(length)}</div>
+                      )}
+                      {current && leftOfIt > 0 && (
+                        <div className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                          {formatGap(leftOfIt)} left
+                        </div>
+                      )}
+                      {slot.items.length > 1 && (
+                        <div className="text-[11px] text-ink-faint">
+                          ×{slot.items.length}
+                        </div>
+                      )}
                     </div>
-                    {length !== null && length > 0 && (
-                      <div className="text-[11px] text-stone-400">{formatGap(length)}</div>
-                    )}
-                    {current && leftOfIt > 0 && (
-                      <div className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
-                        {formatGap(leftOfIt)} left
-                      </div>
-                    )}
-                    {slot.items.length > 1 && (
-                      <div className="text-[11px] text-stone-300 dark:text-stone-600">
-                        ×{slot.items.length}
-                      </div>
-                    )}
-                  </div>
 
-                  <div className="min-w-0 flex-1">
-                    {slot.items.map((block, itemIndex) => (
-                      <BlockRow
-                        key={block.id}
-                        block={block}
-                        current={current}
-                        last={
-                          index === slots.length - 1 &&
-                          itemIndex === slot.items.length - 1
-                        }
-                        // Blocks finishing at the same time are drawn as one
-                        // stack: square the touching corners and let their
-                        // borders overlap into a single divider.
-                        attachedAbove={itemIndex > 0}
-                        attachedBelow={itemIndex < slot.items.length - 1}
-                        habits={habits}
-                        entry={entryFor(block.habitId)}
-                        editing={editingId === block.id}
-                        busy={busy}
-                        onToggleDone={() => toggleDone(block)}
-                        onEdit={() => setEditingId(block.id)}
-                        onCancelEdit={() => setEditingId(null)}
-                        onSave={(title, endMinute, habitId) =>
-                          saveBlock(block.id, title, endMinute, habitId)
-                        }
-                        onDelete={() => removeBlock(block.id)}
-                      />
-                    ))}
+                    <div className="min-w-0 flex-1">
+                      {slot.items.map((block, itemIndex) => (
+                        <BlockRow
+                          key={block.id}
+                          block={block}
+                          current={current}
+                          last={
+                            index === slots.length - 1 &&
+                            itemIndex === slot.items.length - 1
+                          }
+                          // Blocks finishing at the same time are drawn as one
+                          // stack: square the touching corners and let their
+                          // borders overlap into a single divider.
+                          attachedAbove={itemIndex > 0}
+                          attachedBelow={itemIndex < slot.items.length - 1}
+                          habits={habits}
+                          entry={entryFor(block.habitId)}
+                          editing={editingId === block.id}
+                          busy={busy}
+                          onToggleDone={() => toggleDone(block)}
+                          onEdit={() => setEditingId(block.id)}
+                          onCancelEdit={() => setEditingId(null)}
+                          onSave={(title, endMinute, habitId) =>
+                            saveBlock(block.id, title, endMinute, habitId)
+                          }
+                          onDelete={() => removeBlock(block.id)}
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
+                </li>
+              );
+            })}
+            {/* Nothing left to be inside of: now sits past the whole plan. */}
+            {isToday && currentIndex === -1 && (
+              <li className="mt-1">
+                <NowLine minute={nowMinute} />
               </li>
-            );
-          })}
-          {/* Nothing left to be inside of: now sits past the whole plan. */}
-          {isToday && currentIndex === -1 && (
-            <li className="mt-1">
-              <NowLine minute={nowMinute} />
-            </li>
-          )}
-        </ol>
-      )}
+            )}
+          </ol>
+        )}
+        </div>
 
-      <Composer
-        // A new day gets a fresh composer: its suggested time is a first value.
-        key={day.date}
-        habits={habits}
-        today={today}
-        isToday={isToday}
-        busy={busy}
-        suggestedMinute={
-          blocks.length === 0
-            ? Math.min(DAY_MINUTES - 1, Math.ceil(nowMinute / 5) * 5)
-            : Math.min(DAY_MINUTES - 1, blocks[blocks.length - 1].endMinute + 10)
-        }
-        plannedHabitIds={blocks.map((b) => b.habitId).filter((id): id is number => id !== null)}
-        onAdd={addBlock}
-      />
+        <Composer
+          // A new day gets a fresh composer: its suggested time is a first value.
+          key={day.date}
+          habits={habits}
+          today={today}
+          isToday={isToday}
+          busy={busy}
+          suggestedMinute={
+            blocks.length === 0
+              ? Math.min(DAY_MINUTES - 1, Math.ceil(nowMinute / 5) * 5)
+              : Math.min(DAY_MINUTES - 1, blocks[blocks.length - 1].endMinute + 10)
+          }
+          plannedHabitIds={blocks
+            .map((b) => b.habitId)
+            .filter((id): id is number => id !== null)}
+          onAdd={addBlock}
+        />
+      </div>
+    </PageShell>
+  );
+}
+
+/** The plan page while its first fetch is in flight. */
+function PlanSkeleton() {
+  return (
+    <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-4 sm:px-6" role="status" aria-label="Loading">
+      <Skeleton className="h-7 w-40" />
+      <Skeleton className="mt-2 h-4 w-56" />
+      <div className="mt-5 space-y-2">
+        {Array.from({ length: 5 }, (_, i) => (
+          <div key={i} className="flex gap-3">
+            <Skeleton className="h-10 w-12 shrink-0" />
+            <Skeleton className="h-10 flex-1" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -481,17 +509,14 @@ function PlanPage() {
 function PlannerOff() {
   return (
     <div className="mx-auto w-full max-w-md flex-1 p-4">
-      <div className="mt-8 rounded-2xl border border-stone-200 bg-white p-6 text-center shadow-sm dark:border-stone-800 dark:bg-stone-900">
+      <div className="card mt-8 p-6 text-center">
         <ClipboardList size={32} className="mx-auto text-amber-600" />
         <h1 className="mt-3 font-semibold">The daily plan is off</h1>
-        <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
+        <p className="mt-1 text-sm text-ink-soft">
           Turn it on to lay your day out hour by hour and pull habits straight into
           the timeline.
         </p>
-        <Link
-          href="/settings"
-          className="mt-4 inline-block rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-500"
-        >
+        <Link href="/settings" className="btn btn-primary mt-4">
           Open settings
         </Link>
       </div>
@@ -512,14 +537,14 @@ function EmptyDay({
   onCopy: (from: string) => void;
 }) {
   return (
-    <div className="mb-6 rounded-2xl border border-dashed border-stone-300 p-6 text-center dark:border-stone-700">
-      <CalendarDays size={28} className="mx-auto text-stone-300 dark:text-stone-600" />
+    <div className="mb-6 rounded-2xl border border-dashed border-line-strong p-6 text-center">
+      <CalendarDays size={28} className="mx-auto text-ink-faint" />
       <p className="mt-2 font-medium">Nothing planned yet</p>
-      <p className="mx-auto mt-1 max-w-sm text-sm text-stone-500 dark:text-stone-400">
+      <p className="mx-auto mt-1 max-w-sm text-sm text-ink-soft">
         Add the first line below — what you are doing and the time it is done. Each
         line runs from the end of the one above it.
       </p>
-      <p className="mt-3 font-mono text-xs leading-relaxed text-stone-400">
+      <p className="mt-3 font-mono text-xs leading-relaxed text-ink-faint">
         (12:00) Planning
         <br />
         (12:10) prayer
@@ -530,7 +555,7 @@ function EmptyDay({
         <button
           onClick={() => onCopy(lastPlannedDate)}
           disabled={busy}
-          className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-stone-300 px-4 py-2 text-sm transition-colors hover:bg-stone-100 disabled:opacity-50 dark:border-stone-700 dark:hover:bg-stone-800"
+          className="btn btn-ghost mt-4"
         >
           <Copy size={14} />
           Copy {dayLabel(lastPlannedDate, today).toLowerCase()}&apos;s plan
@@ -632,12 +657,12 @@ function BlockRow({
               ? "border-emerald-500 bg-emerald-500 text-white"
               : current
                 ? "border-amber-500 ring-4 ring-amber-500/15"
-                : "border-stone-300 hover:border-stone-400 dark:border-stone-600"
+                : "border-line-strong hover:border-ink-faint"
           }`}
         >
           {block.done && <Check size={10} strokeWidth={3.5} />}
         </button>
-        {!last && <span className="mt-1 w-px flex-1 bg-stone-200 dark:bg-stone-800" />}
+        {!last && <span className="mt-1 w-px flex-1 bg-line" />}
       </div>
 
       {/* the block itself */}
@@ -650,14 +675,14 @@ function BlockRow({
         } ${
           current
             ? "border-amber-300 bg-amber-50/60 dark:border-amber-500/40 dark:bg-amber-400/10"
-            : "border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-900"
+            : "border-line bg-surface"
         } ${block.done ? "opacity-60" : ""}`}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <p
               className={`text-sm font-medium ${
-                block.done ? "text-stone-400 line-through dark:text-stone-500" : ""
+                block.done ? "text-ink-faint line-through" : ""
               }`}
             >
               {block.title}
@@ -680,7 +705,7 @@ function BlockRow({
             <button
               onClick={onEdit}
               aria-label={`Edit ${block.title}`}
-              className="rounded-md p-1.5 text-stone-300 transition-colors hover:bg-stone-100 hover:text-stone-600 dark:text-stone-600 dark:hover:bg-stone-800 dark:hover:text-stone-300"
+              className="btn-icon h-8 w-8"
             >
               <Pencil size={14} />
             </button>
@@ -688,7 +713,7 @@ function BlockRow({
               onClick={onDelete}
               disabled={busy}
               aria-label={`Delete ${block.title}`}
-              className="rounded-md p-1.5 text-stone-300 transition-colors hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:text-stone-600 dark:hover:bg-red-950/40"
+              className="btn-icon h-8 w-8 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950/40"
             >
               <Trash2 size={14} />
             </button>
@@ -766,24 +791,20 @@ function BlockFields({
   );
 
   return (
-    <div className="min-w-0 flex-1 rounded-xl border border-stone-200 bg-white p-3 shadow-sm dark:border-stone-800 dark:bg-stone-900">
+    <div className="card min-w-0 flex-1 p-3">
       <div className="flex gap-2">
         <div className="shrink-0">
-          <span className="mb-0.5 block text-[11px] font-medium uppercase tracking-wide text-stone-400">
-            Done at
-          </span>
+          <span className="field-label mb-0.5">Done at</span>
           <input
             type="time"
             value={time}
             onChange={(e) => setTime(e.target.value)}
             aria-label="The time this is finished"
-            className="w-28 rounded-lg border border-stone-300 px-2 py-2 text-sm tabular-nums focus:border-amber-500 focus:outline-none dark:border-stone-700 dark:bg-stone-900"
+            className="field w-28 tabular-nums"
           />
         </div>
         <div className="min-w-0 flex-1">
-          <span className="mb-0.5 block text-[11px] font-medium uppercase tracking-wide text-stone-400">
-            What
-          </span>
+          <span className="field-label mb-0.5">What</span>
           <input
             value={title}
             maxLength={120}
@@ -794,47 +815,30 @@ function BlockFields({
             }}
             placeholder="Finished doing what?"
             aria-label="What is finished by then"
-            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none dark:border-stone-700 dark:bg-stone-900"
+            className="field"
           />
         </div>
       </div>
 
       {pickable.length > 0 && (
-        <div className="mt-2">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-stone-400">
-            Or pick a habit
-          </span>
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            {pickable.map((habit) => {
-              const on = habitId === habit.id;
-              const alreadyPlanned = plannedHabitIds?.includes(habit.id) ?? false;
-              return (
-                <button
-                  key={habit.id}
-                  type="button"
-                  onClick={() => pickHabit(habit)}
-                  title={
-                    alreadyPlanned ? "Already in this day's plan" : `Plan "${habit.name}"`
-                  }
-                  className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-all ${
-                    on
-                      ? "border-amber-500 bg-amber-100 text-amber-900 dark:bg-amber-400/15 dark:text-amber-200"
-                      : "border-stone-300 text-stone-500 hover:border-stone-400 dark:border-stone-700 dark:text-stone-400"
-                  } ${alreadyPlanned && !on ? "opacity-50" : ""}`}
-                >
-                  {habit.habitType === "QUIT" && <Ban size={10} className="text-red-500" />}
-                  {on ? "✓ " : ""}
-                  {habit.name}
-                  {pendingIds.has(habit.id) && !on && (
-                    <span
-                      className="h-1.5 w-1.5 rounded-full bg-emerald-500"
-                      title="Still unanswered today"
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </div>
+        <div className="mt-2.5 space-y-1">
+          <span className="field-label">Or pick a habit</span>
+          <HabitPicker
+            habits={pickable}
+            selectedIds={habitId === null ? [] : [habitId]}
+            onToggle={pickHabit}
+            ariaLabel="Habits you can plan"
+            placeholder="Search a habit to plan…"
+            dimmed={(habit) => plannedHabitIds?.includes(habit.id) ?? false}
+            meta={(habit) =>
+              pendingIds.has(habit.id) && habitId !== habit.id ? (
+                <span
+                  className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
+                  title="Still unanswered today"
+                />
+              ) : null
+            }
+          />
         </div>
       )}
 
@@ -842,7 +846,7 @@ function BlockFields({
         <button
           onClick={submit}
           disabled={busy || !valid}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-amber-600 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-amber-500 active:scale-[0.99] disabled:opacity-50"
+          className="btn btn-primary flex-1"
         >
           {initial ? null : <Plus size={15} />}
           {submitLabel}
@@ -850,7 +854,7 @@ function BlockFields({
         {onCancel && (
           <button
             onClick={onCancel}
-            className="rounded-lg border border-stone-300 px-4 py-2 text-sm transition-colors hover:bg-stone-100 dark:border-stone-700 dark:hover:bg-stone-800"
+            className="btn btn-ghost"
           >
             Cancel
           </button>
@@ -879,10 +883,11 @@ function Composer({
   onAdd: (title: string, endMinute: number, habitId: number | null) => void;
 }) {
   return (
-    <div className="flex gap-3">
-      <span className="w-12 shrink-0" />
-      <div className="flex w-4 shrink-0 justify-center pt-4">
-        <Plus size={14} className="text-stone-300 dark:text-stone-600" />
+    <div className="mt-2 flex gap-3 lg:mt-0 lg:block lg:sticky lg:top-20">
+      {/* the timeline rail, which only exists in the single-column layout */}
+      <span className="w-12 shrink-0 lg:hidden" />
+      <div className="flex w-4 shrink-0 justify-center pt-4 lg:hidden">
+        <Plus size={14} className="text-ink-faint" />
       </div>
       <BlockFields
         habits={habits}

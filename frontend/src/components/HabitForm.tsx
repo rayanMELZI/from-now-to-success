@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useId, useState, type FormEvent } from "react";
 import {
   GOAL_PRESETS,
   formatDuration,
@@ -10,40 +10,15 @@ import {
   type HabitType,
   type TrackingMode,
 } from "@/lib/types";
-import { Ban, CalendarCheck, Sprout, TimerReset } from "lucide-react";
+import { Ban, CalendarCheck, ChevronDown, Sprout, TimerReset } from "lucide-react";
+import { Segmented } from "./ui/Segmented";
+import { HabitPicker } from "./ui/HabitPicker";
 
 const DAY_SECONDS = 86400;
 
-/* ---------- small polished controls ---------- */
-
-function Segmented<T extends string>({
-  value,
-  options,
-  onChange,
-}: {
-  value: T;
-  options: { value: T; label: ReactNode }[];
-  onChange: (value: T) => void;
-}) {
-  return (
-    <div className="flex rounded-lg bg-stone-100 dark:bg-stone-800 p-1">
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => onChange(option.value)}
-          className={`flex-1 rounded-md px-2 py-1.5 text-sm font-medium transition-all ${
-            value === option.value
-              ? "bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100 shadow-sm"
-              : "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:text-stone-200"
-          }`}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
-}
+/** What a habit gets when you say nothing — see the advanced section. */
+const DEFAULT_POINTS = 10;
+const DEFAULT_STREAK = 7;
 
 function Stepper({
   value,
@@ -51,31 +26,38 @@ function Stepper({
   max,
   onChange,
   suffix,
+  label,
 }: {
   value: number;
   min: number;
   max: number;
   onChange: (value: number) => void;
   suffix?: string;
+  label: string;
 }) {
   const clamp = (v: number) => Math.min(max, Math.max(min, v));
   return (
     <div className="flex items-center gap-1">
       <button
         type="button"
+        aria-label={`Decrease ${label}`}
         onClick={() => onChange(clamp(value - 1))}
-        className="h-9 w-9 rounded-lg border border-stone-300 dark:border-stone-700 text-lg leading-none text-stone-600 dark:text-stone-300 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95"
+        className="h-10 w-10 rounded-lg border border-line-strong text-lg leading-none text-ink-soft transition-colors hover:bg-surface-sunken active:scale-95"
       >
         −
       </button>
-      <div className="flex h-9 min-w-16 items-center justify-center rounded-lg bg-stone-100 dark:bg-stone-800 px-2 text-sm font-semibold tabular-nums">
+      <div
+        aria-live="polite"
+        className="flex h-10 min-w-16 items-center justify-center rounded-lg bg-surface-sunken px-2 text-sm font-semibold tabular-nums"
+      >
         {value}
-        {suffix && <span className="ml-1 font-normal text-stone-500 dark:text-stone-400">{suffix}</span>}
+        {suffix && <span className="ml-1 font-normal text-ink-soft">{suffix}</span>}
       </div>
       <button
         type="button"
+        aria-label={`Increase ${label}`}
         onClick={() => onChange(clamp(value + 1))}
-        className="h-9 w-9 rounded-lg border border-stone-300 dark:border-stone-700 text-lg leading-none text-stone-600 dark:text-stone-300 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800 active:scale-95"
+        className="h-10 w-10 rounded-lg border border-line-strong text-lg leading-none text-ink-soft transition-colors hover:bg-surface-sunken active:scale-95"
       >
         +
       </button>
@@ -92,23 +74,37 @@ interface HabitFormProps {
   onCancel: () => void;
 }
 
+/**
+ * Creating a habit asks four questions — what, how it is tracked, build or
+ * quit, and how often. Everything else (points, how long validation takes,
+ * notes, prerequisites) has a sensible default and lives behind "Advanced",
+ * so the common case is a name and two taps.
+ */
 export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormProps) {
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [basePoints, setBasePoints] = useState(initial?.basePoints ?? 10);
-  const [requiredStreak, setRequiredStreak] = useState(initial?.requiredStreak ?? 7);
+  const [basePoints, setBasePoints] = useState(initial?.basePoints ?? DEFAULT_POINTS);
+  const [requiredStreak, setRequiredStreak] = useState(
+    initial?.requiredStreak ?? DEFAULT_STREAK,
+  );
   const [schedule, setSchedule] = useState<HabitSchedule>(initial?.schedule ?? "DAILY");
   const [habitType, setHabitType] = useState<HabitType>(initial?.habitType ?? "BUILD");
   const [timesPerPeriod, setTimesPerPeriod] = useState(initial?.timesPerPeriod ?? 1);
   const [trackingMode, setTrackingMode] = useState<TrackingMode>(
     initial?.trackingMode ?? "SCHEDULED",
   );
-  const [goalSeconds, setGoalSeconds] = useState(
-    initial?.goalSeconds ?? 30 * DAY_SECONDS,
-  );
+  const [goalSeconds, setGoalSeconds] = useState(initial?.goalSeconds ?? 30 * DAY_SECONDS);
   const [prereqIds, setPrereqIds] = useState<number[]>(initial?.prerequisiteIds ?? []);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Editing a timer habit opens the panel, because the tracking switch lives
+  // in there and it is what makes the rest of the form look the way it does.
+  const [advancedOpen, setAdvancedOpen] = useState(
+    initial !== undefined &&
+      (initial.trackingMode === "TIMER" || (initial.description ?? "") !== ""),
+  );
+  const trackingFieldId = useId();
+  const notesFieldId = useId();
 
   const candidates = allHabits.filter((h) => h.id !== initial?.id);
   const periodNoun = schedule === "WEEKLY" ? "week" : "month";
@@ -153,19 +149,23 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <h2 className="font-semibold">{initial ? "Edit habit" : "New habit"}</h2>
+      <h2 className="text-lg font-semibold">{initial ? "Edit habit" : "New habit"}</h2>
 
       {error && (
-        <p className="rounded-md bg-red-50 dark:bg-red-950/50 px-3 py-2 text-sm text-red-700 dark:text-red-300">{error}</p>
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300">
+          {error}
+        </p>
       )}
 
-      <label className="block">
+      <label className="block space-y-1">
+        <span className="field-label">Habit name</span>
         <input
           required
+          autoFocus
           maxLength={100}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full rounded-lg border border-stone-300 dark:border-stone-700 px-3 py-2.5 text-base focus:border-amber-500 focus:ring-2 focus:ring-amber-200 focus:outline-none"
+          className="field py-2.5 text-base"
           placeholder={
             timer
               ? "e.g. smoking"
@@ -176,86 +176,146 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
         />
       </label>
 
-      <div className="space-y-1">
-        <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
-          Tracking
-        </span>
-        <Segmented
-          value={trackingMode}
-          onChange={setTrackingMode}
-          options={[
-            { value: "SCHEDULED", label: <span className="flex items-center justify-center gap-1.5"><CalendarCheck size={14} className="text-amber-600" />Check-in</span> },
-            { value: "TIMER", label: <span className="flex items-center justify-center gap-1.5"><TimerReset size={14} className="text-sky-500" />Timer</span> },
-          ]}
-        />
-        {timer && (
-          <p className="text-xs text-stone-500 dark:text-stone-400">
-            A clock that runs until you slip and reset it. No daily question — you
-            just try to make each run longer than the last.
-          </p>
+      {/* Goal, and the way into the rest of the settings, on one line. */}
+      <div className="flex items-end gap-3">
+        {!timer && (
+          <div className="min-w-0 flex-1 space-y-1">
+            <span className="field-label">Goal</span>
+            <Segmented
+              value={habitType}
+              onChange={setHabitType}
+              ariaLabel="Build this habit or quit it"
+              options={[
+                {
+                  value: "BUILD",
+                  label: (
+                    <span className="flex items-center justify-center gap-1.5">
+                      <Sprout size={14} className="text-emerald-600" />
+                      Build it
+                    </span>
+                  ),
+                },
+                {
+                  value: "QUIT",
+                  label: (
+                    <span className="flex items-center justify-center gap-1.5">
+                      <Ban size={14} className="text-red-500" />
+                      Quit it
+                    </span>
+                  ),
+                },
+              ]}
+            />
+          </div>
         )}
+
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen((open) => !open)}
+          aria-expanded={advancedOpen}
+          aria-controls={`${trackingFieldId} ${notesFieldId}`}
+          className={`btn btn-sm shrink-0 border font-medium ${timer ? "flex-1" : ""} ${
+            advancedOpen
+              ? "border-accent bg-accent-soft text-accent-ink"
+              : "border-line-strong text-ink-soft hover:bg-surface-sunken"
+          }`}
+        >
+          <ChevronDown
+            size={15}
+            className={`transition-transform duration-200 ${advancedOpen ? "" : "-rotate-90"}`}
+          />
+          Advanced
+        </button>
       </div>
 
-      {!timer && (
-        <div className="space-y-1">
-          <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
-            Goal
-          </span>
+      {/* Revealed in place by the Advanced button above, rather than in a
+          panel of its own — the order of the form never changes, fields only
+          appear and disappear between the ones that are always there. */}
+      {advancedOpen && (
+        <div id={trackingFieldId} className="space-y-1">
+          <span className="field-label">Tracking</span>
           <Segmented
-            value={habitType}
-            onChange={setHabitType}
+            value={trackingMode}
+            onChange={setTrackingMode}
+            ariaLabel="How this habit is tracked"
             options={[
-              { value: "BUILD", label: <span className="flex items-center justify-center gap-1.5"><Sprout size={14} className="text-emerald-600" />Build it</span> },
-              { value: "QUIT", label: <span className="flex items-center justify-center gap-1.5"><Ban size={14} className="text-red-500" />Quit it</span> },
+              {
+                value: "SCHEDULED",
+                label: (
+                  <span className="flex items-center justify-center gap-1.5">
+                    <CalendarCheck size={14} className="text-accent" />
+                    Check-in
+                  </span>
+                ),
+              },
+              {
+                value: "TIMER",
+                label: (
+                  <span className="flex items-center justify-center gap-1.5">
+                    <TimerReset size={14} className="text-sky-500" />
+                    Timer
+                  </span>
+                ),
+              },
             ]}
           />
+          <p className="text-xs text-ink-faint">
+            Almost every habit is a check-in. A timer is the rarer kind: one clock
+            that runs until you slip, instead of a daily question.
+          </p>
         </div>
       )}
 
+      {timer && (
+        <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:bg-sky-400/10 dark:text-sky-300">
+          A clock that runs until you slip and reset it. No daily question — you just
+          try to make each run longer than the last.
+        </p>
+      )}
+
       {timer ? (
-        <div className="space-y-1">
-          <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
-            Stay clean for
-          </span>
+        <div className="space-y-1.5">
+          <span className="field-label">Stay clean for</span>
           <div className="flex flex-wrap gap-1.5">
             {GOAL_PRESETS.map((preset) => (
               <button
                 key={preset.seconds}
                 type="button"
                 onClick={() => setGoalSeconds(preset.seconds)}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
+                aria-pressed={goalSeconds === preset.seconds}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
                   goalSeconds === preset.seconds
-                    ? "border-sky-500 bg-sky-100 dark:bg-sky-400/15 text-sky-900 dark:text-sky-200"
-                    : "border-stone-300 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:border-stone-400"
+                    ? "border-sky-500 bg-sky-100 text-sky-900 dark:bg-sky-400/15 dark:text-sky-200"
+                    : "border-line-strong text-ink-soft hover:border-ink-faint"
                 }`}
               >
                 {preset.label}
               </button>
             ))}
           </div>
-          <div className="flex items-center justify-between rounded-lg bg-sky-50 dark:bg-sky-400/10 px-3 py-2">
-            <span className="text-sm text-stone-600 dark:text-stone-300">Days</span>
+          <div className="flex items-center justify-between rounded-lg bg-sky-50 px-3 py-2 dark:bg-sky-400/10">
+            <span className="text-sm text-ink-soft">Days</span>
             <Stepper
+              label="days clean"
               value={goalDays}
               min={1}
               max={1825}
               onChange={(days) => setGoalSeconds(days * DAY_SECONDS)}
             />
           </div>
-          <p className="text-xs text-stone-500 dark:text-stone-400">
+          <p className="text-xs text-ink-faint">
             Reaching {formatDuration(goalSeconds)} clean validates the habit. Shorter
             milestones along the way (a day, a week, a month…) pay points as you pass
             them.
           </p>
         </div>
       ) : (
-        <div className="space-y-1">
-          <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
-            Rhythm
-          </span>
+        <div className="space-y-1.5">
+          <span className="field-label">Rhythm</span>
           <Segmented
             value={schedule}
             onChange={setSchedule}
+            ariaLabel="How often this habit comes round"
             options={[
               { value: "DAILY", label: "Daily" },
               { value: "WEEKLY", label: "Weekly" },
@@ -263,9 +323,10 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
             ]}
           />
           {schedule !== "DAILY" && (
-            <div className="flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-400/10 px-3 py-2">
-              <span className="text-sm text-stone-600 dark:text-stone-300">Times per {periodNoun}</span>
+            <div className="flex items-center justify-between rounded-lg bg-accent-soft px-3 py-2">
+              <span className="text-sm text-ink-soft">Times per {periodNoun}</span>
               <Stepper
+                label={`times per ${periodNoun}`}
                 value={timesPerPeriod}
                 min={1}
                 max={30}
@@ -277,77 +338,73 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3">
+      {/* Points and the length of the run are part of deciding what the
+          habit IS, so they stay in plain sight — only the things you can
+          leave alone entirely go behind the fold. */}
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
         <div className="space-y-1">
-          <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
-            Points
+          <span className="field-label">
+            Points {timer ? "per milestone" : "per check-in"}
           </span>
-          <Stepper value={basePoints} min={1} max={100} onChange={setBasePoints} />
+          <Stepper
+            label="points"
+            value={basePoints}
+            min={1}
+            max={100}
+            onChange={setBasePoints}
+          />
         </div>
         {!timer && (
           <div className="space-y-1">
-            <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
-              {streakNoun} to validate
-            </span>
-            <Stepper value={requiredStreak} min={2} max={90} onChange={setRequiredStreak} />
+            <span className="field-label">{streakNoun} to validate</span>
+            <Stepper
+              label={`${streakNoun} to validate`}
+              value={requiredStreak}
+              min={2}
+              max={90}
+              onChange={setRequiredStreak}
+            />
           </div>
         )}
       </div>
 
-      <label className="block">
-        <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
-          Notes (optional)
-        </span>
-        <textarea
-          maxLength={500}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={2}
-          className="mt-1 w-full rounded-lg border border-stone-300 dark:border-stone-700 px-3 py-2 text-sm focus:border-amber-500 focus:ring-2 focus:ring-amber-200 focus:outline-none"
-          placeholder="Why this habit matters to you…"
-        />
-      </label>
+      {advancedOpen && (
+        <label id={notesFieldId} className="block space-y-1">
+          <span className="field-label">Notes (optional)</span>
+          <textarea
+            maxLength={500}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={2}
+            className="field"
+            placeholder="Why this habit matters to you…"
+          />
+        </label>
+      )}
 
+      {/* The roadmap IS the prerequisites — this is what makes a habit part
+          of a path instead of a lone item on a list, so it stays up front. */}
       {candidates.length > 0 && (
-        <div className="space-y-1">
-          <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
-            Unlocks after (prerequisites)
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            {candidates.map((habit) => {
-              const on = prereqIds.includes(habit.id);
-              return (
-                <button
-                  key={habit.id}
-                  type="button"
-                  onClick={() => togglePrereq(habit.id)}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
-                    on
-                      ? "border-amber-500 bg-amber-100 dark:bg-amber-400/15 text-amber-900 dark:text-amber-200"
-                      : "border-stone-300 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:border-stone-400"
-                  }`}
-                >
-                  {on ? "✓ " : ""}
-                  {habit.name}
-                </button>
-              );
-            })}
-          </div>
+        <div className="space-y-1.5">
+          <span className="field-label">Unlocks after (prerequisites)</span>
+          <p className="text-xs text-ink-faint">
+            This habit stays locked until every habit you pick here is valid.
+          </p>
+          <HabitPicker
+            habits={candidates}
+            selectedIds={prereqIds}
+            onToggle={(habit) => togglePrereq(habit.id)}
+            ariaLabel="Prerequisite habits"
+            placeholder="Search habits to require first…"
+          />
         </div>
       )}
 
       <div className="flex gap-2 pt-1">
-        <button
-          disabled={busy}
-          className="flex-1 rounded-lg bg-amber-600 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-amber-500 active:scale-[0.99] disabled:opacity-50"
-        >
+        <button disabled={busy} className="btn btn-primary flex-1">
           {busy ? "Saving…" : initial ? "Save changes" : "Add to roadmap"}
         </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-lg border border-stone-300 dark:border-stone-700 px-4 py-2.5 text-sm transition-colors hover:bg-stone-100 dark:hover:bg-stone-800"
-        >
+        <button type="button" onClick={onCancel} className="btn btn-ghost">
           Cancel
         </button>
       </div>
