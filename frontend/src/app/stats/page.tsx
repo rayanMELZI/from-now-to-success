@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
-import type { Habit, HistoryDay } from "@/lib/types";
+import { habitRisk, type Habit, type HistoryDay } from "@/lib/types";
 import { GaugeBar } from "@/components/GaugeBar";
 import { Ban, Flame } from "lucide-react";
 import { PageHeader, PageShell } from "@/components/ui/Page";
 import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
+import { RiskBadge } from "@/components/ui/RiskBadge";
 
 const POINTS_PER_LEVEL = 500;
 
@@ -219,7 +220,9 @@ function StatsPage() {
           <ul className="divide-y divide-line text-sm">
             {habits
               .filter((h) => h.status !== "LOCKED")
-              .map((habit) => (
+              .map((habit) => {
+                const risk = habitRisk(habit);
+                return (
                   <li
                     key={habit.id}
                     className="flex flex-col gap-2 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
@@ -232,12 +235,14 @@ function StatsPage() {
                           valid
                         </span>
                       )}
+                      {risk && <RiskBadge risk={risk} className="ml-1.5" />}
                     </span>
                     <div className="flex items-center gap-3">
                       <GaugeBar
                         gauge={habit.gauge}
                         max={habit.requiredStreak}
                         valid={habit.status === "VALID"}
+                        timer={habit.trackingMode === "TIMER"}
                         className="min-w-0 flex-1 sm:w-36 sm:flex-none"
                       />
                       <span className="flex shrink-0 items-center gap-1 text-sm text-ink-soft">
@@ -247,8 +252,9 @@ function StatsPage() {
                         </span>
                       </span>
                     </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
           </ul>
         </div>
       )}

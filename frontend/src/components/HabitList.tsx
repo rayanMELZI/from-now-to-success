@@ -2,9 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { Flame, Lock, Search, Trophy } from "lucide-react";
-import { formatDuration, scheduleLabel, type Habit, type HabitStatus } from "@/lib/types";
+import {
+  formatDuration,
+  habitRisk,
+  scheduleLabel,
+  type Habit,
+  type HabitStatus,
+} from "@/lib/types";
 import { GaugeBar } from "./GaugeBar";
 import { HabitIcon } from "./ui/HabitPicker";
+import { RiskBadge } from "./ui/RiskBadge";
 
 /**
  * The roadmap as a list.
@@ -106,13 +113,20 @@ function HabitCard({
 }) {
   const timer = habit.trackingMode === "TIMER";
   const locked = habit.status === "LOCKED";
+  const risk = habitRisk(habit);
 
   return (
     <button
       type="button"
       onClick={onSelect}
       className={`card w-full p-3.5 text-left transition-all hover:shadow-md ${
-        selected ? "border-accent ring-2 ring-accent/25" : ""
+        selected
+          ? "border-accent ring-2 ring-accent/25"
+          : risk === "critical"
+            ? "border-rose-300 ring-1 ring-rose-200/70 dark:border-rose-900 dark:ring-rose-900/50"
+            : risk === "caution"
+              ? "border-amber-300 dark:border-amber-900/80"
+              : ""
       } ${locked ? "opacity-70" : ""}`}
     >
       <p className="flex items-center gap-1.5 font-medium">
@@ -122,6 +136,7 @@ function HabitCard({
           <HabitIcon habit={habit} />
         )}
         <span className="truncate">{habit.name}</span>
+        {risk && <RiskBadge risk={risk} className="ml-auto" />}
       </p>
 
       <div className="mt-2">
@@ -129,6 +144,7 @@ function HabitCard({
           gauge={habit.gauge}
           max={habit.requiredStreak}
           valid={habit.status === "VALID"}
+          timer={timer}
         />
       </div>
 
