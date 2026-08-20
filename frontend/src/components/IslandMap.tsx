@@ -14,8 +14,17 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Ban, Check, Flame, Footprints, Lock, Sparkles, Zap } from "lucide-react";
-import type { Habit } from "@/lib/types";
+import {
+  AlertTriangle,
+  Ban,
+  Check,
+  Flame,
+  Footprints,
+  Lock,
+  Sparkles,
+  Zap,
+} from "lucide-react";
+import { habitRisk, riskNote, type Habit } from "@/lib/types";
 import { useTheme } from "@/lib/theme";
 
 /* ------------------------------------------------------------------ */
@@ -139,20 +148,28 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
   const { habit, selected } = data;
   const locked = habit.status === "LOCKED";
   const valid = habit.status === "VALID";
+  // A validated island drifting back down: it stops being green and starts
+  // asking for a day of attention.
+  const risk = habitRisk(habit);
   const pct = habit.requiredStreak > 0
     ? Math.min(100, (habit.gauge / habit.requiredStreak) * 100)
     : 0;
 
   return (
     <div
+      title={risk ? `${habit.name} — ${riskNote[risk]}` : undefined}
       className={`relative h-26 w-47.5 overflow-hidden border-2 shadow-sm transition-shadow ${
         selected
           ? "border-amber-500 shadow-lg shadow-amber-200/60"
           : locked
             ? "border-line-strong"
-            : valid
-              ? "border-emerald-700/60"
-              : "border-amber-800/50"
+            : risk === "critical"
+              ? "border-rose-500 shadow-md shadow-rose-200/70 dark:shadow-rose-950"
+              : risk === "caution"
+                ? "border-amber-600"
+                : valid
+                  ? "border-emerald-700/60"
+                  : "border-amber-800/50"
       } ${locked ? "bg-surface-sunken" : "bg-amber-50 dark:bg-amber-400/10"}`}
       style={{ borderRadius: blobRadius(habit.id) }}
     >
@@ -160,7 +177,11 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
       {!locked && pct > 0 && (
         <div
           className={`absolute inset-x-0 bottom-0 transition-all duration-700 ${
-            valid ? "bg-emerald-300/60" : "bg-amber-300/60"
+            risk === "critical"
+              ? "bg-rose-300/70"
+              : valid && !risk
+                ? "bg-emerald-300/60"
+                : "bg-amber-300/60"
           }`}
           style={{ height: `${pct}%` }}
         />
@@ -185,7 +206,18 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
               locked ? "text-stone-400" : "text-ink-soft"
             }`}
           >
-            {valid && <Check size={12} className="text-emerald-600 dark:text-emerald-400" />}
+            {risk ? (
+              <AlertTriangle
+                size={12}
+                className={
+                  risk === "critical"
+                    ? "text-rose-600 dark:text-rose-400"
+                    : "text-amber-600 dark:text-amber-400"
+                }
+              />
+            ) : (
+              valid && <Check size={12} className="text-emerald-600 dark:text-emerald-400" />
+            )}
             <Zap size={11} className="text-amber-600" />
             {habit.gauge}/{habit.requiredStreak}
             <span className="text-ink-faint">·</span>

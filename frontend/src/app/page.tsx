@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { RequireAuth } from "@/lib/auth";
-import { formatDuration, scheduleLabel, type Habit, type HabitRequest } from "@/lib/types";
+import {
+  demotionFloor,
+  formatDuration,
+  habitRisk,
+  scheduleLabel,
+  type Habit,
+  type HabitRequest,
+} from "@/lib/types";
 import { IslandMap } from "@/components/IslandMap";
 import { HabitList } from "@/components/HabitList";
 import { HabitForm } from "@/components/HabitForm";
@@ -12,7 +19,7 @@ import { Modal } from "@/components/Modal";
 import { PageHeader, PageShell } from "@/components/ui/Page";
 import { Segmented } from "@/components/ui/Segmented";
 import { SkeletonPage } from "@/components/ui/Skeleton";
-import { Ban, Flame, List, Lock, Map, Plus, TimerReset, Trophy } from "lucide-react";
+import { AlertTriangle, Ban, Flame, List, Lock, Map, Plus, TimerReset, Trophy } from "lucide-react";
 
 /** Map or list — remembered, because it is a preference, not a mood. */
 type View = "map" | "list";
@@ -50,6 +57,8 @@ function RoadmapPage() {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  const selectedRisk = selected ? habitRisk(selected) : null;
 
   const tickingClock = mode === "view" && selected?.trackingMode === "TIMER";
 
@@ -211,8 +220,26 @@ function RoadmapPage() {
                 gauge={selected.gauge}
                 max={selected.requiredStreak}
                 valid={selected.status === "VALID"}
+                timer={selected.trackingMode === "TIMER"}
               />
             </div>
+
+            {selectedRisk && (
+              <p
+                className={`flex items-start gap-1.5 rounded-lg px-3 py-2 text-xs ${
+                  selectedRisk === "critical"
+                    ? "bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300"
+                    : "bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+                }`}
+              >
+                <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                <span>
+                  Validated, but the gauge has slipped to {selected.gauge}/
+                  {selected.requiredStreak}. Below {demotionFloor(selected.requiredStreak)}{" "}
+                  it drops back to in progress and re-locks whatever it unlocked.
+                </span>
+              </p>
+            )}
 
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               <dt className="text-ink-soft">Status</dt>

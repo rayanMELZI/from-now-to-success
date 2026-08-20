@@ -6,7 +6,10 @@ import { RequireAuth, useAuth } from "@/lib/auth";
 import {
   formatClock,
   formatDuration,
+  habitRisk,
   habitVerbs,
+  riskNote,
+  type RiskLevel,
   type CheckinResult,
   type FallResult,
   type TimerEntry,
@@ -19,7 +22,9 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { Segmented } from "@/components/ui/Segmented";
 import { Toast } from "@/components/ui/Toast";
 import { SkeletonPage } from "@/components/ui/Skeleton";
+import { RiskBadge } from "@/components/ui/RiskBadge";
 import {
+  AlertTriangle,
   Ban,
   Check,
   Flame,
@@ -157,11 +162,13 @@ function TodaySummary({
   today,
   answered,
   pending,
+  atRisk,
   runningTimers,
 }: {
   today: TodayResponse;
   answered: number;
   pending: number;
+  atRisk: number;
   runningTimers: number;
 }) {
   const total = answered + pending;
@@ -196,6 +203,15 @@ function TodaySummary({
             {today.pointsToday}
           </dd>
         </div>
+        {atRisk > 0 && (
+          <div title="Validated habits a miss or two away from being demoted">
+            <dt className="field-label">At risk</dt>
+            <dd className="flex items-center gap-1 font-semibold tabular-nums text-rose-600 dark:text-rose-400">
+              <AlertTriangle size={13} />
+              {atRisk}
+            </dd>
+          </div>
+        )}
         <div title="Freezes for daily & weekly habits">
           <dt className="field-label">Freezes</dt>
           <dd className="flex items-center gap-1 font-semibold tabular-nums">
@@ -478,6 +494,7 @@ function CheckinPage() {
         today={today}
         answered={answered.length}
         pending={pending.length}
+        atRisk={pending.filter((entry) => habitRisk(entry) !== null).length}
         runningTimers={timers.length}
       />
 
@@ -753,6 +770,7 @@ function TimerCard({
           gauge={entry.gauge}
           max={entry.requiredStreak}
           valid={entry.status === "VALID"}
+          timer
           className="flex-1"
         />
       </div>
@@ -962,7 +980,7 @@ function DragHandle({
  * so the badges sit beside the name when they fit and drop under it when
  * they do not.
  */
-function HabitHeadline({ entry }: { entry: TodayEntry }) {
+function HabitHeadline({ entry, risk }: { entry: TodayEntry; risk: RiskLevel | null }) {
   const periodic = entry.schedule !== "DAILY";
   const periodNoun = entry.schedule === "WEEKLY" ? "week" : "month";
   const urgent =
@@ -990,6 +1008,7 @@ function HabitHeadline({ entry }: { entry: TodayEntry }) {
           {entry.daysLeftInPeriod} day{entry.daysLeftInPeriod === 1 ? "" : "s"} left
         </span>
       )}
+      {risk && <RiskBadge risk={risk} />}
     </div>
   );
 }
@@ -1023,6 +1042,25 @@ function GaugeRow({
         </span>
       )}
     </div>
+  );
+}
+
+/** What is about to happen to a validated habit that is running out of gauge. */
+function RiskNote({ risk, className = "" }: { risk: RiskLevel; className?: string }) {
+  return (
+    <p
+      className={`flex items-start gap-1.5 rounded-md px-2 py-1 text-xs ${
+        risk === "critical"
+          ? "bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300"
+          : "bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+      } ${className}`}
+    >
+      <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+      <span>
+        {riskNote[risk]}
+        {risk === "critical" && " — this one needs today."}
+      </span>
+    </p>
   );
 }
 
@@ -1199,6 +1237,15 @@ interface PendingProps {
   onDraftChange: (draft: MissDraft) => void;
 }
 
+/** The border a habit gets when its validation is close to slipping. */
+function riskFrame(risk: RiskLevel | null, dragging: boolean): string {
+  if (dragging) return "select-none border-accent shadow-lg";
+  if (risk === "critical")
+    return "border-rose-300 ring-1 ring-rose-200/70 dark:border-rose-900 dark:ring-rose-900/50";
+  if (risk === "caution") return "border-amber-300 dark:border-amber-900/80";
+  return "";
+}
+
 /**
  * One habit waiting for an answer, as a card in a grid.
  *
@@ -1208,22 +1255,22 @@ interface PendingProps {
  */
 function PendingCard(props: PendingProps) {
   const { entry, draggable, dragging, rowRef, missDraft } = props;
+  const risk = habitRisk(entry);
 
   return (
     <div
       ref={rowRef}
-      className={`card flex flex-col p-3 transition-shadow ${
-        dragging ? "select-none border-accent shadow-lg" : ""
-      }`}
+      className={`card flex flex-col p-3 transition-shadow ${riskFrame(risk, dragging)}`}
     >
       <div className="flex items-start gap-2">
         {draggable && <DragHandle {...props} className="-ml-1.5 -mt-1" />}
         <div className="min-w-0 flex-1">
-          <HabitHeadline entry={entry} />
+          <HabitHeadline entry={entry} risk={risk} />
         </div>
       </div>
 
       <GaugeRow entry={entry} className="mt-2" />
+      {risk && <RiskNote risk={risk} className="mt-1.5" />}
 
       <div className="mt-2.5">
         <AnswerButtons {...props} stretch />
@@ -1252,22 +1299,23 @@ function PendingCard(props: PendingProps) {
  */
 function PendingRow(props: PendingProps) {
   const { entry, draggable, dragging, rowRef, missDraft } = props;
+  const risk = habitRisk(entry);
 
   return (
     <div
       ref={rowRef}
-      className={`card p-4 transition-shadow ${
-        dragging ? "select-none border-accent shadow-lg" : ""
-      }`}
+      className={`card p-4 transition-shadow ${riskFrame(risk, dragging)}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         {draggable && <DragHandle {...props} className="-ml-2" />}
         <div className="min-w-0 flex-1">
-          <HabitHeadline entry={entry} />
+          <HabitHeadline entry={entry} risk={risk} />
           <GaugeRow entry={entry} className="mt-1 max-w-md" />
         </div>
         <AnswerButtons {...props} stretch={false} />
       </div>
+
+      {risk && <RiskNote risk={risk} className="mt-2" />}
 
       {missDraft && (
         <MissDraftPanel

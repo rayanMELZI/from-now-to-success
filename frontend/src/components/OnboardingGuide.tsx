@@ -49,6 +49,12 @@ const steps: Step[] = [
           undo it, but let it sink far enough and the habit gets demoted.
         </p>
         <GaugeBar gauge={4} max={6} valid={false} />
+        <p className="mt-3 mb-2">
+          The little tick is that demotion line. When a validated habit slips
+          down onto it, it turns red everywhere in the app — that one needs
+          you today.
+        </p>
+        <GaugeBar gauge={4} max={6} valid />
       </>
     ),
   },

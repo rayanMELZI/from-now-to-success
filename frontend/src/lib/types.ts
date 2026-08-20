@@ -174,6 +174,60 @@ export function habitVerbs(type: HabitType) {
     : { did: "Did it", missed: "Missed", question: "do" };
 }
 
+/* ---------- losing a validation ---------- */
+
+/**
+ * Mirrors GameRules.DEMOTION_RATIO on the backend: a VALID habit is demoted
+ * back to ACTIVE once its gauge sinks below this share of its max.
+ */
+export const DEMOTION_RATIO = 0.6;
+
+/** The gauge value a validated habit must stay at or above to keep it. */
+export function demotionFloor(requiredStreak: number): number {
+  return Math.ceil(requiredStreak * DEMOTION_RATIO);
+}
+
+/** How close a validated habit is to falling back to ACTIVE. */
+export type RiskLevel = "caution" | "critical";
+
+/**
+ * A validated habit whose gauge has drifted down towards that floor:
+ * "critical" = the next miss takes the validation away, "caution" = the one
+ * after that would. A full gauge is never at risk, and TIMER habits stay out
+ * of it on purpose — a relapse always empties them, so the warning would be
+ * permanent and would say nothing.
+ */
+export function gaugeRisk(gauge: number, max: number, valid: boolean): RiskLevel | null {
+  if (!valid || gauge >= max) return null;
+  const missesLeft = gauge - demotionFloor(max) + 1;
+  if (missesLeft <= 1) return "critical";
+  if (missesLeft === 2) return "caution";
+  return null;
+}
+
+/** The same question asked of a whole habit or a check-in row. */
+export function habitRisk(habit: {
+  status: HabitStatus;
+  gauge: number;
+  requiredStreak: number;
+  trackingMode?: TrackingMode;
+}): RiskLevel | null {
+  if (habit.trackingMode === "TIMER") return null;
+  return gaugeRisk(habit.gauge, habit.requiredStreak, habit.status === "VALID");
+}
+
+/** The word on the badge — a colour on its own is not a warning. */
+export const riskLabel: Record<RiskLevel, string> = {
+  critical: "At risk",
+  caution: "Slipping",
+};
+
+/** The short line that says what is actually about to happen. */
+export const riskNote: Record<RiskLevel, string> = {
+  critical: "One more miss drops it out of Validated",
+  caution: "Two more misses drop it out of Validated",
+};
+
 export const scheduleLabel: Record<HabitSchedule, string> = {
   DAILY: "daily",
   WEEKLY: "weekly",
