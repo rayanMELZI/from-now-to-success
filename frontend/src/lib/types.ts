@@ -111,6 +111,11 @@ export interface FallResult {
   bestCleanSeconds: number;
   newRecord: boolean;
   relocked: string[];
+  /**
+   * What the fresh clock already reads: 0 for a slip reported as it happens,
+   * the head start earned since for a backdated one.
+   */
+  newRunSeconds: number;
 }
 
 export interface TimerRun {

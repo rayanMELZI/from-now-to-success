@@ -48,6 +48,10 @@ interface MissDraft {
 interface FallDraft {
   habitId: number;
   reason: string;
+  /** Whether the slip is happening now or is being owned up to after the fact. */
+  when: "now" | "earlier";
+  /** The moment picked for "earlier", as a <input type="datetime-local"> value. */
+  at: string;
 }
 
 type GroupBy = "none" | "rhythm" | "goal";
@@ -105,6 +109,22 @@ function groupKey(entry: TodayEntry, mode: GroupBy): string {
 /** Seconds the current run has been going, on the server's clock. */
 function elapsedOf(timer: TimerEntry, serverNowMs: number): number {
   return Math.max(0, Math.floor((serverNowMs - Date.parse(timer.clockStartedAt)) / 1000));
+}
+
+const MINUTE_MS = 60_000;
+
+/**
+ * A moment as <input type="datetime-local"> wants it: the wall clock the
+ * user reads off their own device, to the minute, with no zone attached.
+ */
+function toLocalInput(ms: number): string {
+  const local = new Date(ms - new Date(ms).getTimezoneOffset() * MINUTE_MS);
+  return local.toISOString().slice(0, 16);
+}
+
+/** The same value read back. A zone-less string parses as local time. */
+function fromLocalInput(value: string): number {
+  return new Date(value).getTime();
 }
 
 /** Immutably moves the item at `from` to index `to`. */
@@ -356,9 +376,15 @@ function CheckinPage() {
     setBusyId(draft.habitId);
     setError(null);
     try {
+      // Only a deliberate "earlier" is backdated; the default stays server-side
+      // "now", so a device clock that is off cannot skew an in-the-moment slip.
+      const slippedAt =
+        draft.when === "earlier" && draft.at
+          ? new Date(fromLocalInput(draft.at)).toISOString()
+          : undefined;
       const submission = await api<FallResult>(`/api/timers/${draft.habitId}/fall`, {
         method: "POST",
-        body: { reason: draft.reason || undefined },
+        body: { reason: draft.reason || undefined, slippedAt },
       });
       setFallResult(submission);
       setResult(null);
@@ -519,9 +545,17 @@ function CheckinPage() {
                   key={timer.habitId}
                   entry={timer}
                   elapsed={elapsedOf(timer, nowMs + skewMs)}
+                  nowMs={nowMs + skewMs}
                   busy={busyId === timer.habitId}
                   draft={fallDraft?.habitId === timer.habitId ? fallDraft : null}
-                  onSlipClick={() => setFallDraft({ habitId: timer.habitId, reason: "" })}
+                  onSlipClick={() =>
+                    setFallDraft({
+                      habitId: timer.habitId,
+                      reason: "",
+                      when: "now",
+                      at: toLocalInput(nowMs + skewMs),
+                    })
+                  }
                   onDraftChange={setFallDraft}
                   onConfirm={confirmFall}
                   onCancel={() => setFallDraft(null)}
@@ -662,6 +696,9 @@ function CheckinPage() {
             <p className="font-medium">
               Clock restarted — that run lasted{" "}
               {formatDuration(fallResult.lastRunSeconds)}.
+              {fallResult.newRunSeconds > 0 && (
+                <> The new one already reads {formatDuration(fallResult.newRunSeconds)}.</>
+              )}
             </p>
             <p className="mt-0.5 text-ink-soft">
               {fallResult.earnedPoints >= 0 ? "+" : ""}
@@ -720,6 +757,7 @@ function AnsweredStatus({ entry }: { entry: TodayEntry }) {
 function TimerCard({
   entry,
   elapsed,
+  nowMs,
   busy,
   draft,
   onSlipClick,
@@ -729,6 +767,8 @@ function TimerCard({
 }: {
   entry: TimerEntry;
   elapsed: number;
+  /** Server-corrected wall clock, so a backdated slip is bounded honestly. */
+  nowMs: number;
   busy: boolean;
   draft: FallDraft | null;
   onSlipClick: () => void;
@@ -741,6 +781,21 @@ function TimerCard({
   const beatingRecord = record > 0 && elapsed > record;
   const goalReached = entry.nextMilestoneSeconds === 0;
   const toNext = entry.nextMilestoneSeconds - elapsed;
+
+  // A backdated slip may sit anywhere inside the run that is ending: not
+  // before the clock started, not after now. The minute is rounded inwards
+  // at both ends so a value the picker allows is never one the server refuses.
+  const startedMs = Date.parse(entry.clockStartedAt);
+  const earliest = Math.ceil(startedMs / MINUTE_MS) * MINUTE_MS;
+  const latest = Math.floor(nowMs / MINUTE_MS) * MINUTE_MS;
+  const backdated = draft?.when === "earlier";
+  // An empty picker under "Earlier" is not silently "now" — it is unanswered.
+  const pickedMs = backdated ? fromLocalInput(draft.at) : nowMs;
+  const pickedValid = Number.isFinite(pickedMs) && pickedMs >= startedMs && pickedMs <= nowMs;
+  // What the run will actually be worth, and the head start the new clock gets.
+  const endsAt = pickedValid ? Math.max(0, Math.floor((pickedMs - startedMs) / 1000)) : elapsed;
+  const headStart = pickedValid ? Math.max(0, Math.floor((nowMs - pickedMs) / 1000)) : 0;
+  const endsAsRecord = record > 0 && endsAt > record;
 
   return (
     <div className="card flex flex-col p-3">
@@ -813,11 +868,48 @@ function TimerCard({
       {draft && (
         <div className="mt-3 space-y-3 rounded-lg bg-surface-sunken p-3">
           <p className="text-sm font-medium">Reset the clock?</p>
-          <p className="text-xs text-ink-soft">
-            This run ends at {formatDuration(elapsed)}
-            {beatingRecord ? " — your new record" : ""}. The gauge empties and the clock
-            starts from zero.
-          </p>
+
+          <div className="space-y-1.5">
+            <span className="text-xs text-ink-soft">When did it happen?</span>
+            <Segmented
+              size="sm"
+              ariaLabel="When the slip happened"
+              value={draft.when}
+              options={[
+                { value: "now", label: "Just now" },
+                { value: "earlier", label: "Earlier" },
+              ]}
+              onChange={(when) => onDraftChange({ ...draft, when })}
+            />
+            {backdated && (
+              <input
+                type="datetime-local"
+                value={draft.at}
+                min={toLocalInput(earliest)}
+                max={toLocalInput(latest)}
+                onChange={(e) => onDraftChange({ ...draft, at: e.target.value })}
+                aria-label="The moment you slipped"
+                className="field tabular-nums"
+              />
+            )}
+          </div>
+
+          {backdated && !pickedValid ? (
+            <p className="text-xs text-rose-600 dark:text-rose-400">
+              Pick a moment inside this run — after it started, and not in the future.
+            </p>
+          ) : (
+            <p className="text-xs text-ink-soft">
+              This run ends at {formatDuration(endsAt)}
+              {endsAsRecord ? " — your new record" : ""}. The gauge empties and the clock
+              starts over
+              {headStart > 0
+                ? `, already reading ${formatDuration(headStart)} clean since then`
+                : " from zero"}
+              .
+            </p>
+          )}
+
           <label className="block space-y-1">
             <span className="text-xs text-ink-soft">
               What happened? (a reason halves the point loss)
@@ -834,8 +926,8 @@ function TimerCard({
           <div className="flex gap-2">
             <button
               onClick={() => onConfirm(draft)}
-              disabled={busy}
-              className="btn flex-1 bg-rose-500 text-white hover:bg-rose-400"
+              disabled={busy || (backdated && !pickedValid)}
+              className="btn flex-1 bg-rose-500 text-white hover:bg-rose-400 disabled:opacity-50"
             >
               {busy ? "…" : "Yes, restart it"}
             </button>

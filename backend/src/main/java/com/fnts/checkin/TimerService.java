@@ -1,5 +1,6 @@
 package com.fnts.checkin;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -25,6 +26,9 @@ public class TimerService {
 
     private static final int HISTORY_LIMIT = 10;
 
+    /** How far ahead of the server a device clock may be without complaint. */
+    private static final Duration CLOCK_SKEW = Duration.ofMinutes(5);
+
     private final HabitTimerRunRepository runRepository;
     private final HabitRepository habitRepository;
     private final UserRepository userRepository;
@@ -41,14 +45,10 @@ public class TimerService {
     }
 
     @Transactional
-    public FallResult fall(Long userId, Long habitId, String reason) {
+    public FallResult fall(Long userId, Long habitId, String reason, Instant slippedAt) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> ApiException.notFound("User not found"));
         Instant now = Instant.now();
-        // The run gets everything it earned right up to the relapse. These
-        // points are already on the user's total — only the penalty is left
-        // to apply, or the milestones would be paid twice.
-        int banked = habitService.advanceTimers(user, now).points();
 
         Habit habit = habitService.getOwned(userId, habitId);
         if (habit.getTrackingMode() != TrackingMode.TIMER) {
@@ -57,21 +57,34 @@ public class TimerService {
         if (habit.getStatus() == HabitStatus.LOCKED || habit.getClockStartedAt() == null) {
             throw ApiException.badRequest("This timer has not started yet");
         }
+        Instant fellAt = resolveMoment(slippedAt, habit.getClockStartedAt(), now);
+
+        // The run gets everything it earned right up to the relapse. These
+        // points are already on the user's total — only the penalty is left
+        // to apply, or the milestones would be paid twice. The other clocks
+        // catch up to now; this one stops at the moment of the slip, so a
+        // milestone the user only crossed on paper is never banked.
+        int banked = habitService.advanceTimers(user, now, habitId).points();
+        int upToSlip = GameRules.advanceTimer(habit, fellAt).points();
+        if (upToSlip != 0) {
+            user.setTotalPoints(Math.max(0, user.getTotalPoints() + upToSlip));
+        }
+        banked += upToSlip;
 
         boolean excused = reason != null && !reason.isBlank();
         Instant startedAt = habit.getClockStartedAt();
         long previousBest = habit.getBestCleanSeconds();
-        long lasted = GameRules.elapsedSeconds(habit, now);
+        long lasted = GameRules.elapsedSeconds(habit, fellAt);
         int milestonesHit = habit.getGauge();
 
-        GameRules.TimerResult fall = GameRules.applyFall(habit, excused, now);
+        GameRules.TimerResult fall = GameRules.applyFall(habit, excused, fellAt);
         user.setTotalPoints(Math.max(0, user.getTotalPoints() + fall.points()));
         int earned = banked + fall.points();
 
         HabitTimerRun run = new HabitTimerRun();
         run.setHabit(habit);
         run.setStartedAt(startedAt);
-        run.setEndedAt(now);
+        run.setEndedAt(fellAt);
         run.setDurationSeconds(lasted);
         run.setMilestonesHit(milestonesHit);
         run.setReason(excused ? reason.trim() : null);
@@ -93,7 +106,28 @@ public class TimerService {
         return new FallResult(earned, user.getTotalPoints(),
                 Levels.levelFor(user.getTotalPoints()), lasted,
                 habit.getBestCleanSeconds(), lasted > previousBest && previousBest > 0,
-                relocked);
+                relocked, GameRules.elapsedSeconds(habit, now));
+    }
+
+    /**
+     * Where to place the relapse on the clock. No moment given means now.
+     * A moment slightly ahead of the server is a device clock running fast,
+     * not a claim about the future, so it is pulled back rather than refused;
+     * anything further ahead, or earlier than the run it is ending, cannot be
+     * made sense of and is rejected.
+     */
+    static Instant resolveMoment(Instant slippedAt, Instant runStartedAt, Instant now) {
+        if (slippedAt == null) {
+            return now;
+        }
+        if (slippedAt.isAfter(now.plus(CLOCK_SKEW))) {
+            throw ApiException.badRequest("A slip cannot be in the future");
+        }
+        if (slippedAt.isBefore(runStartedAt)) {
+            throw ApiException.badRequest(
+                    "This run only started later — pick a moment after the clock began");
+        }
+        return slippedAt.isAfter(now) ? now : slippedAt;
     }
 
     @Transactional
