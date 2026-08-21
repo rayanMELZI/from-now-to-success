@@ -59,12 +59,26 @@ public class HabitService {
      */
     @Transactional
     public TimerCatchUp advanceTimers(User user, Instant now) {
+        return advanceTimers(user, now, null);
+    }
+
+    /**
+     * The same catch-up, with one habit held back. A backdated relapse needs
+     * this: the other clocks are honestly clean up to {@code now}, but the one
+     * being reset only earned up to the moment of the slip, so its caller
+     * advances it separately rather than letting this loop overshoot.
+     */
+    @Transactional
+    public TimerCatchUp advanceTimers(User user, Instant now, Long skipHabitId) {
         int earned = 0;
         List<String> becameValid = new ArrayList<>();
 
         for (Habit habit : habitRepository
                 .findByUserIdAndTrackingModeAndStatusInOrderBySortOrderAscIdAsc(
                         user.getId(), TrackingMode.TIMER, TRACKABLE)) {
+            if (habit.getId().equals(skipHabitId)) {
+                continue;
+            }
             GameRules.TimerResult result = GameRules.advanceTimer(habit, now);
             earned += result.points();
             if (result.becameValid()) {

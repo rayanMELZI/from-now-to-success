@@ -27,13 +27,17 @@ public class TimerController {
         this.timerService = timerService;
     }
 
-    /** "I fell": ends the current run and starts a fresh clock. */
+    /**
+     * "I fell": ends the current run and starts a fresh clock, at the moment
+     * the slip happened rather than the moment it is reported.
+     */
     @PostMapping("/{habitId}/fall")
     public FallResult fall(@AuthenticationPrincipal CurrentUser user,
                            @PathVariable Long habitId,
                            @Valid @RequestBody(required = false) FallRequest request) {
         return timerService.fall(user.id(), habitId,
-                request == null ? null : request.reason());
+                request == null ? null : request.reason(),
+                request == null ? null : request.slippedAt());
     }
 
     @GetMapping("/{habitId}/runs")
