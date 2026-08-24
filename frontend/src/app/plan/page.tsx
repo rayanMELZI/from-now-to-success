@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ElementType } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
@@ -13,10 +13,13 @@ import {
   type Habit,
   type PlanBlock,
   type PlanDay,
+  type PlanShiftResult,
   type TodayEntry,
   type TodayResponse,
 } from "@/lib/types";
 import {
+  ArrowDown,
+  ArrowUp,
   Ban,
   CalendarDays,
   Check,
@@ -24,6 +27,7 @@ import {
   ChevronRight,
   ClipboardList,
   Copy,
+  ListChecks,
   Pencil,
   Plus,
   Sparkles,
@@ -35,6 +39,11 @@ import { HabitPicker } from "@/components/ui/HabitPicker";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 const DAY_MINUTES = 24 * 60;
+
+/** The amounts a day usually slips by, one tap each. */
+const SHIFT_PRESETS = [5, 10, 15, 30, 60];
+const MIN_SHIFT = 1;
+const MAX_SHIFT = 12 * 60;
 
 /**
  * Dates are written in the APP's language, never the browser's. Left to the
@@ -97,6 +106,21 @@ function toSlots(blocks: PlanBlock[]): Slot[] {
   return slots;
 }
 
+/**
+ * What to say after a shift. The day has edges, so the amount that landed can
+ * be smaller than the one asked for — and saying "moved 1h later" when it
+ * moved 20 minutes would be a lie the timeline immediately contradicts.
+ */
+function shiftNotice(count: number, asked: number, applied: number): string {
+  const lines = `${count} line${count === 1 ? "" : "s"}`;
+  if (applied === 0) {
+    return `Nothing to move — ${lines} already sit at the edge of your day`;
+  }
+  const direction = applied < 0 ? "earlier" : "later";
+  const trimmed = Math.abs(applied) < Math.abs(asked) ? " — the day ends there" : "";
+  return `${lines} moved ${formatGap(Math.abs(applied))} ${direction}${trimmed}`;
+}
+
 /* ---------- the page ---------- */
 
 function PlanPage() {
@@ -106,6 +130,10 @@ function PlanPage() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [today, setToday] = useState<TodayResponse | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
+  // Shifting is a mode: the rows stop being editable and start being pickable.
+  const [selecting, setSelecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [shiftAmount, setShiftAmount] = useState(60);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -185,7 +213,16 @@ function PlanPage() {
     }
   }
 
-  const goTo = (date: string) => run(() => load(date));
+  /** A selection belongs to the day it was made on — leaving the day drops it. */
+  function stopSelecting() {
+    setSelecting(false);
+    setSelectedIds(new Set());
+  }
+
+  const goTo = (date: string) => {
+    stopSelecting();
+    return run(() => load(date));
+  };
 
   async function addBlock(title: string, endMinute: number, habitId: number | null) {
     if (!day) return;
@@ -242,6 +279,35 @@ function PlanPage() {
     await run(async () => {
       await api(`/api/plan/${id}`, { method: "DELETE" });
       await load(day.date);
+    });
+  }
+
+  function toggleSelected(id: number) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+
+  /**
+   * The whole point of the page's selection mode: you woke up late, the same
+   * lines still have to happen, they just happen later. Every picked line
+   * moves by the same amount, so the day keeps its shape — and the server
+   * says how much of the asked-for shift actually fit inside the day.
+   */
+  async function shiftSelected(delta: number) {
+    if (!day) return;
+    // Blocks the day no longer has (deleted elsewhere) must not be sent.
+    const ids = blocks.filter((b) => selectedIds.has(b.id)).map((b) => b.id);
+    if (ids.length === 0) return;
+    await run(async () => {
+      const result = await api<PlanShiftResult>("/api/plan/shift", {
+        method: "POST",
+        body: { blockIds: ids, deltaMinutes: delta },
+      });
+      setDay(result.day);
+      setNotice(shiftNotice(ids.length, delta, result.appliedMinutes));
     });
   }
 
@@ -349,6 +415,19 @@ function PlanPage() {
             </span>{" "}
             {doneCount}/{blocks.length} done
           </span>
+          {!selecting && (
+            <button
+              onClick={() => {
+                setEditingId(null);
+                setSelecting(true);
+              }}
+              className="btn btn-ghost h-8 min-h-0 shrink-0 px-2.5 text-xs"
+              title="Pick lines and move them all earlier or later"
+            >
+              <ListChecks size={14} />
+              <span className="hidden sm:inline">Shift times</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -438,6 +517,9 @@ function PlanPage() {
                           habits={habits}
                           entry={entryFor(block.habitId)}
                           editing={editingId === block.id}
+                          selecting={selecting}
+                          selected={selectedIds.has(block.id)}
+                          onToggleSelect={() => toggleSelected(block.id)}
                           busy={busy}
                           onToggleDone={() => toggleDone(block)}
                           onEdit={() => setEditingId(block.id)}
@@ -461,8 +543,26 @@ function PlanPage() {
             )}
           </ol>
         )}
+
+        {selecting && (
+          <ShiftBar
+            selectedCount={selectedIds.size}
+            totalCount={blocks.length}
+            amount={shiftAmount}
+            busy={busy}
+            onAmount={setShiftAmount}
+            onSelectAll={() => setSelectedIds(new Set(blocks.map((b) => b.id)))}
+            onClear={() => setSelectedIds(new Set())}
+            onShift={shiftSelected}
+            onDone={stopSelecting}
+          />
+        )}
         </div>
 
+        {/* Shift mode is about moving what is already there, and its panel
+            floats over the foot of the page — the composer would only sit
+            under it with its buttons out of reach. */}
+        {!selecting && (
         <Composer
           // A new day gets a fresh composer: its suggested time is a first value.
           key={day.date}
@@ -480,6 +580,7 @@ function PlanPage() {
             .filter((id): id is number => id !== null)}
           onAdd={addBlock}
         />
+        )}
       </div>
     </PageShell>
   );
@@ -602,8 +703,11 @@ function BlockRow({
   habits,
   entry,
   editing,
+  selecting,
+  selected,
   busy,
   onToggleDone,
+  onToggleSelect,
   onEdit,
   onCancelEdit,
   onSave,
@@ -617,8 +721,12 @@ function BlockRow({
   habits: Habit[];
   entry: TodayEntry | null;
   editing: boolean;
+  /** Shift mode: the whole row becomes one big pick-me button. */
+  selecting: boolean;
+  selected: boolean;
   busy: boolean;
   onToggleDone: () => void;
+  onToggleSelect: () => void;
   onEdit: () => void;
   onCancelEdit: () => void;
   onSave: (title: string, endMinute: number, habitId: number | null) => void;
@@ -627,6 +735,10 @@ function BlockRow({
   const habit = habits.find((h) => h.id === block.habitId) ?? null;
   const checkedIn =
     entry?.todayStatus === "DONE" || entry?.todayStatus === "DONE_TODAY";
+
+  // In shift mode the card itself is the control, so it has to be a button —
+  // which also means nothing else inside it may be one.
+  const Card: ElementType = selecting ? "button" : "div";
 
   if (editing) {
     return (
@@ -646,37 +758,63 @@ function BlockRow({
 
   return (
     <div className="flex gap-3">
-      {/* rail: the dot doubles as the done switch */}
+      {/* rail: the dot doubles as the done switch — or, in shift mode, as the
+          tick box the whole card toggles */}
       <div className="flex w-4 shrink-0 flex-col items-center pt-1.5">
-        <button
-          onClick={onToggleDone}
-          disabled={busy}
-          aria-label={block.done ? `Undo ${block.title}` : `Mark ${block.title} done`}
-          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-all active:scale-90 ${
-            block.done
-              ? "border-emerald-500 bg-emerald-500 text-white"
-              : current
-                ? "border-amber-500 ring-4 ring-amber-500/15"
-                : "border-line-strong hover:border-ink-faint"
-          }`}
-        >
-          {block.done && <Check size={10} strokeWidth={3.5} />}
-        </button>
+        {selecting ? (
+          <span
+            aria-hidden
+            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition-colors ${
+              selected
+                ? "border-amber-500 bg-amber-500 text-white"
+                : "border-line-strong"
+            }`}
+          >
+            {selected && <Check size={10} strokeWidth={3.5} />}
+          </span>
+        ) : (
+          <button
+            onClick={onToggleDone}
+            disabled={busy}
+            aria-label={block.done ? `Undo ${block.title}` : `Mark ${block.title} done`}
+            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-all active:scale-90 ${
+              block.done
+                ? "border-emerald-500 bg-emerald-500 text-white"
+                : current
+                  ? "border-amber-500 ring-4 ring-amber-500/15"
+                  : "border-line-strong hover:border-ink-faint"
+            }`}
+          >
+            {block.done && <Check size={10} strokeWidth={3.5} />}
+          </button>
+        )}
         {!last && <span className="mt-1 w-px flex-1 bg-line" />}
       </div>
 
       {/* the block itself */}
-      <div
-        className={`group min-w-0 flex-1 border px-3 py-2 transition-colors ${
+      <Card
+        {...(selecting
+          ? {
+              type: "button",
+              onClick: onToggleSelect,
+              "aria-pressed": selected,
+              disabled: busy,
+            }
+          : {})}
+        className={`group min-w-0 flex-1 border px-3 py-2 text-left transition-colors ${
           attachedBelow ? "rounded-b-none" : "mb-2 rounded-b-xl"
         } ${
           // -mt-px folds the two borders into one hairline divider
           attachedAbove ? "-mt-px rounded-t-none" : "rounded-t-xl"
         } ${
-          current
-            ? "border-amber-300 bg-amber-50/60 dark:border-amber-500/40 dark:bg-amber-400/10"
-            : "border-line bg-surface"
-        } ${block.done ? "opacity-60" : ""}`}
+          selecting && selected
+            ? "border-amber-400 bg-amber-50 dark:border-amber-500/60 dark:bg-amber-400/15"
+            : current
+              ? "border-amber-300 bg-amber-50/60 dark:border-amber-500/40 dark:bg-amber-400/10"
+              : "border-line bg-surface"
+        } ${selecting ? "cursor-pointer hover:border-amber-300" : ""} ${
+          block.done ? "opacity-60" : ""
+        }`}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
@@ -701,25 +839,130 @@ function BlockRow({
               )}
             </div>
           </div>
-          <div className="flex shrink-0 gap-0.5">
-            <button
-              onClick={onEdit}
-              aria-label={`Edit ${block.title}`}
-              className="btn-icon h-8 w-8"
-            >
-              <Pencil size={14} />
-            </button>
-            <button
-              onClick={onDelete}
-              disabled={busy}
-              aria-label={`Delete ${block.title}`}
-              className="btn-icon h-8 w-8 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950/40"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
+          {!selecting && (
+            <div className="flex shrink-0 gap-0.5">
+              <button
+                onClick={onEdit}
+                aria-label={`Edit ${block.title}`}
+                className="btn-icon h-8 w-8"
+              >
+                <Pencil size={14} />
+              </button>
+              <button
+                onClick={onDelete}
+                disabled={busy}
+                aria-label={`Delete ${block.title}`}
+                className="btn-icon h-8 w-8 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950/40"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          )}
         </div>
 
+      </Card>
+    </div>
+  );
+}
+
+/**
+ * Shift mode's control panel. It rides the bottom of the screen so picking a
+ * line at the foot of a long plan never means scrolling back up to move it.
+ */
+function ShiftBar({
+  selectedCount,
+  totalCount,
+  amount,
+  busy,
+  onAmount,
+  onSelectAll,
+  onClear,
+  onShift,
+  onDone,
+}: {
+  selectedCount: number;
+  totalCount: number;
+  amount: number;
+  busy: boolean;
+  onAmount: (minutes: number) => void;
+  onSelectAll: () => void;
+  onClear: () => void;
+  onShift: (delta: number) => void;
+  onDone: () => void;
+}) {
+  const valid = amount >= MIN_SHIFT && amount <= MAX_SHIFT;
+  const ready = valid && selectedCount > 0 && !busy;
+
+  return (
+    // On phones the tab bar owns the bottom of the screen, so the panel
+    // parks just above it.
+    <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-20 mb-2 sm:bottom-3">
+      <div className="card border-amber-300 p-3 shadow-lg dark:border-amber-500/40">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold">
+            {selectedCount === 0
+              ? "Pick the lines to move"
+              : `${selectedCount} of ${totalCount} picked`}
+          </span>
+          <button
+            onClick={selectedCount === totalCount ? onClear : onSelectAll}
+            className="btn btn-ghost h-7 min-h-0 px-2 text-xs"
+          >
+            {selectedCount === totalCount ? "Clear" : "Select all"}
+          </button>
+          <span className="flex-1" />
+          <button onClick={onDone} className="btn-icon h-7 w-7" aria-label="Leave shift mode">
+            <X size={15} />
+          </button>
+        </div>
+
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          <span className="field-label mr-0.5">By</span>
+          {SHIFT_PRESETS.map((preset) => (
+            <button
+              key={preset}
+              onClick={() => onAmount(preset)}
+              className={`rounded-full px-2.5 py-1 text-xs font-medium tabular-nums transition-colors ${
+                amount === preset
+                  ? "bg-amber-500 text-white"
+                  : "bg-surface-sunken text-ink-soft hover:text-ink"
+              }`}
+            >
+              {formatGap(preset)}
+            </button>
+          ))}
+          {/* Anything the presets don't cover — "we're running 47 late". */}
+          <input
+            type="number"
+            min={MIN_SHIFT}
+            max={MAX_SHIFT}
+            step={5}
+            value={amount}
+            onChange={(e) => onAmount(Number(e.target.value))}
+            aria-label="Minutes to move by"
+            className="field w-20 py-1 text-xs tabular-nums"
+          />
+          <span className="text-xs text-ink-faint">min</span>
+        </div>
+
+        <div className="mt-2.5 flex gap-2">
+          <button
+            onClick={() => onShift(-amount)}
+            disabled={!ready}
+            className="btn btn-ghost flex-1 border border-line-strong"
+          >
+            <ArrowUp size={15} />
+            Earlier
+          </button>
+          <button
+            onClick={() => onShift(amount)}
+            disabled={!ready}
+            className="btn btn-primary flex-1"
+          >
+            <ArrowDown size={15} />
+            Later
+          </button>
+        </div>
       </div>
     </div>
   );

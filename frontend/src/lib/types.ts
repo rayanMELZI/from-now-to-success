@@ -166,6 +166,17 @@ export interface PlanDay {
   blocks: PlanBlock[];
 }
 
+/** The answer to a shift: the day as it now stands, and what actually landed. */
+export interface PlanShiftResult {
+  /**
+   * How far the selection really moved. The day has edges, so this can be
+   * smaller than the amount asked for — 0 when it was already flush against
+   * one of them.
+   */
+  appliedMinutes: number;
+  day: PlanDay;
+}
+
 export interface PlanBlockRequest {
   title: string;
   endMinute: number;

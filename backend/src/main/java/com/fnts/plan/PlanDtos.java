@@ -6,6 +6,7 @@ import java.util.List;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -28,6 +29,14 @@ public class PlanDtos {
     /** Copies another day's blocks onto the requested one. */
     public record CopyRequest(@NotNull LocalDate from) {}
 
+    /**
+     * Slides some of a day's blocks earlier (negative) or later (positive).
+     * The whole selection moves by the same amount, so its shape survives.
+     */
+    public record ShiftRequest(
+            @NotEmpty @Size(max = MAX_BLOCKS_PER_DAY) List<Long> blockIds,
+            @NotNull @Min(-LAST_MINUTE) @Max(LAST_MINUTE) Integer deltaMinutes) {}
+
     public record BlockResponse(
             Long id,
             LocalDate date,
@@ -37,6 +46,12 @@ public class PlanDtos {
             /** The linked habit's current name — it may have been renamed since. */
             String habitName,
             boolean done) {}
+
+    /**
+     * What a shift actually did. The applied amount can be smaller than the
+     * one asked for — the day has edges — so the client can say so.
+     */
+    public record ShiftResult(int appliedMinutes, PlanDayResponse day) {}
 
     public record PlanDayResponse(
             LocalDate date,
