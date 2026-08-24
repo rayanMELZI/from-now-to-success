@@ -22,6 +22,8 @@ import com.fnts.plan.PlanDtos.BlockResponse;
 import com.fnts.plan.PlanDtos.CopyRequest;
 import com.fnts.plan.PlanDtos.DoneRequest;
 import com.fnts.plan.PlanDtos.PlanDayResponse;
+import com.fnts.plan.PlanDtos.ShiftRequest;
+import com.fnts.plan.PlanDtos.ShiftResult;
 
 import jakarta.validation.Valid;
 
@@ -70,6 +72,13 @@ public class PlanController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@AuthenticationPrincipal CurrentUser user, @PathVariable Long id) {
         planService.deleteBlock(user.id(), id);
+    }
+
+    /** Slides a picked set of one day's blocks earlier or later, together. */
+    @PostMapping("/shift")
+    public ShiftResult shift(@AuthenticationPrincipal CurrentUser user,
+                             @Valid @RequestBody ShiftRequest request) {
+        return planService.shiftBlocks(user.id(), request);
     }
 
     /** Seeds an empty day from another day's blocks. */

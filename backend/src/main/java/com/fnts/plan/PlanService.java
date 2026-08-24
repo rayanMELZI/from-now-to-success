@@ -2,7 +2,9 @@ package com.fnts.plan;
 
 import java.time.LocalDate;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +16,8 @@ import com.fnts.habit.HabitService;
 import com.fnts.plan.PlanDtos.BlockRequest;
 import com.fnts.plan.PlanDtos.BlockResponse;
 import com.fnts.plan.PlanDtos.PlanDayResponse;
+import com.fnts.plan.PlanDtos.ShiftRequest;
+import com.fnts.plan.PlanDtos.ShiftResult;
 import com.fnts.user.User;
 import com.fnts.user.UserRepository;
 
@@ -115,6 +119,40 @@ public class PlanService {
             blockRepository.save(copy);
         }
         return day(user, target);
+    }
+
+    /**
+     * Waking up half an hour late does not change WHAT the day holds, only
+     * WHEN — so a handful of lines can be slid earlier or later together,
+     * keeping the gaps between them exactly as they were. The shift is
+     * trimmed to whatever fits inside the user's day, and the amount that
+     * actually landed comes back so the client can say when it was less.
+     */
+    @Transactional
+    public ShiftResult shiftBlocks(Long userId, ShiftRequest request) {
+        User user = load(userId);
+        Set<Long> ids = new LinkedHashSet<>(request.blockIds());
+        List<PlanBlock> blocks = blockRepository.findByIdInAndUserId(ids, userId);
+        if (blocks.size() != ids.size()) {
+            throw ApiException.notFound("Plan block not found");
+        }
+
+        // A shift is one day's business: mixing days would slide lines the
+        // user cannot even see, and there is no single day to send back.
+        LocalDate date = blocks.getFirst().getPlanDate();
+        if (blocks.stream().anyMatch(block -> !block.getPlanDate().equals(date))) {
+            throw ApiException.badRequest("Those blocks are not all on the same day");
+        }
+
+        int dayEndHour = user.getDayEndHour();
+        int delta = PlanShift.fittedDelta(
+                blocks.stream().map(PlanBlock::getEndMinute).toList(),
+                request.deltaMinutes(),
+                dayEndHour);
+        for (PlanBlock block : blocks) {
+            block.setEndMinute(PlanShift.shifted(block.getEndMinute(), delta, dayEndHour));
+        }
+        return new ShiftResult(delta, day(user, date));
     }
 
     /**
