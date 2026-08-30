@@ -8,7 +8,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,20 +62,21 @@ public class CheckinService {
         LocalDate today = Periods.logicalToday(user);
         DayOfWeek weekStart = DayOfWeek.of(user.getWeekStartDay());
         Instant now = Instant.now();
-        catchUpMissedPeriods(user, today);
+        List<Habit> habits = scheduledHabits(userId);
+        catchUpMissedPeriods(user, today, habits);
         // Running clocks bank whatever they passed while the user was away.
         habitService.advanceTimers(user, now);
 
-        List<Habit> habits = scheduledHabits(userId);
         Map<Long, HabitLog> todayLogs = todayLogs(habits, today);
+        Map<Long, PeriodCounts> counts = periodCounts(habits, today, weekStart);
 
         int pointsToday = 0;
         List<TodayEntry> entries = new ArrayList<>();
         boolean anyBlockingPending = false;
 
         for (Habit habit : habits) {
-            PeriodState state = periodState(habit, today, weekStart,
-                    todayLogs.get(habit.getId()));
+            PeriodState state = periodState(habit, todayLogs.get(habit.getId()),
+                    counts.get(habit.getId()));
             String todayStatus = todayStatus(habit, state);
             int daysLeft = Periods.daysLeftInPeriod(habit.getSchedule(), today, weekStart);
             float multiplier = GameRules.multiplier(habit.getCurrentStreak() + 1);
@@ -126,9 +127,9 @@ public class CheckinService {
         User user = loadUser(userId);
         LocalDate today = Periods.logicalToday(user);
         DayOfWeek weekStart = DayOfWeek.of(user.getWeekStartDay());
-        catchUpMissedPeriods(user, today);
-
         List<Habit> habits = scheduledHabits(userId);
+        catchUpMissedPeriods(user, today, habits);
+
         Map<Long, HabitLog> todayLogs = todayLogs(habits, today);
         // The engagement bonus goes to the day's FIRST done answer, so
         // answering habits one by one through the day still earns it once.
@@ -148,8 +149,8 @@ public class CheckinService {
                     .orElseThrow(() -> ApiException.badRequest(
                             "Habit " + entry.habitId() + " is not trackable today"));
 
-            PeriodState state = periodState(habit, today, weekStart,
-                    todayLogs.get(habit.getId()));
+            PeriodState state = periodState(habit, todayLogs.get(habit.getId()),
+                    periodCounts(habit, today, weekStart));
             if (state.todayLog() != null || state.targetMet() || state.periodFrozen()) {
                 continue; // already answered / period complete / period frozen
             }
@@ -237,7 +238,7 @@ public class CheckinService {
     public List<HistoryDay> history(Long userId, int days) {
         User user = loadUser(userId);
         LocalDate today = Periods.logicalToday(user);
-        catchUpMissedPeriods(user, today);
+        catchUpMissedPeriods(user, today, scheduledHabits(userId));
 
         Map<LocalDate, int[]> byDate = new LinkedHashMap<>();
         for (HabitLog log : logRepository.findRecentForUser(userId, today.minusDays(days - 1))) {
@@ -256,13 +257,14 @@ public class CheckinService {
      * answered, in order. Runs before any read or write, so state is always
      * caught up no matter how long the user was away — no scheduled jobs.
      */
-    private void catchUpMissedPeriods(User user, LocalDate today) {
+    private void catchUpMissedPeriods(User user, LocalDate today, List<Habit> habits) {
         DayOfWeek weekStart = DayOfWeek.of(user.getWeekStartDay());
         int penalties = 0;
+        Map<Long, LocalDate> lastAnswered = lastAnsweredDays(habits);
 
-        for (Habit habit : scheduledHabits(user.getId())) {
+        for (Habit habit : habits) {
             if (habit.getSchedule() == HabitSchedule.DAILY) {
-                penalties += catchUpDaily(habit, today);
+                penalties += catchUpDaily(habit, today, lastAnswered.get(habit.getId()));
             } else {
                 penalties += catchUpPeriodic(habit, today, weekStart);
             }
@@ -272,11 +274,28 @@ public class CheckinService {
         }
     }
 
+    /**
+     * The day each habit was last answered, for the whole list in one query.
+     * Asking per habit is what made opening the app cost more the longer the
+     * roadmap got — this is the single biggest read on the check-in path.
+     */
+    private Map<Long, LocalDate> lastAnsweredDays(List<Habit> habits) {
+        Map<Long, LocalDate> byHabit = new HashMap<>();
+        if (habits.isEmpty()) {
+            return byHabit;
+        }
+        for (HabitLogRepository.LastLogRow row : logRepository.findLastLogDates(
+                habits.stream().map(Habit::getId).toList())) {
+            byHabit.put(row.getHabitId(), row.getLastDate());
+        }
+        return byHabit;
+    }
+
     /** Every unanswered past day of a daily habit becomes a MISSED log. */
-    private int catchUpDaily(Habit habit, LocalDate today) {
-        Optional<HabitLog> last = logRepository.findTopByHabitIdOrderByLogDateDesc(habit.getId());
-        LocalDate cursor = last.map(l -> l.getLogDate().plusDays(1))
-                .orElse(habit.getStartDate());
+    private int catchUpDaily(Habit habit, LocalDate today, LocalDate lastAnswered) {
+        LocalDate cursor = lastAnswered != null
+                ? lastAnswered.plusDays(1)
+                : habit.getStartDate();
         int penalties = 0;
         while (cursor.isBefore(today)) {
             GameRules.DayResult result = GameRules.applyMiss(habit, false, false);
@@ -344,18 +363,57 @@ public class CheckinService {
         return byHabit;
     }
 
-    private PeriodState periodState(Habit habit, LocalDate today, DayOfWeek weekStart,
-                                    HabitLog todayLog) {
+    /** What a weekly/monthly habit has already logged inside its running period. */
+    private record PeriodCounts(int done, int missed) {
+        static final PeriodCounts NONE = new PeriodCounts(0, 0);
+    }
+
+    /**
+     * The running period's tallies for every weekly and monthly habit, in one
+     * query per schedule instead of two per habit. Habits on the same schedule
+     * share the same period bounds, which is what makes the grouping possible.
+     */
+    private Map<Long, PeriodCounts> periodCounts(List<Habit> habits, LocalDate today,
+                                                 DayOfWeek weekStart) {
+        Map<Long, PeriodCounts> byHabit = new HashMap<>();
+        Map<HabitSchedule, List<Long>> bySchedule = habits.stream()
+                .filter(h -> h.getSchedule() != HabitSchedule.DAILY)
+                .collect(Collectors.groupingBy(Habit::getSchedule,
+                        Collectors.mapping(Habit::getId, Collectors.toList())));
+
+        for (Map.Entry<HabitSchedule, List<Long>> group : bySchedule.entrySet()) {
+            LocalDate period = Periods.periodStart(group.getKey(), today, weekStart);
+            LocalDate next = Periods.nextPeriodStart(group.getKey(), period);
+            for (HabitLogRepository.PeriodCountRow row
+                    : logRepository.countsInPeriod(group.getValue(), period, next)) {
+                byHabit.put(row.getHabitId(),
+                        new PeriodCounts((int) row.getDoneCount(), (int) row.getMissedCount()));
+            }
+        }
+        return byHabit;
+    }
+
+    /** The same tallies for a single habit — the check-in answers a handful. */
+    private PeriodCounts periodCounts(Habit habit, LocalDate today, DayOfWeek weekStart) {
+        if (habit.getSchedule() == HabitSchedule.DAILY) {
+            return PeriodCounts.NONE;
+        }
+        LocalDate period = Periods.periodStart(habit.getSchedule(), today, weekStart);
+        LocalDate next = Periods.nextPeriodStart(habit.getSchedule(), period);
+        return new PeriodCounts(
+                logRepository.countDoneInPeriod(habit.getId(), period, next),
+                logRepository.countMissedInPeriod(habit.getId(), period, next));
+    }
+
+    private PeriodState periodState(Habit habit, HabitLog todayLog, PeriodCounts counts) {
         if (habit.getSchedule() == HabitSchedule.DAILY) {
             boolean done = todayLog != null && todayLog.getStatus() == HabitLog.Status.DONE;
             return new PeriodState(todayLog, done ? 1 : 0, done, false);
         }
-        LocalDate period = Periods.periodStart(habit.getSchedule(), today, weekStart);
-        LocalDate next = Periods.nextPeriodStart(habit.getSchedule(), period);
-        int done = logRepository.countDoneInPeriod(habit.getId(), period, next);
+        PeriodCounts tally = counts == null ? PeriodCounts.NONE : counts;
         // A MISSED log inside the running period can only come from a freeze.
-        boolean frozen = logRepository.countMissedInPeriod(habit.getId(), period, next) > 0;
-        return new PeriodState(todayLog, done, done >= habit.getTimesPerPeriod(), frozen);
+        return new PeriodState(todayLog, tally.done(),
+                tally.done() >= habit.getTimesPerPeriod(), tally.missed() > 0);
     }
 
     private String todayStatus(Habit habit, PeriodState state) {

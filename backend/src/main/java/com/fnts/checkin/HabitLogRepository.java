@@ -55,4 +55,39 @@ public interface HabitLogRepository extends JpaRepository<HabitLog, Long> {
               AND log.logDate >= :from AND log.logDate < :toExclusive
             """)
     int countDoneInPeriod(Long habitId, LocalDate from, LocalDate toExclusive);
+
+    /** The day each of these habits was last answered — the whole set at once. */
+    @Query("""
+            SELECT log.habit.id AS habitId, MAX(log.logDate) AS lastDate FROM HabitLog log
+            WHERE log.habit.id IN :habitIds
+            GROUP BY log.habit.id
+            """)
+    List<LastLogRow> findLastLogDates(List<Long> habitIds);
+
+    interface LastLogRow {
+        Long getHabitId();
+        LocalDate getLastDate();
+    }
+
+    /**
+     * Both period tallies for a whole set of habits in one pass. Habits on the
+     * same schedule share the same period bounds, so one call covers all the
+     * weeklies and another all the monthlies.
+     */
+    @Query("""
+            SELECT log.habit.id AS habitId,
+                   SUM(CASE WHEN log.status = 'DONE' THEN 1 ELSE 0 END) AS doneCount,
+                   SUM(CASE WHEN log.status = 'MISSED' THEN 1 ELSE 0 END) AS missedCount
+            FROM HabitLog log
+            WHERE log.habit.id IN :habitIds
+              AND log.logDate >= :from AND log.logDate < :toExclusive
+            GROUP BY log.habit.id
+            """)
+    List<PeriodCountRow> countsInPeriod(List<Long> habitIds, LocalDate from, LocalDate toExclusive);
+
+    interface PeriodCountRow {
+        Long getHabitId();
+        long getDoneCount();
+        long getMissedCount();
+    }
 }
