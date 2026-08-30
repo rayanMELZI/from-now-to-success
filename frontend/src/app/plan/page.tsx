@@ -135,6 +135,13 @@ function PlanPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [shiftAmount, setShiftAmount] = useState(60);
   const [busy, setBusy] = useState(false);
+  /**
+   * Lines with a write already in flight. Ticking a box is the one action on
+   * this page that has to feel instant, so it deliberately does NOT raise the
+   * page-wide `busy` flag — only its own dot stops taking clicks while the
+   * server catches up, and the rest of the plan stays live.
+   */
+  const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -213,6 +220,25 @@ function PlanPage() {
     }
   }
 
+  const setPending = (id: number, pending: boolean) =>
+    setPendingIds((current) => {
+      const next = new Set(current);
+      if (pending) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
+  /** Rewrites one line of the day in place, leaving every other one alone. */
+  const patchBlock = (id: number, patch: Partial<PlanBlock>) =>
+    setDay((current) =>
+      current === null
+        ? current
+        : {
+            ...current,
+            blocks: current.blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)),
+          },
+    );
+
   /** A selection belongs to the day it was made on — leaving the day drops it. */
   function stopSelecting() {
     setSelecting(false);
@@ -259,19 +285,43 @@ function PlanPage() {
    * check-in cannot be taken back, so un-ticking the block leaves it standing.
    */
   async function toggleDone(block: PlanBlock) {
-    if (!day) return;
+    if (!day || pendingIds.has(block.id)) return;
     const done = !block.done;
     const entry = entryFor(block.habitId);
-    await run(async () => {
-      await api<PlanBlock>(`/api/plan/${block.id}/done`, {
+
+    // The tick lands first; the round trips happen behind it. This used to go
+    // through run(), which froze the whole page behind up to four requests
+    // before the dot so much as changed colour.
+    patchBlock(block.id, { done });
+    setPending(block.id, true);
+    setError(null);
+
+    try {
+      // The endpoint answers with the block it just wrote, so there is nothing
+      // left to re-read — the entire day used to be fetched again afterwards.
+      const saved = await api<PlanBlock>(`/api/plan/${block.id}/done`, {
         method: "PUT",
         body: { done },
       });
+      patchBlock(block.id, saved);
+    } catch (err) {
+      // The server never took it, so neither do we.
+      patchBlock(block.id, { done: block.done });
+      setError(err instanceof Error ? err.message : "Something went wrong");
+      setPending(block.id, false);
+      return;
+    }
+
+    // The tick is stored: a check-in that fails after it must not undo it.
+    try {
       if (done && entry?.todayStatus === "PENDING") {
         await checkIn(entry.habitId, entry.name);
       }
-      await load(day.date);
-    });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not check that habit in");
+    } finally {
+      setPending(block.id, false);
+    }
   }
 
   async function removeBlock(id: number) {
@@ -323,8 +373,8 @@ function PlanPage() {
   }
 
   /**
-   * The one bridge to the game. Runs inside an existing run() call, so it
-   * reports through the notice banner and lets errors bubble to that handler.
+   * The one bridge to the game. Called from toggleDone, which turns whatever
+   * it throws into the page's error banner.
    */
   async function checkIn(habitId: number, name: string) {
     const result = await api<CheckinResult>("/api/checkins", {
@@ -338,11 +388,16 @@ function PlanPage() {
         ? `${name} was already counted for today`
         : `${name} checked in · ${result.earnedPoints > 0 ? "+" : ""}${result.earnedPoints} points`,
     );
-    const [fresh] = await Promise.all([
+    // The "checked in" chip and the header's point total are bookkeeping: the
+    // answer is already in and already reported, so they catch up on their own
+    // instead of adding two more round trips to the tap. Losing them only
+    // means those two read stale until the next load.
+    void Promise.all([
       api<TodayResponse>("/api/checkins/today"),
       refreshUser(),
-    ]);
-    setToday(fresh);
+    ])
+      .then(([fresh]) => setToday(fresh))
+      .catch(() => {});
   }
 
   if (!user?.plannerEnabled) {
@@ -521,6 +576,7 @@ function PlanPage() {
                           selected={selectedIds.has(block.id)}
                           onToggleSelect={() => toggleSelected(block.id)}
                           busy={busy}
+                          pending={pendingIds.has(block.id)}
                           onToggleDone={() => toggleDone(block)}
                           onEdit={() => setEditingId(block.id)}
                           onCancelEdit={() => setEditingId(null)}
@@ -706,6 +762,7 @@ function BlockRow({
   selecting,
   selected,
   busy,
+  pending,
   onToggleDone,
   onToggleSelect,
   onEdit,
@@ -725,6 +782,8 @@ function BlockRow({
   selecting: boolean;
   selected: boolean;
   busy: boolean;
+  /** This line alone has a write in flight — the rest of the page does not. */
+  pending: boolean;
   onToggleDone: () => void;
   onToggleSelect: () => void;
   onEdit: () => void;
@@ -775,7 +834,7 @@ function BlockRow({
         ) : (
           <button
             onClick={onToggleDone}
-            disabled={busy}
+            disabled={busy || pending}
             aria-label={block.done ? `Undo ${block.title}` : `Mark ${block.title} done`}
             className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-all active:scale-90 ${
               block.done
