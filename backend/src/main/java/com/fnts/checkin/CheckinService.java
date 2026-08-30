@@ -4,6 +4,7 @@ import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,13 +67,15 @@ public class CheckinService {
         habitService.advanceTimers(user, now);
 
         List<Habit> habits = scheduledHabits(userId);
+        Map<Long, HabitLog> todayLogs = todayLogs(habits, today);
 
         int pointsToday = 0;
         List<TodayEntry> entries = new ArrayList<>();
         boolean anyBlockingPending = false;
 
         for (Habit habit : habits) {
-            PeriodState state = periodState(habit, today, weekStart);
+            PeriodState state = periodState(habit, today, weekStart,
+                    todayLogs.get(habit.getId()));
             String todayStatus = todayStatus(habit, state);
             int daysLeft = Periods.daysLeftInPeriod(habit.getSchedule(), today, weekStart);
             float multiplier = GameRules.multiplier(habit.getCurrentStreak() + 1);
@@ -126,11 +129,10 @@ public class CheckinService {
         catchUpMissedPeriods(user, today);
 
         List<Habit> habits = scheduledHabits(userId);
+        Map<Long, HabitLog> todayLogs = todayLogs(habits, today);
         // The engagement bonus goes to the day's FIRST done answer, so
         // answering habits one by one through the day still earns it once.
-        boolean noDoneYet = habits.stream()
-                .map(h -> logRepository.findByHabitIdAndLogDate(h.getId(), today))
-                .flatMap(Optional::stream)
+        boolean noDoneYet = todayLogs.values().stream()
                 .noneMatch(l -> l.getStatus() == HabitLog.Status.DONE);
         int freezesLeft = freezesLeft(userId, today);
         int deepFreezesLeft = deepFreezesLeft(userId, today);
@@ -146,7 +148,8 @@ public class CheckinService {
                     .orElseThrow(() -> ApiException.badRequest(
                             "Habit " + entry.habitId() + " is not trackable today"));
 
-            PeriodState state = periodState(habit, today, weekStart);
+            PeriodState state = periodState(habit, today, weekStart,
+                    todayLogs.get(habit.getId()));
             if (state.todayLog() != null || state.targetMet() || state.periodFrozen()) {
                 continue; // already answered / period complete / period frozen
             }
@@ -204,6 +207,8 @@ public class CheckinService {
             log.setReason(excused ? entry.reason().trim() : null);
             log.setFrozen(freeze);
             logRepository.save(log);
+            // A request naming the same habit twice must still answer it once.
+            todayLogs.put(habit.getId(), log);
 
             earned += result.points();
             if (entry.done()) {
@@ -322,9 +327,25 @@ public class CheckinService {
         return penalties;
     }
 
-    private PeriodState periodState(Habit habit, LocalDate today, DayOfWeek weekStart) {
-        HabitLog todayLog = logRepository
-                .findByHabitIdAndLogDate(habit.getId(), today).orElse(null);
+    /**
+     * Today's log for each of these habits, in one query. Every habit of every
+     * check-in read needs it, and asking per habit made the cost of opening
+     * the page grow with the size of the roadmap.
+     */
+    private Map<Long, HabitLog> todayLogs(List<Habit> habits, LocalDate today) {
+        if (habits.isEmpty()) {
+            return new HashMap<>();
+        }
+        Map<Long, HabitLog> byHabit = new HashMap<>();
+        for (HabitLog log : logRepository.findByHabitIdInAndLogDate(
+                habits.stream().map(Habit::getId).toList(), today)) {
+            byHabit.put(log.getHabit().getId(), log);
+        }
+        return byHabit;
+    }
+
+    private PeriodState periodState(Habit habit, LocalDate today, DayOfWeek weekStart,
+                                    HabitLog todayLog) {
         if (habit.getSchedule() == HabitSchedule.DAILY) {
             boolean done = todayLog != null && todayLog.getStatus() == HabitLog.Status.DONE;
             return new PeriodState(todayLog, done ? 1 : 0, done, false);

@@ -8,6 +8,8 @@ import java.util.Set;
 import com.fnts.common.EncryptedStringConverter;
 import com.fnts.user.User;
 
+import org.hibernate.annotations.BatchSize;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
@@ -114,7 +116,13 @@ public class Habit {
     @Column(name = "sort_order", nullable = false)
     private int sortOrder = 0;
 
+    /**
+     * Read for every habit of every listing — the roadmap, the lock sync, the
+     * cycle check. Left one collection at a time that is one SELECT per habit;
+     * batching fetches them for the whole list at once instead.
+     */
     @ManyToMany(fetch = FetchType.LAZY)
+    @BatchSize(size = 100)
     @JoinTable(name = "habit_prerequisites",
             joinColumns = @JoinColumn(name = "habit_id"),
             inverseJoinColumns = @JoinColumn(name = "prerequisite_id"))
