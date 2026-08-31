@@ -777,7 +777,7 @@ function BlockRow({
             onClick={onToggleDone}
             disabled={busy}
             aria-label={block.done ? `Undo ${block.title}` : `Mark ${block.title} done`}
-            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-all active:scale-90 ${
+            className={`relative flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-all active:scale-90 ${
               block.done
                 ? "border-emerald-500 bg-emerald-500 text-white"
                 : current
@@ -785,6 +785,13 @@ function BlockRow({
                   : "border-line-strong hover:border-ink-faint"
             }`}
           >
+            {/* A 16px dot is the right SIZE and the wrong TARGET — a thumb
+                misses it. This invisible pad grows the tap area to 40px
+                without moving the dot. The inset is measured from the padding
+                box, inside the 2px border, so 3.5 (14px) is what reaches 40 —
+                exactly the rail's 12px gap, so the card keeps every click of
+                its own, and the 58px row pitch keeps 18px between targets. */}
+            <span aria-hidden className="absolute -inset-3.5" />
             {block.done && <Check size={10} strokeWidth={3.5} />}
           </button>
         )}
