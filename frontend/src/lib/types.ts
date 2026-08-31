@@ -161,8 +161,8 @@ export interface PlanDay {
   date: string;
   /** The user's logical today, so the client can label the day it shows. */
   today: string;
-  /** The most recent earlier day that has a plan, or null. */
-  lastPlannedDate: string | null;
+  /** Days that already have a plan, most recent first — what a copy can draw from. */
+  plannedDates: string[];
   blocks: PlanBlock[];
 }
 

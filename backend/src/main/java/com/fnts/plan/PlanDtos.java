@@ -16,6 +16,8 @@ public class PlanDtos {
     public static final int LAST_MINUTE = 1439;
     /** A day only holds so many lines; the cap keeps one user's day bounded. */
     public static final int MAX_BLOCKS_PER_DAY = 60;
+    /** How far back the "copy another day" picker reaches. */
+    public static final int MAX_COPY_SOURCES = 60;
 
     public record BlockRequest(
             @NotBlank @Size(max = 120) String title,
@@ -57,8 +59,8 @@ public class PlanDtos {
             LocalDate date,
             /** The user's logical today, so the client can label the day it shows. */
             LocalDate today,
-            /** The most recent earlier day that has a plan, or null. */
-            LocalDate lastPlannedDate,
+            /** Days that already have a plan, most recent first — copy sources. */
+            List<LocalDate> plannedDates,
             List<BlockResponse> blocks) {}
 
     public static BlockResponse toResponse(PlanBlock block) {
