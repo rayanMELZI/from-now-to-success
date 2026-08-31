@@ -62,8 +62,30 @@ export async function clearCachedData(): Promise<void> {
   }
 }
 
+/**
+ * The refresh currently in flight, if any. Pages fire several requests at
+ * once, so when a 15-minute access token expires they ALL come back 401 at
+ * the same moment — and each one used to start its own refresh.
+ *
+ * That is worse than wasteful. Refresh tokens rotate: the first refresh
+ * revokes the cookie it was given, so the second one presents a token that
+ * has just been revoked, which the server correctly reads as a stolen-token
+ * replay and answers by revoking every session the account has. The user is
+ * thrown back to the login screen for doing nothing but opening a page.
+ *
+ * One refresh at a time; everybody waits on the same answer.
+ */
+let refreshing: Promise<UserInfo | null> | null = null;
+
 /** Try to get a fresh access token from the refresh cookie. */
-export async function tryRefresh(): Promise<UserInfo | null> {
+export function tryRefresh(): Promise<UserInfo | null> {
+  refreshing ??= runRefresh().finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
+}
+
+async function runRefresh(): Promise<UserInfo | null> {
   const res = await send("/api/auth/refresh", { method: "POST" });
   if (!res.ok) return null;
   const data: AuthPayload = await res.json();
@@ -85,12 +107,20 @@ export async function api<T>(
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     });
 
+  const tokenUsed = accessToken;
   let res = await doFetch();
 
-  // Expired access token? Refresh once and retry the original request.
+  // Expired access token? Refresh once and retry the original request —
+  // unless another request already replaced the token while this one was in
+  // the air, in which case retrying with the new one is enough. Every refresh
+  // rotates the cookie, so the ones we can skip are worth skipping.
   if (res.status === 401 && !path.startsWith("/api/auth/")) {
-    const user = await tryRefresh();
-    if (user) res = await doFetch();
+    if (accessToken !== tokenUsed) {
+      res = await doFetch();
+    } else {
+      const user = await tryRefresh();
+      if (user) res = await doFetch();
+    }
   }
 
   if (!res.ok) {
