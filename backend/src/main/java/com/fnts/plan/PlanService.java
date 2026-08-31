@@ -6,6 +6,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -173,7 +174,8 @@ public class PlanService {
         return new PlanDayResponse(
                 date,
                 Periods.logicalToday(user),
-                blockRepository.findLastPlannedDateBefore(user.getId(), date).orElse(null),
+                blockRepository.findPlannedDates(user.getId(), date,
+                        PageRequest.of(0, PlanDtos.MAX_COPY_SOURCES)),
                 blocks);
     }
 

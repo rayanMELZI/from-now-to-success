@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -21,9 +22,15 @@ public interface PlanBlockRepository extends JpaRepository<PlanBlock, Long> {
     /** The user's own blocks among a set of ids — anyone else's simply miss. */
     List<PlanBlock> findByIdInAndUserId(Collection<Long> ids, Long userId);
 
-    /** The last day the user actually planned — the one worth copying from. */
-    @Query("select max(b.planDate) from PlanBlock b "
-            + "where b.user.id = :userId and b.planDate < :before")
-    Optional<LocalDate> findLastPlannedDateBefore(@Param("userId") Long userId,
-                                                  @Param("before") LocalDate before);
+    /**
+     * Every day the user has actually planned, most recent first — the days
+     * worth copying from. Later days count too: a routine written for tomorrow
+     * is as good a source as yesterday's.
+     */
+    @Query("select b.planDate from PlanBlock b "
+            + "where b.user.id = :userId and b.planDate <> :exclude "
+            + "group by b.planDate order by b.planDate desc")
+    List<LocalDate> findPlannedDates(@Param("userId") Long userId,
+                                     @Param("exclude") LocalDate exclude,
+                                     Pageable pageable);
 }

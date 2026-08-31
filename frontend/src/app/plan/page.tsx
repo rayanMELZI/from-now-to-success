@@ -90,6 +90,14 @@ function dayLabel(iso: string, today: string): string {
   });
 }
 
+/** "30 Aug" — pins a relative label to an actual date. */
+function shortDate(iso: string): string {
+  return parseIso(iso).toLocaleDateString(DATE_LOCALE, {
+    day: "numeric",
+    month: "short",
+  });
+}
+
 /** Everything finishing at the same minute, drawn as one attached stack. */
 interface Slot {
   endMinute: number;
@@ -453,7 +461,8 @@ function PlanPage() {
         <div className="min-w-0">
         {blocks.length === 0 ? (
           <EmptyDay
-            lastPlannedDate={day.lastPlannedDate}
+            plannedDates={day.plannedDates}
+            date={day.date}
             today={day.today}
             busy={busy}
             onCopy={copyFrom}
@@ -627,16 +636,31 @@ function PlannerOff() {
 
 /** A day with nothing on it yet — and the fastest way out of that. */
 function EmptyDay({
-  lastPlannedDate,
+  plannedDates,
+  date,
   today,
   busy,
   onCopy,
 }: {
-  lastPlannedDate: string | null;
+  /** Every day that has a plan, most recent first. */
+  plannedDates: string[];
+  /** The empty day being looked at — never a source for itself. */
+  date: string;
   today: string;
   busy: boolean;
   onCopy: (from: string) => void;
 }) {
+  // Yesterday is the usual answer, so it is the one already chosen: the most
+  // recent day BEFORE this one, falling back to the nearest later day for
+  // someone filling in a gap behind a week they have already written.
+  const nearest =
+    plannedDates.find((d) => d < date) ?? plannedDates[plannedDates.length - 1];
+  const [source, setSource] = useState(nearest ?? "");
+
+  // The list reloads when the day does; a source that is no longer on it
+  // (the day it named just got emptied) must not leave the picker stuck.
+  const chosen = plannedDates.includes(source) ? source : (nearest ?? "");
+
   return (
     <div className="mb-6 rounded-2xl border border-dashed border-line-strong p-6 text-center">
       <CalendarDays size={28} className="mx-auto text-ink-faint" />
@@ -652,15 +676,35 @@ function EmptyDay({
         <br />
         (12:20) Write dailies
       </p>
-      {lastPlannedDate && (
-        <button
-          onClick={() => onCopy(lastPlannedDate)}
-          disabled={busy}
-          className="btn btn-ghost mt-4"
-        >
-          <Copy size={14} />
-          Copy {dayLabel(lastPlannedDate, today).toLowerCase()}&apos;s plan
-        </button>
+      {chosen && (
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+          <button
+            onClick={() => onCopy(chosen)}
+            disabled={busy}
+            className="btn btn-ghost"
+          >
+            <Copy size={14} />
+            Copy this day
+          </button>
+          {/* Any day that has a plan can be the source, not just the last one:
+              a Monday routine is worth more next Monday than yesterday is. */}
+          <select
+            value={chosen}
+            onChange={(e) => setSource(e.target.value)}
+            disabled={busy}
+            aria-label="Which day to copy from"
+            className="field w-auto py-2 text-xs"
+          >
+            {plannedDates.map((d) => (
+              <option key={d} value={d}>
+                {dayLabel(d, today)}
+                {daysBetween(today, d) >= -1 && daysBetween(today, d) <= 1
+                  ? ` · ${shortDate(d)}`
+                  : ""}
+              </option>
+            ))}
+          </select>
+        </div>
       )}
     </div>
   );
