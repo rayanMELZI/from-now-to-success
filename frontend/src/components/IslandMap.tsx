@@ -148,8 +148,9 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
   const { habit, selected } = data;
   const locked = habit.status === "LOCKED";
   const valid = habit.status === "VALID";
-  // A validated island drifting back down: it stops being green and starts
-  // asking for a day of attention.
+  // A validated island drifting back down. It keeps a validated habit's green
+  // so the whole validated set still reads as one colour at a glance — only
+  // drained, with the warning triangle saying which ones are running out.
   const risk = habitRisk(habit);
   const pct = habit.requiredStreak > 0
     ? Math.min(100, (habit.gauge / habit.requiredStreak) * 100)
@@ -166,7 +167,7 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
             : risk === "critical"
               ? "border-rose-500 shadow-md shadow-rose-200/70 dark:shadow-rose-950"
               : risk === "caution"
-                ? "border-amber-600"
+                ? "border-emerald-600/35"
                 : valid
                   ? "border-emerald-700/60"
                   : "border-amber-800/50"
@@ -179,9 +180,11 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
           className={`absolute inset-x-0 bottom-0 transition-all duration-700 ${
             risk === "critical"
               ? "bg-rose-300/70"
-              : valid && !risk
-                ? "bg-emerald-300/60"
-                : "bg-amber-300/60"
+              : risk === "caution"
+                ? "bg-emerald-200/45"
+                : valid
+                  ? "bg-emerald-300/60"
+                  : "bg-amber-300/60"
           }`}
           style={{ height: `${pct}%` }}
         />
