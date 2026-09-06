@@ -61,7 +61,10 @@ export function FeedbackButton() {
         className="flex items-center gap-1.5 rounded-full border border-line-strong px-2.5 py-1.5 text-xs font-medium text-ink-soft transition-colors hover:bg-surface-sunken hover:text-ink sm:px-3"
       >
         <MessageSquarePlus size={15} />
-        Feedback
+        {/* On a folded Galaxy (280px) the word is what tips the header row
+            past the screen. It is the first thing to go and the only thing
+            that goes; aria-label and title still name the button. */}
+        <span className="max-[300px]:hidden">Feedback</span>
       </button>
 
       <Modal open={open} onClose={close}>
