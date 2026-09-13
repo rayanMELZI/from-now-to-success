@@ -20,7 +20,13 @@ public class CheckinDtos {
             @Size(max = 500) String reason,
             Boolean freeze) {}
 
-    public record CheckinRequest(@NotEmpty List<Entry> entries) {}
+    /**
+     * {@code forDate} is the logical day the answers belong to, for check-ins
+     * that were made offline and queued: the client stamps the day it asked
+     * the question, because by the time the queue drains the server's "today"
+     * may have rolled on. Absent (the online path) means today.
+     */
+    public record CheckinRequest(@NotEmpty List<Entry> entries, LocalDate forDate) {}
 
     /** One habit's row on the check-in screen. */
     public record TodayEntry(
@@ -71,6 +77,8 @@ public class CheckinDtos {
             List<TimerEntry> timers) {}
 
     public record CheckinResult(
+            /** The logical day these answers landed on — echoed for late replays. */
+            LocalDate date,
             int earnedPoints,
             int totalPoints,
             int level,

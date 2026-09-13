@@ -2,7 +2,9 @@ package com.fnts.checkin;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 
 import com.fnts.habit.Habit;
 import com.fnts.habit.HabitStatus;
@@ -99,6 +101,55 @@ public final class GameRules {
             }
         }
         return new DayResult(penalty, false);
+    }
+
+    /**
+     * Recomputes a daily habit's derived state by folding its entire log
+     * history from scratch, and returns the correction owed to the user's
+     * total points.
+     *
+     * A check-in that was queued offline rewrites a day the game has already
+     * counted, and the effect of a miss cannot be undone in place: a gauge
+     * clamped at 0 and a streak reset to 0 have both forgotten what they
+     * were. The logs are the complete record for a daily habit — the catch-up
+     * fills every unanswered day — so folding them is the only way to reach
+     * the state the user would have had if the answer had arrived on time.
+     *
+     * Only the days in {@code rewritten} have their stored points corrected.
+     * Everything earlier keeps the points it was actually paid: basePoints
+     * and requiredStreak are editable, so re-deriving old days at today's
+     * settings would silently restate history the user has already banked.
+     *
+     * @param logsInDateOrder every log of this habit, oldest first
+     * @param rewritten       the days this request answered late
+     * @return points to add to the user's total (may be negative)
+     */
+    public static int replayDaily(Habit habit, List<HabitLog> logsInDateOrder,
+                                  Set<LocalDate> rewritten) {
+        habit.setGauge(0);
+        habit.setCurrentStreak(0);
+        habit.setBestStreak(0);
+        habit.setConsecutiveMisses(0);
+        habit.setStatus(HabitStatus.ACTIVE);
+
+        int delta = 0;
+        for (HabitLog log : logsInDateOrder) {
+            DayResult result = log.getStatus() == HabitLog.Status.DONE
+                    ? applyDone(habit)
+                    : applyMiss(habit, isExcused(log), log.isFrozen());
+
+            if (rewritten.contains(log.getLogDate())) {
+                delta += result.points() - log.getPointsAwarded();
+                log.setPointsAwarded(result.points());
+            }
+        }
+        return delta;
+    }
+
+    /** A miss with a written reason costs half — the record of that is the text. */
+    private static boolean isExcused(HabitLog log) {
+        return log.getStatus() == HabitLog.Status.MISSED
+                && log.getReason() != null && !log.getReason().isBlank();
     }
 
     /* ---------- timer habits ---------- */

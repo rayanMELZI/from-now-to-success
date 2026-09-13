@@ -127,6 +127,8 @@ export interface TimerRun {
 }
 
 export interface CheckinResult {
+  /** The logical day the answers landed on — echoed back for late replays. */
+  date: string;
   earnedPoints: number;
   totalPoints: number;
   level: number;

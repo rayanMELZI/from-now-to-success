@@ -15,6 +15,9 @@ public interface HabitLogRepository extends JpaRepository<HabitLog, Long> {
 
     Optional<HabitLog> findTopByHabitIdOrderByLogDateDesc(Long habitId);
 
+    /** The habit's whole record, oldest first — the input to a replay. */
+    List<HabitLog> findByHabitIdOrderByLogDateAsc(Long habitId);
+
     boolean existsByHabitIdAndLogDate(Long habitId, LocalDate logDate);
 
     List<HabitLog> findByHabitIdInAndLogDate(List<Long> habitIds, LocalDate logDate);
