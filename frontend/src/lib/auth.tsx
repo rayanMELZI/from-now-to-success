@@ -11,6 +11,7 @@ import {
 import { useRouter } from "next/navigation";
 import * as apiClient from "./api";
 import { recallUser, rememberUser } from "./offline";
+import { clearOutbox } from "./outbox";
 import type { UserInfo } from "./types";
 
 interface AuthState {
@@ -67,6 +68,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await apiClient.logout();
+    // Answers queued by this account must never be sent as the next one.
+    clearOutbox();
     rememberUser(null);
     setUser(null);
     router.push("/login");

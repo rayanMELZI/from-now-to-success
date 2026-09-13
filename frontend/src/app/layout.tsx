@@ -7,6 +7,7 @@ import { OnboardingProvider } from "@/lib/onboarding";
 import { Nav } from "@/components/Nav";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { RegisterSW } from "@/components/RegisterSW";
+import { OutboxSync } from "@/components/OutboxSync";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -56,6 +57,7 @@ export default function RootLayout({
           <AuthProvider>
             <OnboardingProvider>
               <RegisterSW />
+              <OutboxSync />
               <div className="sticky top-0 z-40">
                 <OfflineBanner />
                 <Nav />

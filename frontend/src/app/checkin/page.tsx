@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, isOfflineError } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
+import { enqueue, logicalToday, usePendingCount } from "@/lib/outbox";
 import {
   formatClock,
   formatDuration,
@@ -260,8 +261,45 @@ function TodaySummary({
   );
 }
 
+/**
+ * What a row should say once it has been answered offline. Only the status
+ * moves: the gauge, the streak and the points belong to the server, and
+ * guessing them here is how the two copies would start to disagree.
+ */
+function answeredLocally(
+  today: TodayResponse,
+  habitId: number,
+  done: boolean,
+  freeze: boolean,
+): TodayResponse {
+  return {
+    ...today,
+    entries: today.entries.map((entry) => {
+      if (entry.habitId !== habitId) return entry;
+      if (entry.schedule === "DAILY") {
+        return {
+          ...entry,
+          todayStatus: done ? "DONE" : freeze ? "FROZEN" : "MISSED",
+        };
+      }
+      // A weekly or monthly habit is only finished once the period's target
+      // is met; before that the day is done but the period is not.
+      const doneThisPeriod = done ? entry.doneThisPeriod + 1 : entry.doneThisPeriod;
+      return {
+        ...entry,
+        doneThisPeriod,
+        todayStatus: !done
+          ? "FROZEN"
+          : doneThisPeriod >= entry.timesPerPeriod
+            ? "DONE"
+            : "DONE_TODAY",
+      };
+    }),
+  };
+}
+
 function CheckinPage() {
-  const { refreshUser } = useAuth();
+  const { refreshUser, user } = useAuth();
   const [today, setToday] = useState<TodayResponse | null>(null);
   const [missDraft, setMissDraft] = useState<MissDraft | null>(null);
   const [fallDraft, setFallDraft] = useState<FallDraft | null>(null);
@@ -320,6 +358,19 @@ function CheckinPage() {
     reload();
   }, [reload]);
 
+  // An answer made offline shows only as answered; the gauge, the streak and
+  // the points arrive with the sync. Reload the moment the queue empties so
+  // the screen stops being a promise and becomes the real thing.
+  const waiting = usePendingCount();
+  const wasWaiting = useRef(0);
+  useEffect(() => {
+    if (wasWaiting.current > 0 && waiting === 0) {
+      reload();
+      refreshUser();
+    }
+    wasWaiting.current = waiting;
+  }, [waiting, reload, refreshUser]);
+
   const timers = useMemo(() => today?.timers ?? [], [today]);
   const hasTimers = timers.length > 0;
 
@@ -365,7 +416,23 @@ function CheckinPage() {
       setMissDraft(null);
       await Promise.all([reload(), refreshUser()]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      // Nothing reached the server: hold the answer rather than lose it. The
+      // day is stamped here, because the queue may not drain until after
+      // midnight and the server would otherwise credit the wrong one.
+      if (isOfflineError(err) && today && user) {
+        enqueue({
+          habitId,
+          done,
+          reason: reason || undefined,
+          freeze,
+          forDate: logicalToday(user),
+        });
+        setToday(answeredLocally(today, habitId, done, Boolean(freeze)));
+        setMissDraft(null);
+        setResult(null);
+      } else {
+        setError(err instanceof Error ? err.message : "Something went wrong");
+      }
     } finally {
       setBusyId(null);
     }
