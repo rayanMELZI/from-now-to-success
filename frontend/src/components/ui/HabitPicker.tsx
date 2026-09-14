@@ -23,7 +23,8 @@ interface HabitPickerProps {
   dimmed?: (habit: Habit) => boolean;
   /**
    * Habits the user set aside: still pickable, but greyed and listed after
-   * the rest. Needs `onToggleMuted` to draw the eye that flips it.
+   * the rest. Needs `onToggleMuted` to draw the eye that flips it — the eye
+   * only exists in list mode, so pass `searchThreshold={0}` alongside.
    */
   muted?: (habit: Habit) => boolean;
   onToggleMuted?: (habit: Habit) => void;
@@ -81,7 +82,7 @@ export function HabitPicker({
   const isMuted = (habit: Habit) => muted?.(habit) ?? false;
 
   /** The eye that sets a habit aside or brings it back. */
-  const muteControl = (habit: Habit, className: string) =>
+  const muteControl = (habit: Habit) =>
     onToggleMuted && muted ? (
       <button
         type="button"
@@ -93,9 +94,9 @@ export function HabitPicker({
             : `Set ${habit.name} aside at the bottom of the list`
         }
         title={isMuted(habit) ? "Bring it back up the list" : "Set aside at the bottom"}
-        className={`flex shrink-0 items-center justify-center text-ink-faint transition-opacity hover:text-ink ${
+        className={`flex shrink-0 items-center justify-center self-stretch px-3 text-ink-faint transition-opacity hover:text-ink ${
           isMuted(habit) ? "" : "opacity-40 hover:opacity-100"
-        } ${className}`}
+        }`}
       >
         {isMuted(habit) ? <EyeOff size={13} /> : <Eye size={13} />}
       </button>
@@ -124,7 +125,6 @@ export function HabitPicker({
             dim={(dimmed?.(habit) ?? false) || isMuted(habit)}
             meta={meta?.(habit)}
             onClick={() => onToggle(habit)}
-            control={muteControl(habit, "rounded-r-full px-2")}
           />
         ))}
       </div>
@@ -205,7 +205,7 @@ export function HabitPicker({
             const dim = (dimmed?.(habit) ?? false) || aside;
             // The first set-aside row opens the "set aside" tail of the list.
             const firstAside = aside && index > 0 && !isMuted(matches[index - 1]);
-            const control = muteControl(habit, "self-stretch px-3");
+            const control = muteControl(habit);
             return (
               <div
                 key={habit.id}
@@ -252,47 +252,27 @@ function HabitPill({
   dim,
   meta,
   onClick,
-  control,
 }: {
   habit: Habit;
   on: boolean;
   dim: boolean;
   meta: ReactNode;
   onClick: () => void;
-  /** A second button docked to the pill's right edge — the set-aside eye. */
-  control?: ReactNode;
 }) {
-  const pill = (
+  return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={on}
-      className={`flex items-center gap-1.5 py-1.5 pl-3 text-xs font-medium transition-all ${
-        control ? "pr-2" : "rounded-full border pr-3"
-      } ${
+      className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
         on
-          ? control
-            ? "text-accent-ink"
-            : "border-accent bg-accent-soft text-accent-ink"
-          : control
-            ? "text-ink-soft"
-            : "border-line-strong text-ink-soft hover:border-ink-faint"
+          ? "border-accent bg-accent-soft text-accent-ink"
+          : "border-line-strong text-ink-soft hover:border-ink-faint"
       } ${dim && !on ? "opacity-50" : ""}`}
     >
       {on ? <Check size={11} strokeWidth={3.5} /> : <HabitIcon habit={habit} size={11} />}
       <span className="max-w-44 truncate">{habit.name}</span>
       {meta}
     </button>
-  );
-  if (!control) return pill;
-  return (
-    <span
-      className={`flex items-stretch rounded-full border transition-colors ${
-        on ? "border-accent bg-accent-soft" : "border-line-strong hover:border-ink-faint"
-      }`}
-    >
-      {pill}
-      {control}
-    </span>
   );
 }

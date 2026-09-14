@@ -1211,6 +1211,10 @@ function BlockFields({
             onToggle={pickHabit}
             ariaLabel="Habits you can plan"
             placeholder="Search a habit to plan…"
+            // Always the list, however few habits there are: the set-aside
+            // eye lives on its rows, and a set-aside habit needs a bottom to
+            // sink to.
+            searchThreshold={0}
             dimmed={(habit) => plannedHabitIds?.includes(habit.id) ?? false}
             muted={(habit) => habit.plannerMuted}
             onToggleMuted={onToggleMuted}
