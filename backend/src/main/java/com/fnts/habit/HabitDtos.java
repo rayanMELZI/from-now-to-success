@@ -33,6 +33,9 @@ public class HabitDtos {
     /** The user's habit ids in the exact order they want to see them. */
     public record ReorderRequest(@NotEmpty List<@NotNull Long> habitIds) {}
 
+    /** Whether a habit is set aside in the plan picker. */
+    public record PlannerMuteRequest(@NotNull Boolean muted) {}
+
     public record HabitResponse(
             Long id,
             String name,
@@ -53,6 +56,7 @@ public class HabitDtos {
             int consecutiveMisses,
             LocalDate startDate,
             int sortOrder,
+            boolean plannerMuted,
             List<Long> prerequisiteIds) {}
 
     public static HabitResponse toResponse(Habit habit) {
@@ -76,6 +80,7 @@ public class HabitDtos {
                 habit.getConsecutiveMisses(),
                 habit.getStartDate(),
                 habit.getSortOrder(),
+                habit.isPlannerMuted(),
                 habit.getPrerequisites().stream().map(Habit::getId).sorted().toList());
     }
 

@@ -287,6 +287,28 @@ function PlanPage() {
   }
 
   /**
+   * Setting a habit aside is a preference, not a plan change: it lands on
+   * screen at once and only bounces back if the server refuses it.
+   */
+  async function toggleMuted(habit: Habit) {
+    const muted = !habit.plannerMuted;
+    const patch = (value: boolean) =>
+      setHabits((current) =>
+        current.map((h) => (h.id === habit.id ? { ...h, plannerMuted: value } : h)),
+      );
+    patch(muted);
+    try {
+      await api<Habit>(`/api/habits/${habit.id}/planner-muted`, {
+        method: "PUT",
+        body: { muted },
+      });
+    } catch (err) {
+      patch(!muted);
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    }
+  }
+
+  /**
    * Ticking a block off is the answer to its habit's daily question, so it
    * counts right there — a planned habit should never have to be ticked twice.
    * Only ever on today's plan, and only for a habit still unanswered: the
@@ -593,6 +615,7 @@ function PlanPage() {
                             saveBlock(block.id, title, endMinute, habitId)
                           }
                           onDelete={() => removeBlock(block.id)}
+                          onToggleMuted={toggleMuted}
                         />
                       ))}
                     </div>
@@ -644,6 +667,7 @@ function PlanPage() {
             .map((b) => b.habitId)
             .filter((id): id is number => id !== null)}
           onAdd={addBlock}
+          onToggleMuted={toggleMuted}
         />
         )}
       </div>
@@ -813,6 +837,7 @@ function BlockRow({
   onCancelEdit,
   onSave,
   onDelete,
+  onToggleMuted,
 }: {
   block: PlanBlock;
   current: boolean;
@@ -834,6 +859,7 @@ function BlockRow({
   onCancelEdit: () => void;
   onSave: (title: string, endMinute: number, habitId: number | null) => void;
   onDelete: () => void;
+  onToggleMuted: (habit: Habit) => void;
 }) {
   const habit = habits.find((h) => h.id === block.habitId) ?? null;
   const checkedIn =
@@ -854,6 +880,7 @@ function BlockRow({
           submitLabel="Save"
           onSubmit={onSave}
           onCancel={onCancelEdit}
+          onToggleMuted={onToggleMuted}
         />
       </div>
     );
@@ -1090,6 +1117,7 @@ function BlockFields({
   isToday,
   onSubmit,
   onCancel,
+  onToggleMuted,
 }: {
   habits: Habit[];
   initial?: PlanBlock;
@@ -1101,6 +1129,7 @@ function BlockFields({
   isToday?: boolean;
   onSubmit: (title: string, endMinute: number, habitId: number | null) => void;
   onCancel?: () => void;
+  onToggleMuted: (habit: Habit) => void;
 }) {
   const [time, setTime] = useState(
     formatMinute(initial?.endMinute ?? suggestedMinute ?? 8 * 60),
@@ -1183,6 +1212,8 @@ function BlockFields({
             ariaLabel="Habits you can plan"
             placeholder="Search a habit to plan…"
             dimmed={(habit) => plannedHabitIds?.includes(habit.id) ?? false}
+            muted={(habit) => habit.plannerMuted}
+            onToggleMuted={onToggleMuted}
             meta={(habit) =>
               pendingIds.has(habit.id) && habitId !== habit.id ? (
                 <span
@@ -1226,6 +1257,7 @@ function Composer({
   suggestedMinute,
   plannedHabitIds,
   onAdd,
+  onToggleMuted,
 }: {
   habits: Habit[];
   today: TodayResponse | null;
@@ -1234,6 +1266,7 @@ function Composer({
   suggestedMinute: number;
   plannedHabitIds: number[];
   onAdd: (title: string, endMinute: number, habitId: number | null) => void;
+  onToggleMuted: (habit: Habit) => void;
 }) {
   return (
     <div className="mt-2 flex gap-3 lg:mt-0 lg:block lg:sticky lg:top-20">
@@ -1251,6 +1284,7 @@ function Composer({
         today={today}
         isToday={isToday}
         onSubmit={onAdd}
+        onToggleMuted={onToggleMuted}
       />
     </div>
   );

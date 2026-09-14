@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.fnts.auth.CurrentUser;
 import com.fnts.habit.HabitDtos.HabitRequest;
 import com.fnts.habit.HabitDtos.HabitResponse;
+import com.fnts.habit.HabitDtos.PlannerMuteRequest;
 import com.fnts.habit.HabitDtos.ReorderRequest;
 
 import jakarta.validation.Valid;
@@ -54,6 +55,13 @@ public class HabitController {
     public List<HabitResponse> reorder(@AuthenticationPrincipal CurrentUser user,
                                        @Valid @RequestBody ReorderRequest request) {
         return habitService.reorder(user.id(), request.habitIds());
+    }
+
+    @PutMapping("/{id}/planner-muted")
+    public HabitResponse setPlannerMuted(@AuthenticationPrincipal CurrentUser user,
+                                         @PathVariable Long id,
+                                         @Valid @RequestBody PlannerMuteRequest request) {
+        return habitService.setPlannerMuted(user.id(), id, request.muted());
     }
 
     @DeleteMapping("/{id}")
