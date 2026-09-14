@@ -116,6 +116,10 @@ public class Habit {
     @Column(name = "sort_order", nullable = false)
     private int sortOrder = 0;
 
+    /** Set aside in the plan picker: still pickable, but greyed and listed last. */
+    @Column(name = "planner_muted", nullable = false)
+    private boolean plannerMuted = false;
+
     /**
      * Read for every habit of every listing — the roadmap, the lock sync, the
      * cycle check. Left one collection at a time that is one SELECT per habit;

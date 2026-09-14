@@ -134,6 +134,15 @@ public class HabitService {
         return HabitDtos.toResponse(habit);
     }
 
+    /** Sets a habit aside in the plan picker, or brings it back. */
+    @Transactional
+    public HabitResponse setPlannerMuted(Long userId, Long habitId, boolean muted) {
+        Habit habit = habitRepository.findByIdAndUserId(habitId, userId)
+                .orElseThrow(() -> ApiException.notFound("Habit not found"));
+        habit.setPlannerMuted(muted);
+        return HabitDtos.toResponse(habit);
+    }
+
     /**
      * Applies a user-chosen order. The request may cover only part of the
      * habits (the check-in list hides LOCKED ones), so the moved habits take

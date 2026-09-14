@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Ban, Check, Search, Sprout, TimerReset, X } from "lucide-react";
+import { Ban, Check, Eye, EyeOff, Search, Sprout, TimerReset, X } from "lucide-react";
 import type { Habit } from "@/lib/types";
 
 /** The little icon that says what kind of habit this is, at a glance. */
@@ -21,6 +21,13 @@ interface HabitPickerProps {
   meta?: (habit: Habit) => ReactNode;
   /** Draws a habit back without disabling it. */
   dimmed?: (habit: Habit) => boolean;
+  /**
+   * Habits the user set aside: still pickable, but greyed and listed after
+   * the rest. Needs `onToggleMuted` to draw the eye that flips it — the eye
+   * only exists in list mode, so pass `searchThreshold={0}` alongside.
+   */
+  muted?: (habit: Habit) => boolean;
+  onToggleMuted?: (habit: Habit) => void;
   /** Below this many habits the list is skipped for one-tap pills. */
   searchThreshold?: number;
   placeholder?: string;
@@ -43,6 +50,8 @@ export function HabitPicker({
   onToggle,
   meta,
   dimmed,
+  muted,
+  onToggleMuted,
   searchThreshold = 6,
   placeholder = "Search your habits…",
   emptyLabel,
@@ -57,11 +66,41 @@ export function HabitPicker({
     [habits, selectedIds],
   );
 
+  // Set-aside habits sink to the bottom but keep their order among themselves,
+  // so the ones the user reaches for stay where they expect them.
+  const ordered = useMemo(() => {
+    if (!muted) return habits;
+    return [...habits.filter((h) => !muted(h)), ...habits.filter((h) => muted(h))];
+  }, [habits, muted]);
+
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return habits;
-    return habits.filter((h) => h.name.toLowerCase().includes(q));
-  }, [habits, query]);
+    if (!q) return ordered;
+    return ordered.filter((h) => h.name.toLowerCase().includes(q));
+  }, [ordered, query]);
+
+  const isMuted = (habit: Habit) => muted?.(habit) ?? false;
+
+  /** The eye that sets a habit aside or brings it back. */
+  const muteControl = (habit: Habit) =>
+    onToggleMuted && muted ? (
+      <button
+        type="button"
+        onClick={() => onToggleMuted(habit)}
+        aria-pressed={isMuted(habit)}
+        aria-label={
+          isMuted(habit)
+            ? `Bring ${habit.name} back up the list`
+            : `Set ${habit.name} aside at the bottom of the list`
+        }
+        title={isMuted(habit) ? "Bring it back up the list" : "Set aside at the bottom"}
+        className={`flex shrink-0 items-center justify-center self-stretch px-3 text-ink-faint transition-opacity hover:text-ink ${
+          isMuted(habit) ? "" : "opacity-40 hover:opacity-100"
+        }`}
+      >
+        {isMuted(habit) ? <EyeOff size={13} /> : <Eye size={13} />}
+      </button>
+    ) : null;
 
   // Keep the highlighted row in view as the arrows walk past the fold.
   useEffect(() => {
@@ -78,12 +117,12 @@ export function HabitPicker({
   if (habits.length <= searchThreshold) {
     return (
       <div className="flex flex-wrap gap-1.5" role="group" aria-label={ariaLabel}>
-        {habits.map((habit) => (
+        {ordered.map((habit) => (
           <HabitPill
             key={habit.id}
             habit={habit}
             on={selectedIds.includes(habit.id)}
-            dim={dimmed?.(habit) ?? false}
+            dim={(dimmed?.(habit) ?? false) || isMuted(habit)}
             meta={meta?.(habit)}
             onClick={() => onToggle(habit)}
           />
@@ -162,31 +201,42 @@ export function HabitPicker({
         ) : (
           matches.map((habit, index) => {
             const on = selectedIds.includes(habit.id);
-            const dim = dimmed?.(habit) ?? false;
+            const aside = isMuted(habit);
+            const dim = (dimmed?.(habit) ?? false) || aside;
+            // The first set-aside row opens the "set aside" tail of the list.
+            const firstAside = aside && index > 0 && !isMuted(matches[index - 1]);
+            const control = muteControl(habit);
             return (
-              <button
+              <div
                 key={habit.id}
-                type="button"
-                role="option"
-                aria-selected={on}
                 data-active={index === active}
                 onMouseEnter={() => setActive(index)}
-                onClick={() => onToggle(habit)}
-                className={`flex w-full items-center gap-2 border-b border-line px-3 py-2.5 text-left text-sm transition-colors last:border-b-0 ${
+                className={`flex items-stretch border-b border-line transition-colors last:border-b-0 ${
                   index === active ? "bg-surface-sunken" : ""
-                } ${dim && !on ? "opacity-50" : ""}`}
+                } ${firstAside ? "border-t border-t-line-strong" : ""}`}
               >
-                <span
-                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
-                    on ? "border-accent bg-accent text-white" : "border-line-strong"
-                  }`}
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={on}
+                  onClick={() => onToggle(habit)}
+                  className={`flex min-w-0 flex-1 items-center gap-2 py-2.5 pl-3 text-left text-sm ${
+                    control ? "pr-1" : "pr-3"
+                  } ${dim && !on ? "opacity-50" : ""}`}
                 >
-                  {on && <Check size={11} strokeWidth={3.5} />}
-                </span>
-                <HabitIcon habit={habit} />
-                <span className="min-w-0 flex-1 truncate">{habit.name}</span>
-                {meta?.(habit)}
-              </button>
+                  <span
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                      on ? "border-accent bg-accent text-white" : "border-line-strong"
+                    }`}
+                  >
+                    {on && <Check size={11} strokeWidth={3.5} />}
+                  </span>
+                  <HabitIcon habit={habit} />
+                  <span className="min-w-0 flex-1 truncate">{habit.name}</span>
+                  {meta?.(habit)}
+                </button>
+                {control}
+              </div>
             );
           })
         )}

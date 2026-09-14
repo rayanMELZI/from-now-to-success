@@ -41,6 +41,8 @@ export interface Habit {
   consecutiveMisses: number;
   startDate: string;
   sortOrder: number;
+  /** Set aside in the plan picker: still pickable, but greyed and listed last. */
+  plannerMuted: boolean;
   prerequisiteIds: number[];
 }
 
