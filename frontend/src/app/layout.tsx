@@ -25,6 +25,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // Explicit, since this export replaces Next's own default meta tag rather
+  // than adding to it — omitting these leaves mobile browsers to guess a
+  // desktop-width layout and scale the whole page to fit.
+  width: "device-width",
+  initialScale: 1,
   // The browser/PWA chrome takes its colour from here, so it has to follow
   // the theme or a dark install gets a bright bar above a dark app.
   themeColor: [
