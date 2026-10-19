@@ -36,7 +36,7 @@ export function SkeletonPage({ cards = 4 }: { cards?: number }) {
     >
       <Skeleton className="h-7 w-48" />
       <Skeleton className="mt-2 h-4 w-64" />
-      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: cards }, (_, i) => (
           <SkeletonCard key={i} />
         ))}
