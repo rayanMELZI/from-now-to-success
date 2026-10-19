@@ -4,6 +4,8 @@ A habit tracker where your habits form a **roadmap**: basic habits unlock advanc
 ones. Do a habit enough days in a row and it becomes **valid**, opening the next
 cells on the map — from *now* to *success*.
 
+> Pilot check: this line was added by Claude Pilot to verify the setup.
+
 ## The rules
 
 - Every habit has a **gauge**: +1 per done day (capped at `requiredStreak`),
