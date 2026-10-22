@@ -293,7 +293,8 @@ public class CheckinService {
 
     /** Every unanswered past day of a daily habit becomes a MISSED log. */
     private int catchUpDaily(Habit habit, LocalDate today, LocalDate lastAnswered) {
-        LocalDate cursor = lastAnswered != null
+        // Days before the start date (locked, set aside) were never asked.
+        LocalDate cursor = lastAnswered != null && !lastAnswered.isBefore(habit.getStartDate())
                 ? lastAnswered.plusDays(1)
                 : habit.getStartDate();
         int penalties = 0;
@@ -318,9 +319,14 @@ public class CheckinService {
     private int catchUpPeriodic(Habit habit, LocalDate today, DayOfWeek weekStart) {
         HabitSchedule schedule = habit.getSchedule();
         LocalDate currentPeriod = Periods.periodStart(schedule, today, weekStart);
+        // Periods wholly before the start date (locked, set aside) were never asked.
+        LocalDate first = Periods.periodStart(schedule, habit.getStartDate(), weekStart);
         LocalDate cursor = habit.getLastEvaluatedPeriod() == null
-                ? Periods.periodStart(schedule, habit.getStartDate(), weekStart)
+                ? first
                 : Periods.nextPeriodStart(schedule, habit.getLastEvaluatedPeriod());
+        if (cursor.isBefore(first)) {
+            cursor = first;
+        }
 
         int penalties = 0;
         while (cursor.isBefore(currentPeriod)) {
