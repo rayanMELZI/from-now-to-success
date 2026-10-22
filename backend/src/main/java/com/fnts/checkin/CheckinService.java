@@ -370,8 +370,8 @@ public class CheckinService {
     }
 
     /** What a weekly/monthly habit has already logged inside its running period. */
-    private record PeriodCounts(int done, int missed) {
-        static final PeriodCounts NONE = new PeriodCounts(0, 0);
+    private record PeriodCounts(int done) {
+        static final PeriodCounts NONE = new PeriodCounts(0);
     }
 
     /**
@@ -392,8 +392,7 @@ public class CheckinService {
             LocalDate next = Periods.nextPeriodStart(group.getKey(), period);
             for (HabitLogRepository.PeriodCountRow row
                     : logRepository.countsInPeriod(group.getValue(), period, next)) {
-                byHabit.put(row.getHabitId(),
-                        new PeriodCounts((int) row.getDoneCount(), (int) row.getMissedCount()));
+                byHabit.put(row.getHabitId(), new PeriodCounts((int) row.getDoneCount()));
             }
         }
         return byHabit;
@@ -406,9 +405,7 @@ public class CheckinService {
         }
         LocalDate period = Periods.periodStart(habit.getSchedule(), today, weekStart);
         LocalDate next = Periods.nextPeriodStart(habit.getSchedule(), period);
-        return new PeriodCounts(
-                logRepository.countDoneInPeriod(habit.getId(), period, next),
-                logRepository.countMissedInPeriod(habit.getId(), period, next));
+        return new PeriodCounts(logRepository.countDoneInPeriod(habit.getId(), period, next));
     }
 
     private PeriodState periodState(Habit habit, HabitLog todayLog, PeriodCounts counts,
