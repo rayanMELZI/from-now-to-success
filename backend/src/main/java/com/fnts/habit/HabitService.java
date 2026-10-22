@@ -1,5 +1,6 @@
 package com.fnts.habit;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayDeque;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.fnts.checkin.GameRules;
 import com.fnts.checkin.Milestones;
+import com.fnts.checkin.Periods;
 import com.fnts.common.ApiException;
 import com.fnts.habit.HabitDtos.HabitRequest;
 import com.fnts.habit.HabitDtos.HabitResponse;
@@ -278,8 +280,12 @@ public class HabitService {
         if (request.basePoints() != null) {
             habit.setBasePoints(request.basePoints());
         }
+        HabitSchedule wasSchedule = habit.getSchedule();
         if (request.schedule() != null) {
             habit.setSchedule(request.schedule());
+        }
+        if (wasSchedule != null && wasSchedule != habit.getSchedule()) {
+            restartPeriods(habit);
         }
         if (request.habitType() != null) {
             habit.setHabitType(request.habitType());
@@ -337,6 +343,24 @@ public class HabitService {
                 toVisit.addAll(current.getPrerequisites());
             }
         }
+    }
+
+    /**
+     * A new rhythm is judged from its running period on: the periods behind
+     * it were already settled under the old one. Without this the catch-up
+     * would walk monthly steps from a week-start date (or a daily habit's
+     * nothing), and judge the past by rules it never ran under.
+     */
+    private void restartPeriods(Habit habit) {
+        if (habit.getSchedule() == HabitSchedule.DAILY) {
+            habit.setLastEvaluatedPeriod(null);
+            return;
+        }
+        User user = habit.getUser();
+        DayOfWeek weekStart = DayOfWeek.of(user.getWeekStartDay());
+        LocalDate current = Periods.periodStart(habit.getSchedule(), today(user), weekStart);
+        habit.setLastEvaluatedPeriod(
+                Periods.periodStart(habit.getSchedule(), current.minusDays(1), weekStart));
     }
 
     private LocalDate today(User user) {
