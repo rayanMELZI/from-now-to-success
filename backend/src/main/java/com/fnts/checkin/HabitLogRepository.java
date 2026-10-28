@@ -44,13 +44,6 @@ public interface HabitLogRepository extends JpaRepository<HabitLog, Long> {
 
     @Query("""
             SELECT COUNT(log) FROM HabitLog log
-            WHERE log.habit.id = :habitId AND log.status = 'MISSED'
-              AND log.logDate >= :from AND log.logDate < :toExclusive
-            """)
-    int countMissedInPeriod(Long habitId, LocalDate from, LocalDate toExclusive);
-
-    @Query("""
-            SELECT COUNT(log) FROM HabitLog log
             WHERE log.habit.id = :habitId AND log.status = 'DONE'
               AND log.logDate >= :from AND log.logDate < :toExclusive
             """)
@@ -70,14 +63,13 @@ public interface HabitLogRepository extends JpaRepository<HabitLog, Long> {
     }
 
     /**
-     * Both period tallies for a whole set of habits in one pass. Habits on the
+     * The period's done tally for a whole set of habits in one pass. Habits on the
      * same schedule share the same period bounds, so one call covers all the
      * weeklies and another all the monthlies.
      */
     @Query("""
             SELECT log.habit.id AS habitId,
-                   SUM(CASE WHEN log.status = 'DONE' THEN 1 ELSE 0 END) AS doneCount,
-                   SUM(CASE WHEN log.status = 'MISSED' THEN 1 ELSE 0 END) AS missedCount
+                   SUM(CASE WHEN log.status = 'DONE' THEN 1 ELSE 0 END) AS doneCount
             FROM HabitLog log
             WHERE log.habit.id IN :habitIds
               AND log.logDate >= :from AND log.logDate < :toExclusive
@@ -88,6 +80,5 @@ public interface HabitLogRepository extends JpaRepository<HabitLog, Long> {
     interface PeriodCountRow {
         Long getHabitId();
         long getDoneCount();
-        long getMissedCount();
     }
 }
