@@ -24,7 +24,9 @@ public class PlanDtos {
             /** When this is finished; the block runs from the end of the one before. */
             @NotNull @Min(0) @Max(LAST_MINUTE) Integer endMinute,
             /** The habit this block stands for; null for a plain block. */
-            Long habitId) {}
+            Long habitId,
+            /** The task this block stands for; null when it was not pulled from the list. */
+            Long taskId) {}
 
     public record DoneRequest(@NotNull Boolean done) {}
 
@@ -47,6 +49,7 @@ public class PlanDtos {
             Long habitId,
             /** The linked habit's current name — it may have been renamed since. */
             String habitName,
+            Long taskId,
             boolean done) {}
 
     /**
@@ -71,6 +74,7 @@ public class PlanDtos {
                 block.getTitle(),
                 block.getHabit() == null ? null : block.getHabit().getId(),
                 block.getHabit() == null ? null : block.getHabit().getName(),
+                block.getTask() == null ? null : block.getTask().getId(),
                 block.isDone());
     }
 
