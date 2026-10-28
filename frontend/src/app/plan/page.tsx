@@ -14,6 +14,7 @@ import {
   type PlanBlock,
   type PlanDay,
   type PlanShiftResult,
+  type Task,
   type TodayEntry,
   type TodayResponse,
 } from "@/lib/types";
@@ -25,15 +26,19 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  CircleCheckBig,
   ClipboardList,
   Copy,
   ListChecks,
+  PanelRightClose,
+  PanelRightOpen,
   Pencil,
   Plus,
   Sparkles,
   Trash2,
   X,
 } from "lucide-react";
+import { TaskQuickAdd, TaskRow, useTasks } from "@/components/Tasks";
 import { PageHeader, PageShell } from "@/components/ui/Page";
 import { HabitPicker } from "@/components/ui/HabitPicker";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -98,6 +103,17 @@ function shortDate(iso: string): string {
   });
 }
 
+/** A task on its way from the side panel into the composer. */
+interface TaskDraft {
+  taskId: number;
+  title: string;
+  /** Picking the same task twice must still refill a composer that was cleared. */
+  nonce: number;
+}
+
+/** Whether the tasks panel sits beside the plan — remembered per browser. */
+const TASKS_PANEL_KEY = "plan-tasks-panel";
+
 /** Everything finishing at the same minute, drawn as one attached stack. */
 interface Slot {
   endMinute: number;
@@ -152,6 +168,23 @@ function PlanPage() {
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // The tasks panel: only there when tasks are on, and even then the user's
+  // to show or hide. Lazy init reads the choice without a flash.
+  const tasksEnabled = user?.tasksEnabled ?? false;
+  const tasks = useTasks(tasksEnabled);
+  const [panelOpen, setPanelOpen] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem(TASKS_PANEL_KEY) !== "0";
+  });
+  const [draft, setDraft] = useState<TaskDraft | null>(null);
+  const showPanel = tasksEnabled && panelOpen;
+
+  function togglePanel() {
+    const next = !panelOpen;
+    setPanelOpen(next);
+    localStorage.setItem(TASKS_PANEL_KEY, next ? "1" : "0");
+  }
 
   // The "now" line only moves once a minute — no need to tick any faster.
   const [nowMinute, setNowMinute] = useState(() => {
@@ -258,12 +291,17 @@ function PlanPage() {
     return run(() => load(date));
   };
 
-  async function addBlock(title: string, endMinute: number, habitId: number | null) {
+  async function addBlock(
+    title: string,
+    endMinute: number,
+    habitId: number | null,
+    taskId: number | null,
+  ) {
     if (!day) return;
     await run(async () => {
       await api<PlanBlock>(`/api/plan?date=${day.date}`, {
         method: "POST",
-        body: { title, endMinute, habitId },
+        body: { title, endMinute, habitId, taskId },
       });
       await load(day.date);
     });
@@ -274,12 +312,13 @@ function PlanPage() {
     title: string,
     endMinute: number,
     habitId: number | null,
+    taskId: number | null,
   ) {
     if (!day) return;
     await run(async () => {
       await api<PlanBlock>(`/api/plan/${id}`, {
         method: "PUT",
-        body: { title, endMinute, habitId },
+        body: { title, endMinute, habitId, taskId },
       });
       await load(day.date);
       setEditingId(null);
@@ -334,6 +373,8 @@ function PlanPage() {
         body: { done },
       });
       patchBlock(block.id, saved);
+      // The task ticked along with its line; the panel catches up.
+      if (block.taskId !== null && tasksEnabled) void tasks.reload();
     } catch (err) {
       // The server never took it, so neither do we.
       patchBlock(block.id, { done: block.done });
@@ -446,6 +487,17 @@ function PlanPage() {
         )}`}
         actions={
           <>
+            {tasksEnabled && (
+              <button
+                onClick={togglePanel}
+                aria-pressed={panelOpen}
+                title={panelOpen ? "Hide your tasks" : "Show your tasks beside the plan"}
+                className="btn btn-ghost h-9 min-h-0 px-2.5 text-xs"
+              >
+                {panelOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
+                <span className="hidden sm:inline">Tasks</span>
+              </button>
+            )}
             {/* Stepping one day at a time is fine for tomorrow and hopeless
                 for next month — the date field jumps straight there. */}
             <input
@@ -611,8 +663,8 @@ function PlanPage() {
                           onToggleDone={() => toggleDone(block)}
                           onEdit={() => setEditingId(block.id)}
                           onCancelEdit={() => setEditingId(null)}
-                          onSave={(title, endMinute, habitId) =>
-                            saveBlock(block.id, title, endMinute, habitId)
+                          onSave={(title, endMinute, habitId, taskId) =>
+                            saveBlock(block.id, title, endMinute, habitId, taskId)
                           }
                           onDelete={() => removeBlock(block.id)}
                           onToggleMuted={toggleMuted}
@@ -650,10 +702,13 @@ function PlanPage() {
         {/* Shift mode is about moving what is already there, and its panel
             floats over the foot of the page — the composer would only sit
             under it with its buttons out of reach. */}
+        <div className="lg:sticky lg:top-20 lg:space-y-4">
         {!selecting && (
         <Composer
-          // A new day gets a fresh composer: its suggested time is a first value.
-          key={day.date}
+          // A new day gets a fresh composer: its suggested time is a first
+          // value. A task pulled from the panel gets one too, filled with it.
+          key={`${day.date}-${draft?.nonce ?? 0}`}
+          draft={draft}
           habits={habits}
           today={today}
           isToday={isToday}
@@ -666,10 +721,31 @@ function PlanPage() {
           plannedHabitIds={blocks
             .map((b) => b.habitId)
             .filter((id): id is number => id !== null)}
-          onAdd={addBlock}
+          onAdd={async (title, endMinute, habitId, taskId) => {
+            await addBlock(title, endMinute, habitId, taskId);
+            setDraft(null);
+          }}
           onToggleMuted={toggleMuted}
         />
         )}
+        {showPanel && (
+          <TasksPanel
+            tasks={tasks}
+            plannedTaskIds={blocks
+              .map((b) => b.taskId)
+              .filter((id): id is number => id !== null)}
+            canPlan={!selecting}
+            onPlan={(task) => {
+              setDraft({ taskId: task.id, title: task.title, nonce: Date.now() });
+              // On a phone the composer sits above the panel, out of sight.
+              document
+                .getElementById("plan-composer")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+            onHide={togglePanel}
+          />
+        )}
+        </div>
       </div>
     </PageShell>
   );
@@ -857,7 +933,12 @@ function BlockRow({
   onToggleSelect: () => void;
   onEdit: () => void;
   onCancelEdit: () => void;
-  onSave: (title: string, endMinute: number, habitId: number | null) => void;
+  onSave: (
+    title: string,
+    endMinute: number,
+    habitId: number | null,
+    taskId: number | null,
+  ) => void;
   onDelete: () => void;
   onToggleMuted: (habit: Habit) => void;
 }) {
@@ -1115,27 +1196,39 @@ function BlockFields({
   plannedHabitIds,
   today,
   isToday,
+  draft,
   onSubmit,
   onCancel,
   onToggleMuted,
 }: {
   habits: Habit[];
   initial?: PlanBlock;
+  /** A task pulled in from the side panel: the line starts out as that task. */
+  draft?: TaskDraft | null;
   busy: boolean;
   submitLabel: string;
   suggestedMinute?: number;
   plannedHabitIds?: number[];
   today?: TodayResponse | null;
   isToday?: boolean;
-  onSubmit: (title: string, endMinute: number, habitId: number | null) => void;
+  onSubmit: (
+    title: string,
+    endMinute: number,
+    habitId: number | null,
+    taskId: number | null,
+  ) => void;
   onCancel?: () => void;
   onToggleMuted: (habit: Habit) => void;
 }) {
   const [time, setTime] = useState(
     formatMinute(initial?.endMinute ?? suggestedMinute ?? 8 * 60),
   );
-  const [title, setTitle] = useState(initial?.title ?? "");
+  const [title, setTitle] = useState(initial?.title ?? draft?.title ?? "");
   const [habitId, setHabitId] = useState<number | null>(initial?.habitId ?? null);
+  // Editing keeps whatever task the line already stood for.
+  const [taskId, setTaskId] = useState<number | null>(
+    initial?.taskId ?? draft?.taskId ?? null,
+  );
 
   // Locked habits are not doable yet, so they never belong in a day's plan.
   const pickable = habits.filter((h) => h.status !== "LOCKED");
@@ -1156,10 +1249,11 @@ function BlockFields({
 
   function submit() {
     if (!valid || minute === null) return;
-    onSubmit(title.trim(), minute, habitId);
+    onSubmit(title.trim(), minute, habitId, taskId);
     if (!initial) {
       setTitle("");
       setHabitId(null);
+      setTaskId(null);
       setTime(formatMinute(Math.min(DAY_MINUTES - 1, minute + 10)));
     }
   }
@@ -1201,6 +1295,22 @@ function BlockFields({
           />
         </div>
       </div>
+
+      {!initial && taskId !== null && (
+        <div className="mt-2 flex items-center gap-1.5 text-xs text-ink-soft">
+          <CircleCheckBig size={13} className="shrink-0 text-emerald-600" />
+          <span className="min-w-0 flex-1 truncate">
+            From your tasks — ticking the line ticks the task
+          </span>
+          <button
+            onClick={() => setTaskId(null)}
+            aria-label="Unlink the task"
+            className="btn-icon h-6 w-6 min-h-0"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
 
       {pickable.length > 0 && (
         <div className="mt-2.5 space-y-1">
@@ -1252,6 +1362,89 @@ function BlockFields({
   );
 }
 
+/**
+ * The tasks list, beside the plan: jot a task down without leaving the page,
+ * tick one off, or pull one into the composer to give it a time.
+ */
+function TasksPanel({
+  tasks,
+  plannedTaskIds,
+  canPlan,
+  onPlan,
+  onHide,
+}: {
+  tasks: ReturnType<typeof useTasks>;
+  /** Tasks already on this day's plan — drawn back, still pickable. */
+  plannedTaskIds: number[];
+  /** Shift mode hides the composer, so there is nowhere to send a task. */
+  canPlan: boolean;
+  onPlan: (task: Task) => void;
+  onHide: () => void;
+}) {
+  const { list, error, add, toggleDone } = tasks;
+
+  return (
+    <section className="card mt-4 p-3 lg:mt-0" aria-label="Your tasks">
+      <div className="mb-2 flex items-center gap-2">
+        <CircleCheckBig size={15} className="text-emerald-600" />
+        <Link href="/tasks" className="text-sm font-semibold hover:underline">
+          Tasks
+        </Link>
+        {list && list.open.length > 0 && (
+          <span className="rounded-full bg-surface-sunken px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-ink-soft">
+            {list.open.length}
+          </span>
+        )}
+        <button
+          onClick={onHide}
+          aria-label="Hide the tasks panel"
+          className="btn-icon ml-auto h-7 w-7 min-h-0"
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      <TaskQuickAdd onAdd={add} compact />
+
+      {error && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</p>}
+
+      {list === null ? (
+        <Skeleton className="mt-3 h-16 w-full" />
+      ) : list.open.length === 0 ? (
+        <p className="mt-3 text-center text-xs text-ink-faint">Nothing waiting on you.</p>
+      ) : (
+        <ul className="mt-1 max-h-80 divide-y divide-line overflow-y-auto">
+          {list.open.map((task) => {
+            const planned = plannedTaskIds.includes(task.id);
+            return (
+              <li key={task.id}>
+                <TaskRow
+                  task={task}
+                  today={list.today}
+                  dimmed={planned}
+                  onToggle={() => toggleDone(task)}
+                >
+                  {canPlan && (
+                    <button
+                      onClick={() => onPlan(task)}
+                      title={planned ? "Already on this day — plan it again" : "Give it a time on the plan"}
+                      aria-label={`Plan ${task.title}`}
+                      className="btn btn-ghost h-7 min-h-0 shrink-0 px-2 text-xs"
+                    >
+                      <Plus size={13} />
+                      Plan
+                    </button>
+                  )}
+                </TaskRow>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 /** The always-present "add a line" card at the foot of the timeline. */
 function Composer({
   habits,
@@ -1260,6 +1453,7 @@ function Composer({
   busy,
   suggestedMinute,
   plannedHabitIds,
+  draft,
   onAdd,
   onToggleMuted,
 }: {
@@ -1269,11 +1463,17 @@ function Composer({
   busy: boolean;
   suggestedMinute: number;
   plannedHabitIds: number[];
-  onAdd: (title: string, endMinute: number, habitId: number | null) => void;
+  draft: TaskDraft | null;
+  onAdd: (
+    title: string,
+    endMinute: number,
+    habitId: number | null,
+    taskId: number | null,
+  ) => void;
   onToggleMuted: (habit: Habit) => void;
 }) {
   return (
-    <div className="mt-2 flex gap-3 lg:mt-0 lg:block lg:sticky lg:top-20">
+    <div id="plan-composer" className="mt-2 flex scroll-mt-24 gap-3 lg:mt-0 lg:block">
       {/* the timeline rail, which only exists in the single-column layout */}
       <span className="w-12 shrink-0 lg:hidden" />
       <div className="flex w-4 shrink-0 justify-center pt-4 lg:hidden">
@@ -1287,6 +1487,7 @@ function Composer({
         plannedHabitIds={plannedHabitIds}
         today={today}
         isToday={isToday}
+        draft={draft}
         onSubmit={onAdd}
         onToggleMuted={onToggleMuted}
       />
