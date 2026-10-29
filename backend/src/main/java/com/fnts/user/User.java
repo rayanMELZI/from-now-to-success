@@ -55,6 +55,10 @@ public class User {
     @Column(name = "planner_enabled", nullable = false)
     private boolean plannerEnabled = false;
 
+    /** Opt-in: the tasks page (and the plan's tasks panel) stay hidden until asked for. */
+    @Column(name = "tasks_enabled", nullable = false)
+    private boolean tasksEnabled = false;
+
     @Column(name = "last_reminder_date")
     private LocalDate lastReminderDate;
 

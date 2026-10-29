@@ -5,6 +5,7 @@ import java.time.LocalDate;
 
 import com.fnts.common.EncryptedStringConverter;
 import com.fnts.habit.Habit;
+import com.fnts.task.Task;
 import com.fnts.user.User;
 
 import jakarta.persistence.Column;
@@ -58,6 +59,14 @@ public class PlanBlock {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "habit_id")
     private Habit habit;
+
+    /**
+     * The task this block stands for, when it was pulled in from the tasks
+     * list. Ticking the block ticks the task; deleting the task unlinks it.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "task_id")
+    private Task task;
 
     @Column(nullable = false)
     private boolean done = false;

@@ -22,6 +22,10 @@ cells on the map — from *now* to *success*.
 - **3 streak freezes per month**: a frozen miss leaves gauge and streak untouched.
 - Your day can end past midnight (night-owl setting) and your week can start
   on any day. Answer each habit the moment you know — no need to wait.
+- Optional extras, off until turned on in Settings: a **daily plan** (a
+  timeline of your day) and **tasks** (one-off things to get done). Tasks can
+  sit in a hideable panel beside the plan and be pulled into it; ticking the
+  plan line ticks the task. Neither touches points.
 - A push notification asks about your day at your chosen hour — only on days
   you haven't finished checking in.
 - The in-app feedback button sends ideas to the developer: each one is

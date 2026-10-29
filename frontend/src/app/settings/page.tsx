@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
 import { useOnboarding } from "@/lib/onboarding";
-import { BookOpen, ClipboardList, LogOut, MapPin, Monitor, Moon, Sun } from "lucide-react";
+import { BookOpen, CircleCheckBig, ClipboardList, LogOut, MapPin, Monitor, Moon, Sun } from "lucide-react";
 import { PageHeader, PageShell } from "@/components/ui/Page";
 import { Segmented } from "@/components/ui/Segmented";
 import {
@@ -33,6 +33,8 @@ function SettingsPage() {
   // The daily plan is opt-in, so the switch reads straight from the account.
   const plannerOn = user?.plannerEnabled ?? false;
   const [plannerBusy, setPlannerBusy] = useState(false);
+  const tasksOn = user?.tasksEnabled ?? false;
+  const [tasksBusy, setTasksBusy] = useState(false);
 
   useEffect(() => {
     // Also re-saves the browser subscription to the backend (self-healing).
@@ -74,6 +76,22 @@ function SettingsPage() {
       setError(err instanceof Error ? err.message : "Could not save that");
     } finally {
       setPlannerBusy(false);
+    }
+  }
+
+  async function toggleTasks() {
+    setTasksBusy(true);
+    setError(null);
+    try {
+      await api("/api/users/me/settings", {
+        method: "PATCH",
+        body: { tasksEnabled: !tasksOn },
+      });
+      await refreshUser();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save that");
+    } finally {
+      setTasksBusy(false);
     }
   }
 
@@ -245,6 +263,49 @@ function SettingsPage() {
             <span
               className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
                 plannerOn ? "left-5.5" : "left-0.5"
+              }`}
+            />
+          </span>
+        </button>
+        <button
+          onClick={toggleTasks}
+          disabled={tasksBusy}
+          className={`flex w-full items-center gap-3 rounded-xl border-2 p-3 text-left transition-all disabled:opacity-50 ${
+            tasksOn
+              ? "border-amber-400 bg-amber-50 shadow-sm dark:bg-amber-400/10"
+              : "border-stone-200 hover:border-line-strong dark:hover:border-stone-600"
+          }`}
+        >
+          <span
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all ${
+              tasksOn
+                ? "scale-110 bg-amber-500 text-white"
+                : "bg-amber-100 text-amber-600 dark:bg-amber-900/50"
+            }`}
+          >
+            <CircleCheckBig size={18} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span
+              className={`block text-sm font-semibold ${
+                tasksOn ? "text-amber-800 dark:text-amber-300" : ""
+              }`}
+            >
+              Tasks
+            </span>
+            <span className="block text-xs text-ink-soft">
+              A list of one-off things to get done — adds a &ldquo;Tasks&rdquo; tab and
+              a tasks panel beside your daily plan.
+            </span>
+          </span>
+          <span
+            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+              tasksOn ? "bg-amber-500" : "bg-line-strong"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                tasksOn ? "left-5.5" : "left-0.5"
               }`}
             />
           </span>

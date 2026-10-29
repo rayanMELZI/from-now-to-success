@@ -16,6 +16,8 @@ export interface UserInfo {
   weekStartDay: number;
   /** Opt-in: reveals the daily plan page and its nav tab. */
   plannerEnabled: boolean;
+  /** Opt-in: reveals the tasks page, its nav tab and the plan's tasks panel. */
+  tasksEnabled: boolean;
 }
 
 export interface Habit {
@@ -156,6 +158,8 @@ export interface PlanBlock {
   habitId: number | null;
   /** The linked habit's current name — it may have been renamed since. */
   habitName: string | null;
+  /** The task this block stands for, if it was pulled from the tasks list. */
+  taskId: number | null;
   done: boolean;
 }
 
@@ -183,6 +187,25 @@ export interface PlanBlockRequest {
   title: string;
   endMinute: number;
   habitId?: number | null;
+  taskId?: number | null;
+}
+
+/** A one-off thing to get done — no rhythm, no points. */
+export interface Task {
+  id: number;
+  title: string;
+  /** "2026-10-30": the day it should be done by, or null for no deadline. */
+  dueDate: string | null;
+  done: boolean;
+}
+
+export interface TaskList {
+  /** The user's logical today, so a deadline can read "overdue". */
+  today: string;
+  /** Still to do: deadlines first (soonest on top), then the rest oldest first. */
+  open: Task[];
+  /** Recently finished, most recent first. */
+  done: Task[];
 }
 
 /** Wording flips for QUIT habits: success = avoiding it. */

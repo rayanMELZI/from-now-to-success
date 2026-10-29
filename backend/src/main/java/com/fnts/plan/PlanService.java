@@ -19,6 +19,8 @@ import com.fnts.plan.PlanDtos.BlockResponse;
 import com.fnts.plan.PlanDtos.PlanDayResponse;
 import com.fnts.plan.PlanDtos.ShiftRequest;
 import com.fnts.plan.PlanDtos.ShiftResult;
+import com.fnts.task.Task;
+import com.fnts.task.TaskService;
 import com.fnts.user.User;
 import com.fnts.user.UserRepository;
 
@@ -34,13 +36,16 @@ public class PlanService {
     private final PlanBlockRepository blockRepository;
     private final UserRepository userRepository;
     private final HabitService habitService;
+    private final TaskService taskService;
 
     public PlanService(PlanBlockRepository blockRepository,
                        UserRepository userRepository,
-                       HabitService habitService) {
+                       HabitService habitService,
+                       TaskService taskService) {
         this.blockRepository = blockRepository;
         this.userRepository = userRepository;
         this.habitService = habitService;
+        this.taskService = taskService;
     }
 
     @Transactional(readOnly = true)
@@ -78,6 +83,11 @@ public class PlanService {
     public BlockResponse setDone(Long userId, Long blockId, boolean done) {
         PlanBlock block = getOwned(userId, blockId);
         block.setDone(done);
+        // A line that stands for a task IS that task: ticking one ticks the
+        // other, and unticking a slip puts the task back on the list.
+        if (block.getTask() != null) {
+            block.getTask().markDone(done);
+        }
         return PlanDtos.toResponse(block);
     }
 
@@ -115,6 +125,10 @@ public class PlanService {
             copy.setEndMinute(original.getEndMinute());
             copy.setTitle(original.getTitle());
             copy.setHabit(original.getHabit());
+            // A finished task is not something to plan again — the copy keeps
+            // its title but only stays linked to tasks still open.
+            Task task = original.getTask();
+            copy.setTask(task != null && !task.isDone() ? task : null);
             // A copied plan is a plan for the day ahead: nothing is done yet.
             copy.setDone(false);
             blockRepository.save(copy);
@@ -186,6 +200,10 @@ public class PlanService {
                 ? null
                 : habitService.getOwned(userId, request.habitId());
         block.setHabit(habit);
+        Task task = request.taskId() == null
+                ? null
+                : taskService.getOwned(userId, request.taskId());
+        block.setTask(task);
     }
 
     private PlanBlock getOwned(Long userId, Long blockId) {

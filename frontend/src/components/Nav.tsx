@@ -7,6 +7,7 @@ import { useTheme } from "@/lib/theme";
 import { FeedbackButton } from "./FeedbackButton";
 import {
   BarChart3,
+  CircleCheckBig,
   ClipboardList,
   ListChecks,
   Map,
@@ -26,6 +27,9 @@ const baseLinks = [
 /** The daily plan is opt-in: no tab at all until the user turns it on. */
 const planLink = { href: "/plan", label: "Plan", Icon: ClipboardList };
 
+/** Same deal for the tasks list. */
+const tasksLink = { href: "/tasks", label: "Tasks", Icon: CircleCheckBig };
+
 export function Nav() {
   const { user, logout } = useAuth();
   const { resolved, setTheme } = useTheme();
@@ -33,9 +37,12 @@ export function Nav() {
 
   if (!user) return null;
 
-  const links = user.plannerEnabled
-    ? [...baseLinks.slice(0, 2), planLink, ...baseLinks.slice(2)]
-    : baseLinks;
+  const links = [
+    ...baseLinks.slice(0, 2),
+    ...(user.plannerEnabled ? [planLink] : []),
+    ...(user.tasksEnabled ? [tasksLink] : []),
+    ...baseLinks.slice(2),
+  ];
 
   return (
     <>
@@ -109,7 +116,11 @@ export function Nav() {
       {/* mobile bottom tab bar — the app-like navigation */}
       <nav
         className={`fixed inset-x-0 bottom-0 z-40 grid border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden ${
-          links.length === 5 ? "grid-cols-5" : "grid-cols-4"
+          links.length === 6
+            ? "grid-cols-6"
+            : links.length === 5
+              ? "grid-cols-5"
+              : "grid-cols-4"
         }`}
       >
         {links.map((link) => {
