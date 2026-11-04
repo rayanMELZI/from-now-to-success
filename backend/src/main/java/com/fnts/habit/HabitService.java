@@ -326,7 +326,13 @@ public class HabitService {
                 if (prereqId.equals(habit.getId())) {
                     throw ApiException.badRequest("A habit cannot be its own prerequisite");
                 }
-                prerequisites.add(getOwned(userId, prereqId));
+                Habit prerequisite = getOwned(userId, prereqId);
+                // A habit in use can't wait on one that is put away: it would never unlock.
+                if (prerequisite.getArchivedAt() != null && habit.getArchivedAt() == null) {
+                    throw ApiException.badRequest(
+                            "\"" + prerequisite.getName() + "\" is archived — restore it first");
+                }
+                prerequisites.add(prerequisite);
             }
             habit.setPrerequisites(prerequisites);
         }
