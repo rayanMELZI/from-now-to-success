@@ -105,6 +105,18 @@ public class CheckinService {
                 entries, timers(userId, now));
     }
 
+    /**
+     * Settles every unanswered past day and finished period, and banks the
+     * running clocks, without building the check-in. Archiving runs this first
+     * so putting a branch away never wipes the misses it already owes.
+     */
+    @Transactional
+    public void catchUp(Long userId) {
+        User user = loadUser(userId);
+        catchUpMissedPeriods(user, Periods.logicalToday(user), scheduledHabits(userId));
+        habitService.advanceTimers(user, Instant.now());
+    }
+
     /** Timer habits have no question to answer — only a clock and a record. */
     private List<TimerEntry> timers(Long userId, Instant now) {
         List<TimerEntry> timers = new ArrayList<>();
