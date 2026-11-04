@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { RequireAuth } from "@/lib/auth";
 import {
+  archivedBranches,
   demotionFloor,
+  dependentCount,
   formatDuration,
   habitRisk,
   scheduleLabel,
@@ -19,7 +21,21 @@ import { Modal } from "@/components/Modal";
 import { PageHeader, PageShell } from "@/components/ui/Page";
 import { Segmented } from "@/components/ui/Segmented";
 import { SkeletonPage } from "@/components/ui/Skeleton";
-import { AlertTriangle, Ban, Flame, List, Lock, Map, Plus, TimerReset, Trophy } from "lucide-react";
+import { Disclosure } from "@/components/ui/Disclosure";
+import { Toast } from "@/components/ui/Toast";
+import {
+  AlertTriangle,
+  Archive,
+  ArchiveRestore,
+  Ban,
+  Flame,
+  List,
+  Lock,
+  Map,
+  Plus,
+  TimerReset,
+  Trophy,
+} from "lucide-react";
 
 /** Map or list — remembered, because it is a preference, not a mood. */
 type View = "map" | "list";
@@ -28,6 +44,9 @@ function RoadmapPage() {
   const [habits, setHabits] = useState<Habit[] | null>(null);
   const [selected, setSelected] = useState<Habit | null>(null);
   const [mode, setMode] = useState<"closed" | "view" | "create" | "edit">("closed");
+  const [notice, setNotice] = useState<{ tone: "success" | "warning"; text: string } | null>(
+    null,
+  );
   // Timer habits show a running clock; it only needs to tick while one is open.
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -45,14 +64,12 @@ function RoadmapPage() {
 
   // setState happens in the promise callback, never in the effect body itself
   // (react-hooks/set-state-in-effect).
-  const reload = useCallback(
-    () =>
-      api<Habit[]>("/api/habits").then((data) => {
-        setHabits(data);
-        setSelected((current) => data.find((h) => h.id === current?.id) ?? null);
-      }),
-    [],
-  );
+  const show = useCallback((data: Habit[]) => {
+    setHabits(data);
+    setSelected((current) => data.find((h) => h.id === current?.id) ?? null);
+  }, []);
+
+  const reload = useCallback(() => api<Habit[]>("/api/habits").then(show), [show]);
 
   useEffect(() => {
     reload();
@@ -90,7 +107,58 @@ function RoadmapPage() {
     await reload();
   }
 
+  /** Puts the selected habit away, along with everything that depends on it. */
+  async function archiveHabit() {
+    if (!selected || !habits) return;
+    const dependents = dependentCount(selected, inUse);
+    const branch =
+      dependents === 0
+        ? `"${selected.name}"`
+        : `"${selected.name}" and the ${dependents} habit${dependents === 1 ? "" : "s"} that depend on it`;
+    if (
+      !confirm(
+        `Archive ${branch}? They leave the map and the check-in, keep their progress, and come back whenever you restore them.`,
+      )
+    )
+      return;
+    try {
+      show(await api<Habit[]>(`/api/habits/${selected.id}/archive`, { method: "POST" }));
+      setMode("closed");
+      setNotice({
+        tone: "success",
+        text: `Archived ${branch}. Find it under Archived to bring it back.`,
+      });
+    } catch (err) {
+      setNotice({ tone: "warning", text: err instanceof Error ? err.message : "Could not archive" });
+    }
+  }
+
+  async function restoreHabit(habit: Habit) {
+    try {
+      const data = await api<Habit[]>(`/api/habits/${habit.id}/restore`, { method: "POST" });
+      show(data);
+      const back = (habits ?? []).filter(
+        (h) => h.archivedAt && !data.find((d) => d.id === h.id)?.archivedAt,
+      ).length;
+      setMode("closed");
+      setNotice({
+        tone: "success",
+        text:
+          back > 1
+            ? `"${habit.name}" and ${back - 1} more are back on your roadmap.`
+            : `"${habit.name}" is back on your roadmap.`,
+      });
+    } catch (err) {
+      setNotice({ tone: "warning", text: err instanceof Error ? err.message : "Could not restore" });
+    }
+  }
+
   if (!habits) return <SkeletonPage cards={6} />;
+
+  // Archived habits keep their place in the data but leave the roadmap.
+  const inUse = habits.filter((h) => !h.archivedAt);
+  const branches = archivedBranches(habits);
+  const archivedCount = habits.length - inUse.length;
 
   function openNew() {
     setSelected(null);
@@ -104,7 +172,7 @@ function RoadmapPage() {
         subtitle="Validate habits to unlock the next ones on the path to success."
         actions={
           <>
-            {habits.length > 0 && (
+            {inUse.length > 0 && (
               <Segmented
                 size="sm"
                 value={view}
@@ -145,9 +213,13 @@ function RoadmapPage() {
         }
       />
 
-      {habits.length === 0 ? (
+      {inUse.length === 0 ? (
         <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-line-strong text-center text-ink-soft">
-          <p>Your map is empty. Add your first basic habit —</p>
+          <p>
+            {archivedCount > 0
+              ? "Every habit is archived. Restore one below, or add a new one —"
+              : "Your map is empty. Add your first basic habit —"}
+          </p>
           <p className="text-sm">
             start small: “5 prayers”, “make my bed”, “read 10 minutes”.
           </p>
@@ -157,7 +229,7 @@ function RoadmapPage() {
         </div>
       ) : view === "map" ? (
         <IslandMap
-          habits={habits}
+          habits={inUse}
           selectedId={selected?.id ?? null}
           onSelect={(habit) => {
             setSelected(habit);
@@ -166,7 +238,7 @@ function RoadmapPage() {
         />
       ) : (
         <HabitList
-          habits={habits}
+          habits={inUse}
           selectedId={selected?.id ?? null}
           onSelect={(habit) => {
             setSelected(habit);
@@ -175,10 +247,63 @@ function RoadmapPage() {
         />
       )}
 
+      {branches.length > 0 && (
+        <div className="mt-6">
+          <Disclosure
+            title="Archived"
+            icon={<Archive size={14} className="text-ink-faint" />}
+            count={archivedCount}
+            summary="put away for now, progress kept"
+            storageKey="roadmap-archived"
+          >
+            <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {branches.map(({ root, members }) => {
+                const waitingOn = habits.find(
+                  (h) => h.archivedAt && root.prerequisiteIds.includes(h.id),
+                );
+                return (
+                  <li key={root.id} className="card flex items-center gap-3 p-3.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelected(root);
+                        setMode("view");
+                      }}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <p className="truncate font-medium">{root.name}</p>
+                      <p className="truncate text-xs text-ink-faint">
+                        {members.length > 0
+                          ? `with ${members.map((m) => m.name).join(", ")}`
+                          : "on its own"}
+                        {waitingOn && ` · needs "${waitingOn.name}" back first`}
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => restoreHabit(root)}
+                      disabled={!!waitingOn}
+                      className="btn btn-ghost shrink-0 px-3 text-sm"
+                      title={waitingOn ? `Restore "${waitingOn.name}" first` : "Back on the roadmap"}
+                    >
+                      <ArchiveRestore size={14} /> Restore
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </Disclosure>
+        </div>
+      )}
+
+      <Toast open={!!notice} tone={notice?.tone} onClose={() => setNotice(null)}>
+        {notice?.text}
+      </Toast>
+
       {/* create */}
       <Modal open={mode === "create"} onClose={() => setMode("closed")} size="lg">
         <HabitForm
-          allHabits={habits}
+          allHabits={inUse}
           onSubmit={createHabit}
           onCancel={() => setMode("closed")}
         />
@@ -188,7 +313,7 @@ function RoadmapPage() {
       <Modal open={mode === "edit" && !!selected} onClose={() => setMode("view")} size="lg">
         {selected && (
           <HabitForm
-            allHabits={habits}
+            allHabits={selected.archivedAt ? habits : inUse}
             initial={selected}
             onSubmit={updateHabit}
             onCancel={() => setMode("view")}
@@ -283,7 +408,15 @@ function RoadmapPage() {
               <dd>{selected.basePoints}</dd>
             </dl>
 
-            {selected.status === "LOCKED" && (
+            {selected.archivedAt && (
+              <p className="flex items-center gap-1.5 rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink-soft">
+                <Archive size={13} /> Archived on{" "}
+                {new Date(selected.archivedAt).toLocaleDateString()}. Its progress is kept;
+                the time away never counts as missed.
+              </p>
+            )}
+
+            {selected.status === "LOCKED" && !selected.archivedAt && (
               <p className="flex items-center gap-1.5 rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink-soft">
                 <Lock size={13} /> Unlocks when all its prerequisite habits are valid.
               </p>
@@ -293,6 +426,19 @@ function RoadmapPage() {
               <button onClick={() => setMode("edit")} className="btn btn-ghost flex-1">
                 Edit
               </button>
+              {selected.archivedAt ? (
+                <button onClick={() => restoreHabit(selected)} className="btn btn-ghost">
+                  <ArchiveRestore size={15} /> Restore
+                </button>
+              ) : (
+                <button
+                  onClick={archiveHabit}
+                  className="btn btn-ghost"
+                  title="Put it away with what depends on it, progress kept"
+                >
+                  <Archive size={15} /> Archive
+                </button>
+              )}
               <button
                 onClick={deleteHabit}
                 className="btn border border-red-200 font-medium text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/50"
