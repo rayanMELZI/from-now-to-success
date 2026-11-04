@@ -109,7 +109,7 @@ public class CheckinService {
     private List<TimerEntry> timers(Long userId, Instant now) {
         List<TimerEntry> timers = new ArrayList<>();
         for (Habit habit : habitRepository
-                .findByUserIdAndTrackingModeAndStatusInOrderBySortOrderAscIdAsc(
+                .findByUserIdAndTrackingModeAndStatusInAndArchivedAtIsNullOrderBySortOrderAscIdAsc(
                         userId, TrackingMode.TIMER, TRACKABLE)) {
             long goal = habit.getGoalSeconds() == null ? 0 : habit.getGoalSeconds();
             long elapsed = GameRules.elapsedSeconds(habit, now);
@@ -455,7 +455,7 @@ public class CheckinService {
      * no daily question, so the catch-up must never mark them missed.
      */
     private List<Habit> scheduledHabits(Long userId) {
-        return habitRepository.findByUserIdAndTrackingModeAndStatusInOrderBySortOrderAscIdAsc(
+        return habitRepository.findByUserIdAndTrackingModeAndStatusInAndArchivedAtIsNullOrderBySortOrderAscIdAsc(
                 userId, TrackingMode.SCHEDULED, TRACKABLE);
     }
 

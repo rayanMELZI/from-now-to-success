@@ -76,7 +76,7 @@ public class HabitService {
         List<String> becameValid = new ArrayList<>();
 
         for (Habit habit : habitRepository
-                .findByUserIdAndTrackingModeAndStatusInOrderBySortOrderAscIdAsc(
+                .findByUserIdAndTrackingModeAndStatusInAndArchivedAtIsNullOrderBySortOrderAscIdAsc(
                         user.getId(), TrackingMode.TIMER, TRACKABLE)) {
             if (habit.getId().equals(skipHabitId)) {
                 continue;
