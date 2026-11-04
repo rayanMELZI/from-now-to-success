@@ -27,9 +27,11 @@ import jakarta.validation.Valid;
 public class HabitController {
 
     private final HabitService habitService;
+    private final ArchiveService archiveService;
 
-    public HabitController(HabitService habitService) {
+    public HabitController(HabitService habitService, ArchiveService archiveService) {
         this.habitService = habitService;
+        this.archiveService = archiveService;
     }
 
     @GetMapping
@@ -62,6 +64,20 @@ public class HabitController {
                                          @PathVariable Long id,
                                          @Valid @RequestBody PlannerMuteRequest request) {
         return habitService.setPlannerMuted(user.id(), id, request.muted());
+    }
+
+    /** Archives the habit with its whole branch; answers with every habit. */
+    @PostMapping("/{id}/archive")
+    public List<HabitResponse> archive(@AuthenticationPrincipal CurrentUser user,
+                                       @PathVariable Long id) {
+        return archiveService.archive(user.id(), id);
+    }
+
+    /** Restores an archived habit and what was put away with it. */
+    @PostMapping("/{id}/restore")
+    public List<HabitResponse> restore(@AuthenticationPrincipal CurrentUser user,
+                                       @PathVariable Long id) {
+        return archiveService.restore(user.id(), id);
     }
 
     @DeleteMapping("/{id}")
