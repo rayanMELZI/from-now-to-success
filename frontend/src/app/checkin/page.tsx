@@ -62,8 +62,18 @@ const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: "goal", label: "Goal" },
 ];
 
-/** One column on a phone, two on a tablet, three on a wide desktop. */
-const CARD_GRID = "grid gap-3 sm:grid-cols-2 xl:grid-cols-3";
+/**
+ * One column on a phone, two on a tablet, three on a wide desktop.
+ *
+ * `grid-cols-1` is not redundant. Without it the phone layout falls back to an
+ * implicit `auto` column, which sizes to the widest card's *min-content* — and
+ * a truncated habit name is `white-space: nowrap`, so its min-content is the
+ * whole untruncated title. One long name then pushed the grid wider than the
+ * screen and the entire page scrolled sideways. `grid-cols-1` compiles to
+ * `minmax(0, 1fr)`, which pins the column to the container and lets the title
+ * ellipsis do its job.
+ */
+const CARD_GRID = "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3";
 
 /** The two shapes a pending habit can take. Neither replaced the other. */
 type View = "cards" | "list";
