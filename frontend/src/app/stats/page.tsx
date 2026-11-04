@@ -168,7 +168,8 @@ function StatsPage() {
 
   useEffect(() => {
     api<HistoryDay[]>("/api/checkins/history?days=30").then(setHistory);
-    api<Habit[]>("/api/habits").then(setHabits);
+    // Archived habits are put away: the tiles and streaks count what is in use.
+    api<Habit[]>("/api/habits").then((all) => setHabits(all.filter((h) => !h.archivedAt)));
   }, []);
 
   if (!history || !habits || !user) {
