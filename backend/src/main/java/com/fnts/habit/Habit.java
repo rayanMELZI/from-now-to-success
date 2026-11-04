@@ -121,6 +121,13 @@ public class Habit {
     private boolean plannerMuted = false;
 
     /**
+     * Put away with its branch: off the map and the check-in, progress frozen.
+     * Null while the habit is in use.
+     */
+    @Column(name = "archived_at")
+    private Instant archivedAt;
+
+    /**
      * Read for every habit of every listing — the roadmap, the lock sync, the
      * cycle check. Left one collection at a time that is one SELECT per habit;
      * batching fetches them for the whole list at once instead.
