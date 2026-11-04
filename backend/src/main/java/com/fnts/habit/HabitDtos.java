@@ -57,6 +57,8 @@ public class HabitDtos {
             LocalDate startDate,
             int sortOrder,
             boolean plannerMuted,
+            /** Set while the habit is put away with its branch; null when in use. */
+            Instant archivedAt,
             List<Long> prerequisiteIds) {}
 
     public static HabitResponse toResponse(Habit habit) {
@@ -81,6 +83,7 @@ public class HabitDtos {
                 habit.getStartDate(),
                 habit.getSortOrder(),
                 habit.isPlannerMuted(),
+                habit.getArchivedAt(),
                 habit.getPrerequisites().stream().map(Habit::getId).sorted().toList());
     }
 
