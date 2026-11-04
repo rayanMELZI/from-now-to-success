@@ -1230,8 +1230,9 @@ function BlockFields({
     initial?.taskId ?? draft?.taskId ?? null,
   );
 
-  // Locked habits are not doable yet, so they never belong in a day's plan.
-  const pickable = habits.filter((h) => h.status !== "LOCKED");
+  // Locked habits are not doable yet and archived ones are put away, so
+  // neither belongs in a day's plan.
+  const pickable = habits.filter((h) => h.status !== "LOCKED" && !h.archivedAt);
   const minute = parseMinute(time);
   const valid = title.trim().length > 0 && minute !== null;
 
