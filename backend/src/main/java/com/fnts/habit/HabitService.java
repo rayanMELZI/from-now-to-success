@@ -201,6 +201,7 @@ public class HabitService {
      * Enforces the lock invariant over ALL of the user's habits, in both
      * directions: a non-VALID habit is LOCKED if and only if any of its
      * prerequisites is not VALID. Returns the names of habits that unlocked.
+     * Archived habits are left exactly as they are until they come back.
      * (VALID habits never lock; validation is earned and only the gauge/miss
      * rules can take it away.)
      */
@@ -208,7 +209,8 @@ public class HabitService {
     public List<String> syncLockStates(Long userId, LocalDate today) {
         List<String> unlockedNames = new ArrayList<>();
         for (Habit habit : habitRepository.findByUserIdOrderBySortOrderAscIdAsc(userId)) {
-            if (habit.getStatus() == HabitStatus.VALID) {
+            // Archived habits keep the status they were put away with.
+            if (habit.getStatus() == HabitStatus.VALID || habit.getArchivedAt() != null) {
                 continue;
             }
             boolean eligible = habit.getPrerequisites().stream()
