@@ -54,6 +54,9 @@ public class TimerService {
         if (habit.getTrackingMode() != TrackingMode.TIMER) {
             throw ApiException.badRequest("That habit is not a timer");
         }
+        if (habit.getArchivedAt() != null) {
+            throw ApiException.badRequest("This timer is archived");
+        }
         if (habit.getStatus() == HabitStatus.LOCKED || habit.getClockStartedAt() == null) {
             throw ApiException.badRequest("This timer has not started yet");
         }
