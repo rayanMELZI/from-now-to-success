@@ -45,7 +45,60 @@ export interface Habit {
   sortOrder: number;
   /** Set aside in the plan picker: still pickable, but greyed and listed last. */
   plannerMuted: boolean;
+  /** Put away with its branch: off the map and the check-in, progress kept. */
+  archivedAt: string | null;
   prerequisiteIds: number[];
+}
+
+/**
+ * The archived habits that head their own archive: none of their
+ * prerequisites went away with them or before them. Each comes with the
+ * habits that were put away along with it, which restoring brings back.
+ */
+export function archivedBranches(habits: Habit[]): { root: Habit; members: Habit[] }[] {
+  const byId = new Map(habits.map((h) => [h.id, h]));
+  const archivedAt = (h: Habit) => (h.archivedAt ? Date.parse(h.archivedAt) : null);
+  const isRoot = (h: Habit) =>
+    h.prerequisiteIds.every((id) => {
+      const p = byId.get(id);
+      const at = p ? archivedAt(p) : null;
+      return at === null || at > archivedAt(h)!;
+    });
+  return habits
+    .filter((h) => h.archivedAt && isRoot(h))
+    .map((root) => {
+      // Walk downstream through habits archived in the same move.
+      const members: Habit[] = [];
+      const seen = new Set([root.id]);
+      const queue = [root];
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        for (const h of habits) {
+          if (seen.has(h.id) || !h.prerequisiteIds.includes(current.id)) continue;
+          if (h.archivedAt !== root.archivedAt) continue;
+          seen.add(h.id);
+          members.push(h);
+          queue.push(h);
+        }
+      }
+      return { root, members };
+    });
+}
+
+/** How many habits sit downstream of this one — what archiving it takes along. */
+export function dependentCount(habit: Habit, habits: Habit[]): number {
+  const seen = new Set([habit.id]);
+  const queue = [habit.id];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const h of habits) {
+      if (!seen.has(h.id) && h.prerequisiteIds.includes(current)) {
+        seen.add(h.id);
+        queue.push(h.id);
+      }
+    }
+  }
+  return seen.size - 1;
 }
 
 export interface HabitRequest {
