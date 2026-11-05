@@ -81,14 +81,18 @@ function RoadmapPage() {
 
   // Lazy init reads the saved choice during the first render, so the map
   // never flashes up before the list takes over.
-  const [view, setViewState] = useState<View>(() =>
-    typeof window === "undefined"
-      ? "map"
-      : ((localStorage.getItem("roadmapView") as View | null) ?? "map"),
-  );
+  const [view, setViewState] = useState<View>(() => savedView("roadmapView"));
   const setView = (next: View) => {
     setViewState(next);
     localStorage.setItem("roadmapView", next);
+  };
+  // The archive has its own switch: a graph of what was put away, or the list.
+  const [archivedView, setArchivedViewState] = useState<View>(() =>
+    savedView("archivedView"),
+  );
+  const setArchivedView = (next: View) => {
+    setArchivedViewState(next);
+    localStorage.setItem("archivedView", next);
   };
 
   // setState happens in the promise callback, never in the effect body itself
@@ -264,42 +268,64 @@ function RoadmapPage() {
             summary="put away for now, progress kept"
             storageKey="roadmap-archived"
           >
-            <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {branches.map(({ root, members }) => {
-                const waitingOn = habits.find(
-                  (h) => h.archivedAt && root.prerequisiteIds.includes(h.id),
-                );
-                return (
-                  <li key={root.id} className="card flex items-center gap-3 p-3.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelected(root);
-                        setMode("view");
-                      }}
-                      className="min-w-0 flex-1 text-left"
-                    >
-                      <p className="truncate font-medium">{root.name}</p>
-                      <p className="truncate text-xs text-ink-faint">
-                        {members.length > 0
-                          ? `with ${members.map((m) => m.name).join(", ")}`
-                          : "on its own"}
-                        {waitingOn && ` · needs "${waitingOn.name}" back first`}
-                      </p>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => restoreHabit(root)}
-                      disabled={!!waitingOn}
-                      className="btn btn-ghost shrink-0 px-3 text-sm"
-                      title={waitingOn ? `Restore "${waitingOn.name}" first` : "Back on the roadmap"}
-                    >
-                      <ArchiveRestore size={14} /> Restore
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+            <div className="mb-3 flex justify-end">
+              <Segmented
+                size="sm"
+                value={archivedView}
+                onChange={setArchivedView}
+                ariaLabel="How to show the archive"
+                options={VIEW_OPTIONS}
+              />
+            </div>
+            {archivedView === "map" ? (
+              <IslandMap
+                habits={habits.filter((h) => h.archivedAt)}
+                selectedId={selected?.archivedAt ? selected.id : null}
+                onSelect={(habit) => {
+                  setSelected(habit);
+                  setMode(habit ? "view" : "closed");
+                }}
+                bookends={false}
+                heightClass="h-80 sm:h-96"
+              />
+            ) : (
+              <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {branches.map(({ root, members }) => {
+                  const waitingOn = habits.find(
+                    (h) => h.archivedAt && root.prerequisiteIds.includes(h.id),
+                  );
+                  return (
+                    <li key={root.id} className="card flex items-center gap-3 p-3.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelected(root);
+                          setMode("view");
+                        }}
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <p className="truncate font-medium">{root.name}</p>
+                        <p className="truncate text-xs text-ink-faint">
+                          {members.length > 0
+                            ? `with ${members.map((m) => m.name).join(", ")}`
+                            : "on its own"}
+                          {waitingOn && ` · needs "${waitingOn.name}" back first`}
+                        </p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => restoreHabit(root)}
+                        disabled={!!waitingOn}
+                        className="btn btn-ghost shrink-0 px-3 text-sm"
+                        title={waitingOn ? `Restore "${waitingOn.name}" first` : "Back on the roadmap"}
+                      >
+                        <ArchiveRestore size={14} /> Restore
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </Disclosure>
         </div>
       )}
