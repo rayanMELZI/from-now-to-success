@@ -22,7 +22,8 @@ cells on the map — from *now* to *success*.
 - **3 streak freezes per month**: a frozen miss leaves gauge and streak untouched.
 - A habit you no longer need can be **archived** with its whole branch (every
   habit that depends on it): it leaves the map and the check-in but keeps its
-  gauge, streaks and history. Restoring it brings the branch back, and the
+  gauge, streaks and history; the Archived section shows those branches as
+  their own graph (or a list). Restoring brings the branch back, and the
   time away never counts as missed.
 - Your day can end past midnight (night-owl setting) and your week can start
   on any day. Answer each habit the moment you know — no need to wait.
