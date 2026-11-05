@@ -40,6 +40,35 @@ import {
 /** Map or list — remembered, because it is a preference, not a mood. */
 type View = "map" | "list";
 
+const VIEW_OPTIONS = [
+  {
+    value: "map" as const,
+    title: "The island map",
+    label: (
+      <span className="flex items-center justify-center gap-1.5">
+        <Map size={13} />
+        <span className="hidden sm:inline">Map</span>
+      </span>
+    ),
+  },
+  {
+    value: "list" as const,
+    title: "A searchable list",
+    label: (
+      <span className="flex items-center justify-center gap-1.5">
+        <List size={13} />
+        <span className="hidden sm:inline">List</span>
+      </span>
+    ),
+  },
+];
+
+/** A saved Map/List choice, read during the first render so nothing flashes. */
+function savedView(key: string): View {
+  if (typeof window === "undefined") return "map";
+  return (localStorage.getItem(key) as View | null) ?? "map";
+}
+
 function RoadmapPage() {
   const [habits, setHabits] = useState<Habit[] | null>(null);
   const [selected, setSelected] = useState<Habit | null>(null);
@@ -178,28 +207,7 @@ function RoadmapPage() {
                 value={view}
                 onChange={setView}
                 ariaLabel="How to show the roadmap"
-                options={[
-                  {
-                    value: "map",
-                    title: "The island map",
-                    label: (
-                      <span className="flex items-center justify-center gap-1.5">
-                        <Map size={13} />
-                        <span className="hidden sm:inline">Map</span>
-                      </span>
-                    ),
-                  },
-                  {
-                    value: "list",
-                    title: "A searchable list",
-                    label: (
-                      <span className="flex items-center justify-center gap-1.5">
-                        <List size={13} />
-                        <span className="hidden sm:inline">List</span>
-                      </span>
-                    ),
-                  },
-                ]}
+                options={VIEW_OPTIONS}
               />
             )}
             {/* On a phone the label goes and the button becomes the round
