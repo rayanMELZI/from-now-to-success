@@ -258,9 +258,19 @@ interface IslandMapProps {
   habits: Habit[];
   selectedId: number | null;
   onSelect: (habit: Habit | null) => void;
+  /** The now / success bookends — only the full roadmap is a path between them. */
+  bookends?: boolean;
+  /** Overrides the height, which must stay concrete for React Flow. */
+  heightClass?: string;
 }
 
-export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
+export function IslandMap({
+  habits,
+  selectedId,
+  onSelect,
+  bookends = true,
+  heightClass = "h-[calc(100dvh-220px)] min-h-105",
+}: IslandMapProps) {
   const { resolved } = useTheme();
 
   // Layout depends only on graph STRUCTURE (which habit points to which), so
@@ -272,7 +282,7 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
   const layout = useMemo(() => computeLayout(habits), [structure]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const nodes = useMemo<Node[]>(() => {
-    const list: Node[] = [
+    const anchors: Node[] = [
       {
         id: "now",
         type: "anchor",
@@ -290,6 +300,7 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
         selectable: false,
       },
     ];
+    const list: Node[] = bookends ? anchors : [];
     habits.forEach((habit) => {
       list.push({
         id: String(habit.id),
@@ -300,33 +311,36 @@ export function IslandMap({ habits, selectedId, onSelect }: IslandMapProps) {
       });
     });
     return list;
-  }, [habits, layout, selectedId]);
+  }, [habits, layout, selectedId, bookends]);
 
   const edges = useMemo<Edge[]>(
     () =>
       habits.flatMap((habit) =>
-        habit.prerequisiteIds.map((prereqId) => {
-          const prereq = habits.find((h) => h.id === prereqId);
-          const flowing = prereq?.status === "VALID";
-          return {
-            id: `${prereqId}-${habit.id}`,
-            source: String(prereqId),
-            target: String(habit.id),
-            animated: flowing,
-            style: {
-              stroke: flowing ? "#d97706" : "#a8a29e",
-              strokeWidth: 1.5,
-              strokeDasharray: flowing ? undefined : "6 6",
-            },
-          };
-        }),
+        // A partial map (the archive) may point at habits it does not show.
+        habit.prerequisiteIds
+          .filter((prereqId) => habits.some((h) => h.id === prereqId))
+          .map((prereqId) => {
+            const prereq = habits.find((h) => h.id === prereqId);
+            const flowing = prereq?.status === "VALID";
+            return {
+              id: `${prereqId}-${habit.id}`,
+              source: String(prereqId),
+              target: String(habit.id),
+              animated: flowing,
+              style: {
+                stroke: flowing ? "#d97706" : "#a8a29e",
+                strokeWidth: 1.5,
+                strokeDasharray: flowing ? undefined : "6 6",
+              },
+            };
+          }),
       ),
     [habits],
   );
 
   return (
     // React Flow needs a concrete height, not just min/flex sizing.
-    <div className="h-[calc(100dvh-220px)] min-h-105 overflow-hidden rounded-xl border border-line-strong bg-surface-sunken">
+    <div className={`${heightClass} overflow-hidden rounded-xl border border-line-strong bg-surface-sunken`}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
