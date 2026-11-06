@@ -16,6 +16,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import {
   AlertTriangle,
+  Archive,
   Ban,
   Check,
   Flame,
@@ -146,12 +147,16 @@ type AnchorNodeData = { label: string };
 
 function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
   const { habit, selected } = data;
-  const locked = habit.status === "LOCKED";
+  // Archived habits are greyed out like locked ones, but keep their status
+  // underneath: the grey says "put away", not "not earned yet".
+  const archived = !!habit.archivedAt;
+  const locked = habit.status === "LOCKED" && !archived;
+  const dimmed = locked || archived;
   const valid = habit.status === "VALID";
   // A validated island drifting back down. It keeps a validated habit's green
   // so the whole validated set still reads as one colour at a glance — only
   // drained, with the warning triangle saying which ones are running out.
-  const risk = habitRisk(habit);
+  const risk = archived ? null : habitRisk(habit);
   const pct = habit.requiredStreak > 0
     ? Math.min(100, (habit.gauge / habit.requiredStreak) * 100)
     : 0;
@@ -162,7 +167,7 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
       className={`relative h-26 w-47.5 overflow-hidden border-2 shadow-sm transition-shadow ${
         selected
           ? "border-amber-500 shadow-lg shadow-amber-200/60"
-          : locked
+          : dimmed
             ? "border-line-strong"
             : risk === "critical"
               ? "border-rose-500 shadow-md shadow-rose-200/70 dark:shadow-rose-950"
@@ -171,14 +176,18 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
                 : valid
                   ? "border-emerald-700/60"
                   : "border-amber-800/50"
-      } ${locked ? "bg-surface-sunken" : "bg-amber-50 dark:bg-amber-400/10"}`}
+      } ${dimmed ? "bg-surface-sunken" : "bg-amber-50 dark:bg-amber-400/10"} ${
+        archived ? "opacity-75" : ""
+      }`}
       style={{ borderRadius: blobRadius(habit.id) }}
     >
       {/* gauge liquid */}
       {!locked && pct > 0 && (
         <div
           className={`absolute inset-x-0 bottom-0 transition-all duration-700 ${
-            risk === "critical"
+            archived
+              ? "bg-stone-300/50 dark:bg-stone-600/40"
+              : risk === "critical"
               ? "bg-rose-300/70"
               : risk === "caution"
                 ? "bg-emerald-200/45"
@@ -192,17 +201,22 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
       <div className="relative flex h-full flex-col items-center justify-center gap-1 px-3 text-center">
         <p
           className={`flex max-w-full items-center gap-1 truncate text-sm font-semibold ${
-            locked ? "text-ink-soft" : "text-ink"
+            dimmed ? "text-ink-soft" : "text-ink"
           }`}
         >
           {locked && <Lock size={12} className="shrink-0" />}
-          {!locked && habit.habitType === "QUIT" && (
+          {archived && <Archive size={12} className="shrink-0" />}
+          {!dimmed && habit.habitType === "QUIT" && (
             <Ban size={12} className="shrink-0 text-red-500" />
           )}
           <span className="truncate">{habit.name}</span>
         </p>
         {locked ? (
           <p className="text-xs text-stone-400">locked</p>
+        ) : archived ? (
+          <p className="flex items-center gap-1 text-xs text-stone-400">
+            archived · {habit.gauge}/{habit.requiredStreak}
+          </p>
         ) : (
           <p
             className={`flex items-center gap-1 text-xs ${
@@ -321,7 +335,8 @@ export function IslandMap({
           .filter((prereqId) => habits.some((h) => h.id === prereqId))
           .map((prereqId) => {
             const prereq = habits.find((h) => h.id === prereqId);
-            const flowing = prereq?.status === "VALID";
+            // Nothing flows through a branch that is put away.
+            const flowing = prereq?.status === "VALID" && !prereq.archivedAt;
             return {
               id: `${prereqId}-${habit.id}`,
               source: String(prereqId),
