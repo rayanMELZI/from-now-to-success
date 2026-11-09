@@ -324,9 +324,210 @@ export function TaskRow({
         >
           {task.title}
         </div>
-        {task.dueDate && !task.done && <DueChip due={task.dueDate} today={today} />}
+        {(task.tags.length > 0 || (task.dueDate && !task.done)) && (
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+            {task.dueDate && !task.done && <DueChip due={task.dueDate} today={today} />}
+            {task.tags.map((tag) => (
+              <TagChip key={tag.id} tag={tag} />
+            ))}
+          </div>
+        )}
       </div>
       {children}
     </div>
+  );
+}
+
+/** A tag as a small coloured label. */
+export function TagChip({ tag, className = "" }: { tag: TaskTag; className?: string }) {
+  return (
+    <span
+      className={`inline-flex max-w-40 items-center rounded-full px-2 py-px text-[11px] font-medium ${TAG_STYLES[tag.color].chip} ${className}`}
+    >
+      <span className="truncate">{tag.name}</span>
+    </span>
+  );
+}
+
+/** The palette as a row of round swatches, the chosen one ringed. */
+export function TagColorSwatches({
+  value,
+  onChange,
+}: {
+  value: TagColor;
+  onChange: (color: TagColor) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Tag colour">
+      {TAG_COLORS.map((color) => (
+        <button
+          key={color}
+          type="button"
+          role="radio"
+          aria-checked={value === color}
+          aria-label={color}
+          title={color}
+          onClick={() => onChange(color)}
+          className={`h-5 w-5 rounded-full transition-transform active:scale-90 ${TAG_STYLES[color].dot} ${
+            value === color
+              ? "ring-2 ring-ink ring-offset-2 ring-offset-surface"
+              : "hover:scale-110"
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** A colour for the next tag: the first one not used yet, so tags stay apart. */
+export function nextTagColor(tags: TaskTag[]): TagColor {
+  const used = new Set(tags.map((t) => t.color));
+  return TAG_COLORS.find((c) => c !== "gray" && !used.has(c)) ?? "gray";
+}
+
+/**
+ * Picks a task's tags: every existing tag as a toggle, then a small form to
+ * make a new one (which is selected as soon as it exists).
+ */
+export function TagPicker({
+  tags,
+  selected,
+  onChange,
+  onCreate,
+}: {
+  tags: TaskTag[];
+  selected: number[];
+  onChange: (ids: number[]) => void;
+  onCreate: (name: string, color: TagColor) => Promise<TaskTag | null>;
+}) {
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const [color, setColor] = useState<TagColor>(() => nextTagColor(tags));
+  const [busy, setBusy] = useState(false);
+  const full = selected.length >= MAX_TAGS_PER_TASK;
+
+  function toggle(id: number) {
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+  }
+
+  async function create() {
+    const trimmed = name.trim();
+    if (!trimmed || busy) return;
+    setBusy(true);
+    const tag = await onCreate(trimmed, color);
+    setBusy(false);
+    if (!tag) return;
+    if (!full) onChange([...selected, tag.id]);
+    setName("");
+    setColor(nextTagColor([...tags, tag]));
+    setCreating(false);
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {tags.map((tag) => {
+          const on = selected.includes(tag.id);
+          return (
+            <button
+              key={tag.id}
+              type="button"
+              aria-pressed={on}
+              disabled={!on && full}
+              onClick={() => toggle(tag.id)}
+              className={`inline-flex max-w-40 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-all disabled:opacity-40 ${
+                on
+                  ? `${TAG_STYLES[tag.color].chip} ring-1 ring-current`
+                  : "text-ink-soft ring-1 ring-line-strong hover:text-ink"
+              }`}
+            >
+              {on ? (
+                <Check size={11} strokeWidth={3} />
+              ) : (
+                <span className={`h-2 w-2 shrink-0 rounded-full ${TAG_STYLES[tag.color].dot}`} />
+              )}
+              <span className="truncate">{tag.name}</span>
+            </button>
+          );
+        })}
+        {!creating && tags.length < MAX_TAGS && (
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium text-ink-soft ring-1 ring-dashed ring-line-strong hover:text-ink"
+          >
+            <Plus size={11} />
+            New tag
+          </button>
+        )}
+      </div>
+      {creating && (
+        <div className="space-y-2 rounded-lg bg-surface-sunken p-2">
+          <div className="flex gap-2">
+            <input
+              value={name}
+              maxLength={24}
+              autoFocus
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  void create();
+                }
+                if (e.key === "Escape") {
+                  e.stopPropagation();
+                  setCreating(false);
+                }
+              }}
+              placeholder="Tag name"
+              aria-label="New tag name"
+              className="field min-w-0 flex-1"
+            />
+            <button
+              type="button"
+              onClick={() => void create()}
+              disabled={busy || !name.trim()}
+              className="btn btn-primary shrink-0 px-3"
+            >
+              Add
+            </button>
+            <button
+              type="button"
+              onClick={() => setCreating(false)}
+              className="btn btn-ghost shrink-0 px-3"
+            >
+              Cancel
+            </button>
+          </div>
+          <TagColorSwatches value={color} onChange={setColor} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The icon button that opens a tag picker, with how many are chosen. */
+export function TagToggle({
+  open,
+  count,
+  onClick,
+}: {
+  open: boolean;
+  count: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={open}
+      aria-label="Tags"
+      title="Tags"
+      className={`btn shrink-0 px-2.5 ${open || count > 0 ? "btn-ghost text-ink" : "btn-ghost text-ink-faint"}`}
+    >
+      <Tag size={15} />
+      {count > 0 && <span className="text-xs tabular-nums">{count}</span>}
+    </button>
   );
 }
