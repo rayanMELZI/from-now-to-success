@@ -1,6 +1,7 @@
 package com.fnts.task;
 
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -8,6 +9,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.fnts.checkin.Periods;
 import com.fnts.common.ApiException;
+import com.fnts.task.TaskDtos.TagRequest;
+import com.fnts.task.TaskDtos.TagResponse;
 import com.fnts.task.TaskDtos.TaskListResponse;
 import com.fnts.task.TaskDtos.TaskRequest;
 import com.fnts.task.TaskDtos.TaskResponse;
@@ -27,10 +30,13 @@ public class TaskService {
             .thenComparing(Task::getId);
 
     private final TaskRepository taskRepository;
+    private final TaskTagRepository tagRepository;
     private final UserRepository userRepository;
 
-    public TaskService(TaskRepository taskRepository, UserRepository userRepository) {
+    public TaskService(TaskRepository taskRepository, TaskTagRepository tagRepository,
+                       UserRepository userRepository) {
         this.taskRepository = taskRepository;
+        this.tagRepository = tagRepository;
         this.userRepository = userRepository;
     }
 
@@ -46,7 +52,11 @@ public class TaskService {
                 .stream()
                 .map(TaskDtos::toResponse)
                 .toList();
-        return new TaskListResponse(Periods.logicalToday(user), open, done);
+        List<TagResponse> tags = tagRepository.findByUserIdOrderByIdAsc(userId)
+                .stream()
+                .map(TaskDtos::toResponse)
+                .toList();
+        return new TaskListResponse(Periods.logicalToday(user), open, done, tags);
     }
 
     @Transactional
@@ -58,14 +68,14 @@ public class TaskService {
         }
         Task task = new Task();
         task.setUser(user);
-        apply(task, request);
+        apply(userId, task, request);
         return TaskDtos.toResponse(taskRepository.save(task));
     }
 
     @Transactional
     public TaskResponse update(Long userId, Long taskId, TaskRequest request) {
         Task task = getOwned(userId, taskId);
-        apply(task, request);
+        apply(userId, task, request);
         return TaskDtos.toResponse(task);
     }
 
@@ -87,14 +97,64 @@ public class TaskService {
         taskRepository.deleteDone(userId);
     }
 
+    @Transactional
+    public TagResponse addTag(Long userId, TagRequest request) {
+        User user = load(userId);
+        if (tagRepository.countByUserId(userId) >= TaskDtos.MAX_TAGS) {
+            throw ApiException.badRequest("You can have at most " + TaskDtos.MAX_TAGS + " tags");
+        }
+        TaskTag tag = new TaskTag();
+        tag.setUser(user);
+        applyTag(userId, tag, request);
+        return TaskDtos.toResponse(tagRepository.save(tag));
+    }
+
+    /** Renaming or recolouring shows on every task that carries the tag. */
+    @Transactional
+    public TagResponse updateTag(Long userId, Long tagId, TagRequest request) {
+        TaskTag tag = getOwnedTag(userId, tagId);
+        applyTag(userId, tag, request);
+        return TaskDtos.toResponse(tag);
+    }
+
+    /** Takes the tag off every task (the links go with it), then drops it. */
+    @Transactional
+    public void deleteTag(Long userId, Long tagId) {
+        tagRepository.delete(getOwnedTag(userId, tagId));
+    }
+
     public Task getOwned(Long userId, Long taskId) {
         return taskRepository.findByIdAndUserId(taskId, userId)
                 .orElseThrow(() -> ApiException.notFound("Task not found"));
     }
 
-    private void apply(Task task, TaskRequest request) {
+    private void apply(Long userId, Task task, TaskRequest request) {
         task.setTitle(request.title().trim());
         task.setDueDate(request.dueDate());
+        if (request.tagIds() != null) {
+            List<TaskTag> tags = request.tagIds().isEmpty()
+                    ? List.of()
+                    : tagRepository.findByUserIdAndIdIn(userId, request.tagIds());
+            task.setTags(new LinkedHashSet<>(tags));
+        }
+    }
+
+    /** Names are encrypted, so uniqueness is checked here rather than by an index. */
+    private void applyTag(Long userId, TaskTag tag, TagRequest request) {
+        String name = request.name().trim();
+        boolean taken = tagRepository.findByUserIdOrderByIdAsc(userId).stream()
+                .anyMatch(other -> !other.getId().equals(tag.getId())
+                        && other.getName().equalsIgnoreCase(name));
+        if (taken) {
+            throw ApiException.conflict("You already have a tag called \"" + name + "\"");
+        }
+        tag.setName(name);
+        tag.setColor(request.color());
+    }
+
+    private TaskTag getOwnedTag(Long userId, Long tagId) {
+        return tagRepository.findByIdAndUserId(tagId, userId)
+                .orElseThrow(() -> ApiException.notFound("Tag not found"));
     }
 
     private User load(Long userId) {
