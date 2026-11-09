@@ -244,12 +244,39 @@ export interface PlanBlockRequest {
 }
 
 /** A one-off thing to get done — no rhythm, no points. */
+/** The palette a task tag picks from (the server checks the same names). */
+export const TAG_COLORS = [
+  "gray",
+  "red",
+  "orange",
+  "amber",
+  "green",
+  "teal",
+  "sky",
+  "indigo",
+  "violet",
+  "pink",
+] as const;
+export type TagColor = (typeof TAG_COLORS)[number];
+
+/** Tags a user can define, and how many one task can carry. */
+export const MAX_TAGS = 30;
+export const MAX_TAGS_PER_TASK = 5;
+
+export interface TaskTag {
+  id: number;
+  name: string;
+  color: TagColor;
+}
+
 export interface Task {
   id: number;
   title: string;
   /** "2026-10-30": the day it should be done by, or null for no deadline. */
   dueDate: string | null;
   done: boolean;
+  /** In the order the tags were made. */
+  tags: TaskTag[];
 }
 
 export interface TaskList {
@@ -259,6 +286,8 @@ export interface TaskList {
   open: Task[];
   /** Recently finished, most recent first. */
   done: Task[];
+  /** Every tag the user has, oldest first. */
+  tags: TaskTag[];
 }
 
 /** Wording flips for QUIT habits: success = avoiding it. */
