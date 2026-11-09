@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { CalendarDays, Check, Plus, Tag } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { CalendarDays, Check, Plus, Tag, X } from "lucide-react";
 import { api } from "@/lib/api";
 import {
   MAX_TAGS,
@@ -129,6 +129,31 @@ export function useTasks(enabled: boolean) {
       api<Task>(`/api/tasks/${id}`, { method: "PUT", body: { title, dueDate, tagIds } }),
     );
 
+  /**
+   * Retags a saved task straight from its row: shown at once, sent with its
+   * title and deadline unchanged, and only reloaded if the server refuses.
+   */
+  async function setTags(task: Task, tagIds: number[]) {
+    setError(null);
+    setList((current) =>
+      current && {
+        ...current,
+        open: current.open.map((t) =>
+          t.id === task.id ? { ...t, tags: current.tags.filter((g) => tagIds.includes(g.id)) } : t,
+        ),
+      },
+    );
+    try {
+      await api<Task>(`/api/tasks/${task.id}`, {
+        method: "PUT",
+        body: { title: task.title, dueDate: task.dueDate, tagIds },
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not change its tags");
+      await reload();
+    }
+  }
+
   /** Resolves to the new tag, so a picker can select it straight away. */
   async function addTag(name: string, color: TagColor): Promise<TaskTag | null> {
     const made: { tag: TaskTag | null } = { tag: null };
@@ -188,6 +213,7 @@ export function useTasks(enabled: boolean) {
     remove,
     clearDone,
     toggleDone,
+    setTags,
     addTag,
     updateTag,
     removeTag,
@@ -213,7 +239,6 @@ export function TaskQuickAdd({
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [tagIds, setTagIds] = useState<number[]>([]);
-  const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
   const withTags = !compact && tags !== undefined && onCreateTag !== undefined;
 
@@ -232,7 +257,6 @@ export function TaskQuickAdd({
       setTitle("");
       setDueDate("");
       setTagIds([]);
-      setPicking(false);
     }
   }
 
@@ -262,7 +286,13 @@ export function TaskQuickAdd({
           />
         )}
         {withTags && (
-          <TagToggle open={picking} count={tagIds.length} onClick={() => setPicking((v) => !v)} />
+          <TagMenuButton
+            tags={tags}
+            selected={tagIds}
+            onChange={setTagIds}
+            onCreate={onCreateTag}
+            label="Tag it"
+          />
         )}
         <button
           onClick={() => void submit()}
@@ -274,14 +304,9 @@ export function TaskQuickAdd({
           {!compact && <span className="hidden sm:inline">Add</span>}
         </button>
       </div>
-      {withTags && picking && (
+      {withTags && tagIds.length > 0 && (
         <div className="mt-2">
-          <TagPicker
-            tags={tags}
-            selected={tagIds}
-            onChange={setTagIds}
-            onCreate={onCreateTag}
-          />
+          <ChosenTags tags={tags} selected={tagIds} onChange={setTagIds} />
         </div>
       )}
     </div>
@@ -416,151 +441,217 @@ export function nextTagColor(tags: TaskTag[]): TagColor {
 }
 
 /**
- * Picks a task's tags: every existing tag as a toggle, then a small form to
- * make a new one (which is selected as soon as it exists).
+ * The tags a user can choose from, as a checklist: an empty box for "not on
+ * it", a ticked one for "on it" — nothing can be mistaken for already chosen.
+ * Typing filters the list; Enter applies the match, or makes the tag.
  */
-export function TagPicker({
+function TagMenu({
   tags,
   selected,
-  onChange,
+  onToggle,
   onCreate,
-  showExisting = true,
+  onClose,
 }: {
   tags: TaskTag[];
   selected: number[];
-  onChange: (ids: number[]) => void;
-  onCreate: (name: string, color: TagColor) => Promise<TaskTag | null>;
-  /** Off where tags are only made, not chosen (the tags dialog). */
-  showExisting?: boolean;
+  onToggle: (id: number) => void;
+  onCreate: (name: string) => Promise<void>;
+  onClose: () => void;
 }) {
-  const [creating, setCreating] = useState(false);
-  const [name, setName] = useState("");
-  const [color, setColor] = useState<TagColor>(() => nextTagColor(tags));
+  const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const q = query.trim().toLowerCase();
+  const shown = q ? tags.filter((t) => t.name.toLowerCase().includes(q)) : tags;
+  const exact = tags.find((t) => t.name.toLowerCase() === q);
   const full = selected.length >= MAX_TAGS_PER_TASK;
+  const canCreate = q.length > 0 && !exact && tags.length < MAX_TAGS && !full;
 
-  function toggle(id: number) {
-    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
-  }
+  // Clicks anywhere else close it, like any menu.
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [onClose]);
 
   async function create() {
-    const trimmed = name.trim();
-    if (!trimmed || busy) return;
+    if (!canCreate || busy) return;
     setBusy(true);
-    const tag = await onCreate(trimmed, color);
+    await onCreate(query.trim());
     setBusy(false);
-    if (!tag) return;
-    if (!full) onChange([...selected, tag.id]);
-    setName("");
-    setColor(nextTagColor([...tags, tag]));
-    setCreating(false);
+    setQuery("");
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-1.5">
-        {showExisting && tags.map((tag) => {
+    <div
+      ref={ref}
+      className="absolute right-0 top-full z-30 mt-1 w-60 rounded-xl border border-line bg-surface p-1.5 shadow-lg"
+    >
+      <input
+        value={query}
+        maxLength={24}
+        autoFocus
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.stopPropagation();
+            if (exact) {
+              if (selected.includes(exact.id) || !full) onToggle(exact.id);
+              setQuery("");
+            } else void create();
+          }
+          if (e.key === "Escape") {
+            e.stopPropagation();
+            onClose();
+          }
+        }}
+        placeholder={tags.length > 0 ? "Find or make a tag…" : "Name your first tag…"}
+        aria-label="Find or make a tag"
+        className="field h-9 text-sm"
+      />
+      <ul className="mt-1 max-h-56 overflow-y-auto" role="listbox" aria-multiselectable="true">
+        {shown.map((tag) => {
           const on = selected.includes(tag.id);
           return (
-            <button
-              key={tag.id}
-              type="button"
-              aria-pressed={on}
-              disabled={!on && full}
-              onClick={() => toggle(tag.id)}
-              className={`inline-flex max-w-40 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-all disabled:opacity-40 ${
-                on
-                  ? `${TAG_STYLES[tag.color].chip} ring-1 ring-current`
-                  : "text-ink-soft ring-1 ring-line-strong hover:text-ink"
-              }`}
-            >
-              {on ? (
-                <Check size={11} strokeWidth={3} />
-              ) : (
-                <span className={`h-2 w-2 shrink-0 rounded-full ${TAG_STYLES[tag.color].dot}`} />
-              )}
-              <span className="truncate">{tag.name}</span>
-            </button>
+            <li key={tag.id}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={on}
+                disabled={!on && full}
+                onClick={() => onToggle(tag.id)}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-surface-sunken disabled:opacity-40"
+              >
+                <span
+                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                    on ? "border-ink bg-ink text-surface" : "border-line-strong"
+                  }`}
+                >
+                  {on && <Check size={11} strokeWidth={3.5} />}
+                </span>
+                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${TAG_STYLES[tag.color].dot}`} />
+                <span className="min-w-0 flex-1 truncate">{tag.name}</span>
+              </button>
+            </li>
           );
         })}
-        {!creating && tags.length < MAX_TAGS && (
-          <button
-            type="button"
-            onClick={() => setCreating(true)}
-            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border border-dashed border-line-strong text-ink-soft hover:text-ink"
-          >
-            <Plus size={11} />
-            New tag
-          </button>
-        )}
-      </div>
-      {creating && (
-        <div className="space-y-2 rounded-lg bg-surface-sunken p-2">
-          <div className="flex gap-2">
-            <input
-              value={name}
-              maxLength={24}
-              autoFocus
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  void create();
-                }
-                if (e.key === "Escape") {
-                  e.stopPropagation();
-                  setCreating(false);
-                }
-              }}
-              placeholder="Tag name"
-              aria-label="New tag name"
-              className="field min-w-0 flex-1"
-            />
-            <button
-              type="button"
-              onClick={() => void create()}
-              disabled={busy || !name.trim()}
-              className="btn btn-primary shrink-0 px-3"
-            >
-              Add
-            </button>
-            <button
-              type="button"
-              onClick={() => setCreating(false)}
-              className="btn btn-ghost shrink-0 px-3"
-            >
-              Cancel
-            </button>
-          </div>
-          <TagColorSwatches value={color} onChange={setColor} />
-        </div>
+      </ul>
+      {canCreate && (
+        <button
+          type="button"
+          onClick={() => void create()}
+          disabled={busy}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-ink-soft hover:bg-surface-sunken"
+        >
+          <Plus size={14} className="shrink-0" />
+          <span className="min-w-0 truncate">
+            Make <span className="font-medium text-ink">“{query.trim()}”</span>
+          </span>
+        </button>
+      )}
+      {shown.length === 0 && !canCreate && (
+        <p className="px-2 py-1.5 text-xs text-ink-faint">
+          {full ? `${MAX_TAGS_PER_TASK} tags at most per task.` : "No tag by that name."}
+        </p>
+      )}
+      {full && shown.length > 0 && (
+        <p className="px-2 pt-1 text-[11px] text-ink-faint">
+          {MAX_TAGS_PER_TASK} tags at most per task.
+        </p>
       )}
     </div>
   );
 }
 
-/** The icon button that opens a tag picker, with how many are chosen. */
-export function TagToggle({
-  open,
-  count,
-  onClick,
+/**
+ * A button that opens the tag checklist. Each tick is handed straight to
+ * onChange, so on a saved task it applies at once — no form to submit.
+ */
+export function TagMenuButton({
+  tags,
+  selected,
+  onChange,
+  onCreate,
+  label = "Tags",
+  className = "btn btn-ghost shrink-0 px-2.5",
 }: {
-  open: boolean;
-  count: number;
-  onClick: () => void;
+  tags: TaskTag[];
+  selected: number[];
+  onChange: (ids: number[]) => void;
+  onCreate: (name: string, color: TagColor) => Promise<TaskTag | null>;
+  label?: string;
+  className?: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+
+  const toggle = (id: number) =>
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+
+  async function create(name: string) {
+    const tag = await onCreate(name, nextTagColor(tags));
+    if (tag) onChange([...selected, tag.id]);
+  }
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-expanded={open}
-      aria-label="Tags"
-      title="Tags"
-      className={`btn shrink-0 px-2.5 ${open || count > 0 ? "btn-ghost text-ink" : "btn-ghost text-ink-faint"}`}
-    >
-      <Tag size={15} />
-      {count > 0 && <span className="text-xs tabular-nums">{count}</span>}
-    </button>
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={label}
+        title={label}
+        className={className}
+      >
+        <Tag size={15} />
+      </button>
+      {open && (
+        <TagMenu
+          tags={tags}
+          selected={selected}
+          onToggle={toggle}
+          onCreate={create}
+          onClose={close}
+        />
+      )}
+    </div>
+  );
+}
+
+/** The tags chosen so far in a form, each with its own × to take it off. */
+export function ChosenTags({
+  tags,
+  selected,
+  onChange,
+}: {
+  tags: TaskTag[];
+  selected: number[];
+  onChange: (ids: number[]) => void;
+}) {
+  const chosen = tags.filter((t) => selected.includes(t.id));
+  if (chosen.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {chosen.map((tag) => (
+        <span
+          key={tag.id}
+          className={`inline-flex max-w-44 items-center gap-1 rounded-full py-0.5 pl-2 pr-1 text-xs font-medium ${TAG_STYLES[tag.color].chip}`}
+        >
+          <span className="truncate">{tag.name}</span>
+          <button
+            type="button"
+            onClick={() => onChange(selected.filter((id) => id !== tag.id))}
+            aria-label={`Remove the ${tag.name} tag`}
+            className="rounded-full p-0.5 opacity-70 hover:opacity-100"
+          >
+            <X size={11} strokeWidth={3} />
+          </button>
+        </span>
+      ))}
+    </div>
   );
 }
