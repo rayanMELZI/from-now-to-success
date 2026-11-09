@@ -4,11 +4,15 @@ import { useState } from "react";
 import Link from "next/link";
 import { RequireAuth, useAuth } from "@/lib/auth";
 import type { TagColor, Task, TaskTag } from "@/lib/types";
-import { CircleCheckBig, Pencil, Trash2, X } from "lucide-react";
+import { CircleCheckBig, Pencil, Settings2, Trash2, X } from "lucide-react";
+import { Modal } from "@/components/Modal";
 import { PageHeader, PageShell } from "@/components/ui/Page";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
+  TAG_STYLES,
+  TagChip,
+  TagColorSwatches,
   TagPicker,
   TagToggle,
   TaskQuickAdd,
@@ -19,9 +23,22 @@ import {
 function TasksPage() {
   const { user } = useAuth();
   const enabled = user?.tasksEnabled ?? false;
-  const { list, error, setError, add, update, remove, clearDone, toggleDone, addTag } =
-    useTasks(enabled);
+  const {
+    list,
+    error,
+    setError,
+    add,
+    update,
+    remove,
+    clearDone,
+    toggleDone,
+    addTag,
+    updateTag,
+    removeTag,
+  } = useTasks(enabled);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [filterId, setFilterId] = useState<number | null>(null);
+  const [managing, setManaging] = useState(false);
 
   if (!enabled) return <TasksOff />;
   if (!list) {
@@ -35,6 +52,11 @@ function TasksPage() {
   }
 
   const overdue = list.open.filter((t) => t.dueDate !== null && t.dueDate < list.today).length;
+  // A filter on a tag that has since been deleted simply falls away.
+  const filter = list.tags.find((t) => t.id === filterId) ?? null;
+  const matches = (task: Task) => filter === null || task.tags.some((t) => t.id === filter.id);
+  const open = list.open.filter(matches);
+  const done = list.done.filter(matches);
 
   return (
     <PageShell width="form">
@@ -53,9 +75,28 @@ function TasksPage() {
         <TaskQuickAdd onAdd={add} tags={list.tags} onCreateTag={addTag} autoFocus />
       </div>
 
-      {list.open.length > 0 ? (
+      {list.tags.length > 0 && (
+        <TagFilter
+          tags={list.tags}
+          value={filter?.id ?? null}
+          onChange={setFilterId}
+          onManage={() => setManaging(true)}
+        />
+      )}
+
+      <Modal open={managing} onClose={() => setManaging(false)}>
+        <TagManager
+          tags={list.tags}
+          onCreate={addTag}
+          onUpdate={updateTag}
+          onRemove={removeTag}
+          onClose={() => setManaging(false)}
+        />
+      </Modal>
+
+      {open.length > 0 ? (
         <ul className="card mt-4 divide-y divide-line px-4">
-          {list.open.map((task) =>
+          {open.map((task) =>
             editingId === task.id ? (
               <li key={task.id} className="py-2">
                 <TaskEditor
@@ -90,6 +131,10 @@ function TasksPage() {
             ),
           )}
         </ul>
+      ) : filter !== null && list.open.length > 0 ? (
+        <div className="card mt-4 p-6 text-center text-sm text-ink-soft">
+          Nothing open is tagged <TagChip tag={filter} className="align-middle" />.
+        </div>
       ) : (
         <div className="card mt-4 p-6 text-center text-sm text-ink-soft">
           <CircleCheckBig size={28} className="mx-auto mb-2 text-emerald-500" />
@@ -97,16 +142,16 @@ function TasksPage() {
         </div>
       )}
 
-      {list.done.length > 0 && (
+      {done.length > 0 && (
         <div className="mt-4">
           <Disclosure
             title="Finished"
-            count={list.done.length}
+            count={done.length}
             storageKey="tasks-finished"
             tone="card"
           >
             <ul className="divide-y divide-line">
-              {list.done.map((task) => (
+              {done.map((task) => (
                 <li key={task.id}>
                   <TaskRow task={task} today={list.today} onToggle={() => toggleDone(task)}>
                     <button
@@ -192,6 +237,152 @@ function TaskEditor({
           Cancel
         </button>
       </div>
+    </div>
+  );
+}
+
+/** One tag at a time narrows both lists; "All" lifts it. */
+function TagFilter({
+  tags,
+  value,
+  onChange,
+  onManage,
+}: {
+  tags: TaskTag[];
+  value: number | null;
+  onChange: (id: number | null) => void;
+  onManage: () => void;
+}) {
+  const chip = (active: boolean) =>
+    `inline-flex max-w-40 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+      active ? "bg-ink text-surface" : "bg-surface-sunken text-ink-soft hover:text-ink"
+    }`;
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-1.5" aria-label="Filter by tag">
+      <button type="button" aria-pressed={value === null} onClick={() => onChange(null)} className={chip(value === null)}>
+        All
+      </button>
+      {tags.map((tag) => (
+        <button
+          key={tag.id}
+          type="button"
+          aria-pressed={value === tag.id}
+          onClick={() => onChange(value === tag.id ? null : tag.id)}
+          className={chip(value === tag.id)}
+        >
+          <span className={`h-2 w-2 shrink-0 rounded-full ${TAG_STYLES[tag.color].dot}`} />
+          <span className="truncate">{tag.name}</span>
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={onManage}
+        aria-label="Edit tags"
+        title="Edit tags"
+        className="btn-icon ml-auto h-7 w-7 min-h-0"
+      >
+        <Settings2 size={14} />
+      </button>
+    </div>
+  );
+}
+
+/** Rename, recolour, delete or add tags; each change is saved as it is made. */
+function TagManager({
+  tags,
+  onCreate,
+  onUpdate,
+  onRemove,
+  onClose,
+}: {
+  tags: TaskTag[];
+  onCreate: (name: string, color: TagColor) => Promise<TaskTag | null>;
+  onUpdate: (id: number, name: string, color: TagColor) => Promise<boolean>;
+  onRemove: (id: number) => Promise<boolean>;
+  onClose: () => void;
+}) {
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="font-semibold">Tags</h2>
+        <button onClick={onClose} aria-label="Close" className="btn-icon h-8 w-8 min-h-0">
+          <X size={16} />
+        </button>
+      </div>
+      {tags.length === 0 ? (
+        <p className="text-sm text-ink-soft">No tags yet.</p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {tags.map((tag) => (
+            <li key={tag.id} className="py-3">
+              <TagEditorRow tag={tag} onUpdate={onUpdate} onRemove={onRemove} />
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-3 border-t border-line pt-3">
+        <TagPicker
+          tags={tags}
+          selected={[]}
+          onChange={() => {}}
+          onCreate={onCreate}
+          showExisting={false}
+        />
+      </div>
+      <p className="mt-3 text-xs text-ink-faint">
+        Renaming or recolouring a tag changes it on every task; deleting it takes it off them.
+      </p>
+    </div>
+  );
+}
+
+function TagEditorRow({
+  tag,
+  onUpdate,
+  onRemove,
+}: {
+  tag: TaskTag;
+  onUpdate: (id: number, name: string, color: TagColor) => Promise<boolean>;
+  onRemove: (id: number) => Promise<boolean>;
+}) {
+  const [name, setName] = useState(tag.name);
+  const saveName = () => {
+    const trimmed = name.trim();
+    if (!trimmed) setName(tag.name);
+    else if (trimmed !== tag.name) void onUpdate(tag.id, trimmed, tag.color);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span className={`h-3 w-3 shrink-0 rounded-full ${TAG_STYLES[tag.color].dot}`} />
+        <input
+          value={name}
+          maxLength={24}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={saveName}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
+          aria-label={`Name of the ${tag.name} tag`}
+          className="field min-w-0 flex-1"
+        />
+        <button
+          onClick={() => {
+            if (confirm(`Delete the "${tag.name}" tag? Tasks keep everything else.`)) {
+              void onRemove(tag.id);
+            }
+          }}
+          aria-label={`Delete the ${tag.name} tag`}
+          className="btn-icon hover:text-red-600"
+        >
+          <Trash2 size={15} />
+        </button>
+      </div>
+      <TagColorSwatches
+        value={tag.color}
+        onChange={(color) => color !== tag.color && void onUpdate(tag.id, name.trim() || tag.name, color)}
+      />
     </div>
   );
 }
