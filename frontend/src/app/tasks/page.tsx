@@ -8,6 +8,7 @@ import { CircleCheckBig, Pencil, Settings2, Trash2, X } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { PageHeader, PageShell } from "@/components/ui/Page";
 import { Disclosure } from "@/components/ui/Disclosure";
+import { Segmented } from "@/components/ui/Segmented";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
   TAG_STYLES,
@@ -20,6 +21,28 @@ import {
   TaskRow,
   useTasks,
 } from "@/components/Tasks";
+
+type SortBy = "date" | "tag";
+const SORT_KEY = "tasks-sort";
+
+/**
+ * Open tasks bunched by tag, in the order the tags were made: a task sits
+ * under its first tag, untagged ones last. Within a bunch the server's order
+ * (deadlines first) stays.
+ */
+function groupByTag(tasks: Task[], tags: TaskTag[]): { tag: TaskTag | null; tasks: Task[] }[] {
+  const rank = new Map(tags.map((t, i) => [t.id, i]));
+  const first = (task: Task) =>
+    task.tags.reduce<TaskTag | null>(
+      (best, t) => (best === null || rank.get(t.id)! < rank.get(best.id)! ? t : best),
+      null,
+    );
+  const groups = [...tags, null].map((tag) => ({
+    tag,
+    tasks: tasks.filter((task) => (first(task)?.id ?? null) === (tag?.id ?? null)),
+  }));
+  return groups.filter((g) => g.tasks.length > 0);
+}
 
 function TasksPage() {
   const { user } = useAuth();
@@ -41,6 +64,15 @@ function TasksPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [filterId, setFilterId] = useState<number | null>(null);
   const [managing, setManaging] = useState(false);
+  // Lazy init reads the saved choice on the first client render (the page
+  // only renders once signed in, never on the server).
+  const [sortBy, setSortBy] = useState<SortBy>(() =>
+    typeof window !== "undefined" && localStorage.getItem(SORT_KEY) === "tag" ? "tag" : "date",
+  );
+  const changeSort = (next: SortBy) => {
+    setSortBy(next);
+    localStorage.setItem(SORT_KEY, next);
+  };
 
   if (!enabled) return <TasksOff />;
   if (!list) {
@@ -59,6 +91,11 @@ function TasksPage() {
   const matches = (task: Task) => filter === null || task.tags.some((t) => t.id === filter.id);
   const open = list.open.filter(matches);
   const done = list.done.filter(matches);
+  const groups =
+    sortBy === "tag" && list.tags.length > 0
+      ? groupByTag(open, list.tags)
+      : [{ tag: null, tasks: open }];
+  const showHeads = groups.length > 1 || (sortBy === "tag" && groups[0]?.tag != null);
 
   return (
     <PageShell width="form">
@@ -82,6 +119,8 @@ function TasksPage() {
           tags={list.tags}
           value={filter?.id ?? null}
           onChange={setFilterId}
+          sortBy={sortBy}
+          onSort={changeSort}
           onManage={() => setManaging(true)}
         />
       )}
@@ -98,7 +137,19 @@ function TasksPage() {
 
       {open.length > 0 ? (
         <ul className="card mt-4 divide-y divide-line px-4">
-          {open.map((task) =>
+          {groups.flatMap(({ tag, tasks }) => [
+            ...(showHeads
+              ? [
+                  <li
+                    key={`head-${tag?.id ?? "none"}`}
+                    className="flex items-center gap-2 pb-1.5 pt-3 text-[11px] font-semibold uppercase tracking-wide text-ink-faint"
+                  >
+                    {tag ? <TagChip tag={tag} className="normal-case tracking-normal" /> : "No tag"}
+                    <span className="tabular-nums">{tasks.length}</span>
+                  </li>,
+                ]
+              : []),
+            ...tasks.map((task) =>
             editingId === task.id ? (
               <li key={task.id} className="py-2">
                 <TaskEditor
@@ -139,7 +190,8 @@ function TasksPage() {
                 </TaskRow>
               </li>
             ),
-          )}
+          ),
+          ])}
         </ul>
       ) : filter !== null && list.open.length > 0 ? (
         <div className="card mt-4 p-6 text-center text-sm text-ink-soft">
@@ -259,11 +311,15 @@ function TagFilter({
   tags,
   value,
   onChange,
+  sortBy,
+  onSort,
   onManage,
 }: {
   tags: TaskTag[];
   value: number | null;
   onChange: (id: number | null) => void;
+  sortBy: SortBy;
+  onSort: (sortBy: SortBy) => void;
   onManage: () => void;
 }) {
   const chip = (active: boolean) =>
@@ -292,15 +348,27 @@ function TagFilter({
           <span className="truncate">{tag.name}</span>
         </button>
       ))}
-      <button
-        type="button"
-        onClick={onManage}
-        aria-label="Edit tags"
-        title="Edit tags"
-        className="btn-icon ml-auto h-7 w-7 min-h-0"
-      >
-        <Settings2 size={14} />
-      </button>
+      <div className="ml-auto flex items-center gap-1">
+        <Segmented
+          size="sm"
+          ariaLabel="Sort tasks"
+          value={sortBy}
+          onChange={onSort}
+          options={[
+            { value: "date", label: "By date", title: "Deadlines first" },
+            { value: "tag", label: "By tag", title: "Grouped under their tags" },
+          ]}
+        />
+        <button
+          type="button"
+          onClick={onManage}
+          aria-label="Edit tags"
+          title="Edit tags"
+          className="btn-icon h-7 w-7 min-h-0"
+        >
+          <Settings2 size={14} />
+        </button>
+      </div>
     </div>
   );
 }
