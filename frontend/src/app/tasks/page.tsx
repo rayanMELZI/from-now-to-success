@@ -3,17 +3,23 @@
 import { useState } from "react";
 import Link from "next/link";
 import { RequireAuth, useAuth } from "@/lib/auth";
-import type { Task } from "@/lib/types";
+import type { TagColor, Task, TaskTag } from "@/lib/types";
 import { CircleCheckBig, Pencil, Trash2, X } from "lucide-react";
 import { PageHeader, PageShell } from "@/components/ui/Page";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { TaskQuickAdd, TaskRow, useTasks } from "@/components/Tasks";
+import {
+  TagPicker,
+  TagToggle,
+  TaskQuickAdd,
+  TaskRow,
+  useTasks,
+} from "@/components/Tasks";
 
 function TasksPage() {
   const { user } = useAuth();
   const enabled = user?.tasksEnabled ?? false;
-  const { list, error, setError, add, update, remove, clearDone, toggleDone } =
+  const { list, error, setError, add, update, remove, clearDone, toggleDone, addTag } =
     useTasks(enabled);
   const [editingId, setEditingId] = useState<number | null>(null);
 
@@ -44,7 +50,7 @@ function TasksPage() {
       {error && <ErrorNote message={error} onDismiss={() => setError(null)} />}
 
       <div className="card p-3">
-        <TaskQuickAdd onAdd={add} autoFocus />
+        <TaskQuickAdd onAdd={add} tags={list.tags} onCreateTag={addTag} autoFocus />
       </div>
 
       {list.open.length > 0 ? (
@@ -54,9 +60,11 @@ function TasksPage() {
               <li key={task.id} className="py-2">
                 <TaskEditor
                   task={task}
+                  tags={list.tags}
+                  onCreateTag={addTag}
                   onCancel={() => setEditingId(null)}
-                  onSave={async (title, dueDate) => {
-                    if (await update(task.id, title, dueDate)) setEditingId(null);
+                  onSave={async (title, dueDate, tagIds) => {
+                    if (await update(task.id, title, dueDate, tagIds)) setEditingId(null);
                   }}
                 />
               </li>
@@ -122,20 +130,32 @@ function TasksPage() {
   );
 }
 
-/** Title and deadline, edited in place. */
+/** Title, deadline and tags, edited in place. */
 function TaskEditor({
   task,
+  tags,
+  onCreateTag,
   onSave,
   onCancel,
 }: {
   task: Task;
-  onSave: (title: string, dueDate: string | null) => void;
+  tags: TaskTag[];
+  onCreateTag: (name: string, color: TagColor) => Promise<TaskTag | null>;
+  onSave: (title: string, dueDate: string | null, tagIds: number[]) => void;
   onCancel: () => void;
 }) {
   const [title, setTitle] = useState(task.title);
   const [dueDate, setDueDate] = useState(task.dueDate ?? "");
+  const [tagIds, setTagIds] = useState(() => task.tags.map((t) => t.id));
+  const [picking, setPicking] = useState(task.tags.length > 0);
   const valid = title.trim().length > 0;
-  const save = () => valid && onSave(title.trim(), dueDate || null);
+  const save = () =>
+    valid &&
+    onSave(
+      title.trim(),
+      dueDate || null,
+      tagIds.filter((id) => tags.some((t) => t.id === id)),
+    );
 
   return (
     <div className="space-y-2">
@@ -159,7 +179,11 @@ function TaskEditor({
           aria-label="Due by (optional)"
           className="field w-auto shrink-0 tabular-nums"
         />
+        <TagToggle open={picking} count={tagIds.length} onClick={() => setPicking((v) => !v)} />
       </div>
+      {picking && (
+        <TagPicker tags={tags} selected={tagIds} onChange={setTagIds} onCreate={onCreateTag} />
+      )}
       <div className="flex gap-2">
         <button onClick={save} disabled={!valid} className="btn btn-primary flex-1">
           Save
