@@ -355,8 +355,16 @@ function TagFilter({
           value={sortBy}
           onChange={onSort}
           options={[
-            { value: "date", label: "By date", title: "Deadlines first" },
-            { value: "tag", label: "By tag", title: "Grouped under their tags" },
+            {
+              value: "date",
+              label: <span className="whitespace-nowrap">By date</span>,
+              title: "Deadlines first",
+            },
+            {
+              value: "tag",
+              label: <span className="whitespace-nowrap">By tag</span>,
+              title: "Grouped under their tags",
+            },
           ]}
         />
         <button
