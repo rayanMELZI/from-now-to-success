@@ -454,7 +454,7 @@ export function TagPicker({
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium text-ink-soft ring-1 ring-dashed ring-line-strong hover:text-ink"
+            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border border-dashed border-line-strong text-ink-soft hover:text-ink"
           >
             <Plus size={11} />
             New tag
