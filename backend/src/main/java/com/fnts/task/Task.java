@@ -2,6 +2,10 @@ package com.fnts.task;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.LinkedHashSet;
+import java.util.Set;
+
+import org.hibernate.annotations.BatchSize;
 
 import com.fnts.common.EncryptedStringConverter;
 import com.fnts.user.User;
@@ -14,6 +18,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Getter;
@@ -51,6 +57,14 @@ public class Task {
     /** When it was ticked, so finished tasks can be listed most recent first. */
     @Column(name = "done_at")
     private Instant doneAt;
+
+    /** Its labels; batch-loaded so a whole list costs a handful of queries. */
+    @ManyToMany
+    @JoinTable(name = "task_tag_links",
+            joinColumns = @JoinColumn(name = "task_id"),
+            inverseJoinColumns = @JoinColumn(name = "tag_id"))
+    @BatchSize(size = 50)
+    private Set<TaskTag> tags = new LinkedHashSet<>();
 
     @Column(name = "created_at", nullable = false, updatable = false, insertable = false)
     private Instant createdAt;
