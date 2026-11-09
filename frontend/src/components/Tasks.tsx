@@ -1,9 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { CalendarDays, Check, Plus } from "lucide-react";
+import { CalendarDays, Check, Plus, Tag } from "lucide-react";
 import { api } from "@/lib/api";
-import type { Task, TaskList } from "@/lib/types";
+import {
+  MAX_TAGS,
+  MAX_TAGS_PER_TASK,
+  TAG_COLORS,
+  type TagColor,
+  type Task,
+  type TaskList,
+  type TaskTag,
+} from "@/lib/types";
 
 /** Same rule as the plan page: dates in the app's language, not the browser's. */
 const DATE_LOCALE = "en-GB";
@@ -33,6 +41,47 @@ export function dueLabel(due: string, today: string): { text: string; late: bool
     late: false,
   };
 }
+
+/**
+ * Each palette name spelled out in full so Tailwind sees the classes:
+ * a soft chip for the label, a solid dot for swatches and filters.
+ */
+export const TAG_STYLES: Record<TagColor, { chip: string; dot: string }> = {
+  gray: {
+    chip: "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300",
+    dot: "bg-stone-400",
+  },
+  red: { chip: "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300", dot: "bg-red-500" },
+  orange: {
+    chip: "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300",
+    dot: "bg-orange-500",
+  },
+  amber: {
+    chip: "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
+    dot: "bg-amber-400",
+  },
+  green: {
+    chip: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
+    dot: "bg-emerald-500",
+  },
+  teal: {
+    chip: "bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300",
+    dot: "bg-teal-500",
+  },
+  sky: { chip: "bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300", dot: "bg-sky-500" },
+  indigo: {
+    chip: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300",
+    dot: "bg-indigo-500",
+  },
+  violet: {
+    chip: "bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300",
+    dot: "bg-violet-500",
+  },
+  pink: {
+    chip: "bg-pink-100 text-pink-700 dark:bg-pink-950/60 dark:text-pink-300",
+    dot: "bg-pink-500",
+  },
+};
 
 /**
  * The tasks list and every way to change it, shared by the tasks page and
@@ -70,11 +119,35 @@ export function useTasks(enabled: boolean) {
     }
   }
 
-  const add = (title: string, dueDate: string | null) =>
-    attempt(() => api<Task>("/api/tasks", { method: "POST", body: { title, dueDate } }));
+  const add = (title: string, dueDate: string | null, tagIds: number[] = []) =>
+    attempt(() =>
+      api<Task>("/api/tasks", { method: "POST", body: { title, dueDate, tagIds } }),
+    );
 
-  const update = (id: number, title: string, dueDate: string | null) =>
-    attempt(() => api<Task>(`/api/tasks/${id}`, { method: "PUT", body: { title, dueDate } }));
+  const update = (id: number, title: string, dueDate: string | null, tagIds: number[]) =>
+    attempt(() =>
+      api<Task>(`/api/tasks/${id}`, { method: "PUT", body: { title, dueDate, tagIds } }),
+    );
+
+  /** Resolves to the new tag, so a picker can select it straight away. */
+  async function addTag(name: string, color: TagColor): Promise<TaskTag | null> {
+    const made: { tag: TaskTag | null } = { tag: null };
+    await attempt(async () => {
+      made.tag = await api<TaskTag>("/api/tasks/tags", {
+        method: "POST",
+        body: { name, color },
+      });
+    });
+    return made.tag;
+  }
+
+  const updateTag = (id: number, name: string, color: TagColor) =>
+    attempt(() =>
+      api<TaskTag>(`/api/tasks/tags/${id}`, { method: "PUT", body: { name, color } }),
+    );
+
+  const removeTag = (id: number) =>
+    attempt(() => api(`/api/tasks/tags/${id}`, { method: "DELETE" }));
 
   const remove = (id: number) =>
     attempt(() => api(`/api/tasks/${id}`, { method: "DELETE" }));
@@ -105,7 +178,20 @@ export function useTasks(enabled: boolean) {
     if (!ok) await reload();
   }
 
-  return { list, error, setError, reload, add, update, remove, clearDone, toggleDone };
+  return {
+    list,
+    error,
+    setError,
+    reload,
+    add,
+    update,
+    remove,
+    clearDone,
+    toggleDone,
+    addTag,
+    updateTag,
+    removeTag,
+  };
 }
 
 /** One line: title in, optional deadline, Enter adds it. */
