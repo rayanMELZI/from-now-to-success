@@ -424,11 +424,14 @@ export function TagPicker({
   selected,
   onChange,
   onCreate,
+  showExisting = true,
 }: {
   tags: TaskTag[];
   selected: number[];
   onChange: (ids: number[]) => void;
   onCreate: (name: string, color: TagColor) => Promise<TaskTag | null>;
+  /** Off where tags are only made, not chosen (the tags dialog). */
+  showExisting?: boolean;
 }) {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -456,7 +459,7 @@ export function TagPicker({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-1.5">
-        {tags.map((tag) => {
+        {showExisting && tags.map((tag) => {
           const on = selected.includes(tag.id);
           return (
             <button
