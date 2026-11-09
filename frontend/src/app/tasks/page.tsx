@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { RequireAuth, useAuth } from "@/lib/auth";
-import type { TagColor, Task, TaskTag } from "@/lib/types";
+import { MAX_TAGS, type TagColor, type Task, type TaskTag } from "@/lib/types";
 import { CircleCheckBig, Pencil, Settings2, Trash2, X } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { PageHeader, PageShell } from "@/components/ui/Page";
@@ -13,8 +13,9 @@ import {
   TAG_STYLES,
   TagChip,
   TagColorSwatches,
-  TagPicker,
-  TagToggle,
+  nextTagColor,
+  ChosenTags,
+  TagMenuButton,
   TaskQuickAdd,
   TaskRow,
   useTasks,
@@ -32,6 +33,7 @@ function TasksPage() {
     remove,
     clearDone,
     toggleDone,
+    setTags,
     addTag,
     updateTag,
     removeTag,
@@ -112,6 +114,14 @@ function TasksPage() {
             ) : (
               <li key={task.id}>
                 <TaskRow task={task} today={list.today} onToggle={() => toggleDone(task)}>
+                  <TagMenuButton
+                    tags={list.tags}
+                    selected={task.tags.map((t) => t.id)}
+                    onChange={(ids) => void setTags(task, ids)}
+                    onCreate={addTag}
+                    label={`Tag ${task.title}`}
+                    className="btn-icon"
+                  />
                   <button
                     onClick={() => setEditingId(task.id)}
                     aria-label={`Edit ${task.title}`}
@@ -192,7 +202,6 @@ function TaskEditor({
   const [title, setTitle] = useState(task.title);
   const [dueDate, setDueDate] = useState(task.dueDate ?? "");
   const [tagIds, setTagIds] = useState(() => task.tags.map((t) => t.id));
-  const [picking, setPicking] = useState(task.tags.length > 0);
   const valid = title.trim().length > 0;
   const save = () =>
     valid &&
@@ -224,11 +233,15 @@ function TaskEditor({
           aria-label="Due by (optional)"
           className="field w-auto shrink-0 tabular-nums"
         />
-        <TagToggle open={picking} count={tagIds.length} onClick={() => setPicking((v) => !v)} />
+        <TagMenuButton
+          tags={tags}
+          selected={tagIds}
+          onChange={setTagIds}
+          onCreate={onCreateTag}
+          label="Tag it"
+        />
       </div>
-      {picking && (
-        <TagPicker tags={tags} selected={tagIds} onChange={setTagIds} onCreate={onCreateTag} />
-      )}
+      <ChosenTags tags={tags} selected={tagIds} onChange={setTagIds} />
       <div className="flex gap-2">
         <button onClick={save} disabled={!valid} className="btn btn-primary flex-1">
           Save
@@ -326,17 +339,63 @@ function TagManager({
         </ul>
       )}
       <div className="mt-3 border-t border-line pt-3">
-        <TagPicker
-          tags={tags}
-          selected={[]}
-          onChange={() => {}}
-          onCreate={onCreate}
-          showExisting={false}
-        />
+        <NewTagForm tags={tags} onCreate={onCreate} />
       </div>
       <p className="mt-3 text-xs text-ink-faint">
         Renaming or recolouring a tag changes it on every task; deleting it takes it off them.
       </p>
+    </div>
+  );
+}
+
+/** Name and colour for a new tag, made from the tags dialog. */
+function NewTagForm({
+  tags,
+  onCreate,
+}: {
+  tags: TaskTag[];
+  onCreate: (name: string, color: TagColor) => Promise<TaskTag | null>;
+}) {
+  const [name, setName] = useState("");
+  const [color, setColor] = useState<TagColor>(() => nextTagColor(tags));
+  const [busy, setBusy] = useState(false);
+  const full = tags.length >= MAX_TAGS;
+
+  async function create() {
+    const trimmed = name.trim();
+    if (!trimmed || busy) return;
+    setBusy(true);
+    const tag = await onCreate(trimmed, color);
+    setBusy(false);
+    if (!tag) return;
+    setName("");
+    setColor(nextTagColor([...tags, tag]));
+  }
+
+  if (full) return <p className="text-xs text-ink-faint">{MAX_TAGS} tags at most.</p>;
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <input
+          value={name}
+          maxLength={24}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void create();
+          }}
+          placeholder="New tag"
+          aria-label="New tag name"
+          className="field min-w-0 flex-1"
+        />
+        <button
+          onClick={() => void create()}
+          disabled={busy || !name.trim()}
+          className="btn btn-primary shrink-0 px-3"
+        >
+          Add
+        </button>
+      </div>
+      <TagColorSwatches value={color} onChange={setColor} />
     </div>
   );
 }
