@@ -194,66 +194,96 @@ export function useTasks(enabled: boolean) {
   };
 }
 
-/** One line: title in, optional deadline, Enter adds it. */
+/** One line: title in, optional deadline and tags, Enter adds it. */
 export function TaskQuickAdd({
   onAdd,
+  tags,
+  onCreateTag,
   compact = false,
   autoFocus = false,
 }: {
-  onAdd: (title: string, dueDate: string | null) => Promise<boolean>;
+  onAdd: (title: string, dueDate: string | null, tagIds: number[]) => Promise<boolean>;
+  /** With both of these the tags button appears (never in compact mode). */
+  tags?: TaskTag[];
+  onCreateTag?: (name: string, color: TagColor) => Promise<TaskTag | null>;
   /** The plan's side panel: no date field, just the title. */
   compact?: boolean;
   autoFocus?: boolean;
 }) {
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [tagIds, setTagIds] = useState<number[]>([]);
+  const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
+  const withTags = !compact && tags !== undefined && onCreateTag !== undefined;
 
   async function submit() {
     const trimmed = title.trim();
     if (!trimmed || busy) return;
     setBusy(true);
-    const ok = await onAdd(trimmed, dueDate || null);
+    // A tag deleted meanwhile would be dropped by the server anyway.
+    const ok = await onAdd(
+      trimmed,
+      dueDate || null,
+      tagIds.filter((id) => tags?.some((t) => t.id === id)),
+    );
     setBusy(false);
     if (ok) {
       setTitle("");
       setDueDate("");
+      setTagIds([]);
+      setPicking(false);
     }
   }
 
   return (
-    <div className="flex gap-2">
-      <input
-        value={title}
-        maxLength={120}
-        autoFocus={autoFocus}
-        onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") void submit();
-        }}
-        placeholder="Something to get done…"
-        aria-label="New task"
-        className="field min-w-0 flex-1"
-      />
-      {!compact && (
+    <div>
+      <div className="flex gap-2">
         <input
-          type="date"
-          value={dueDate}
-          onChange={(e) => setDueDate(e.target.value)}
-          aria-label="Due by (optional)"
-          title="Due by (optional)"
-          className="field w-auto shrink-0 tabular-nums"
+          value={title}
+          maxLength={120}
+          autoFocus={autoFocus}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void submit();
+          }}
+          placeholder="Something to get done…"
+          aria-label="New task"
+          className="field min-w-0 flex-1"
         />
+        {!compact && (
+          <input
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+            aria-label="Due by (optional)"
+            title="Due by (optional)"
+            className="field w-auto shrink-0 tabular-nums"
+          />
+        )}
+        {withTags && (
+          <TagToggle open={picking} count={tagIds.length} onClick={() => setPicking((v) => !v)} />
+        )}
+        <button
+          onClick={() => void submit()}
+          disabled={busy || !title.trim()}
+          aria-label="Add task"
+          className="btn btn-primary shrink-0 px-3"
+        >
+          <Plus size={15} />
+          {!compact && <span className="hidden sm:inline">Add</span>}
+        </button>
+      </div>
+      {withTags && picking && (
+        <div className="mt-2">
+          <TagPicker
+            tags={tags}
+            selected={tagIds}
+            onChange={setTagIds}
+            onCreate={onCreateTag}
+          />
+        </div>
       )}
-      <button
-        onClick={() => void submit()}
-        disabled={busy || !title.trim()}
-        aria-label="Add task"
-        className="btn btn-primary shrink-0 px-3"
-      >
-        <Plus size={15} />
-        {!compact && <span className="hidden sm:inline">Add</span>}
-      </button>
     </div>
   );
 }
