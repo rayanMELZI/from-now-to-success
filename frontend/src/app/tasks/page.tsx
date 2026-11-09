@@ -259,7 +259,12 @@ function TagFilter({
     }`;
   return (
     <div className="mt-4 flex flex-wrap items-center gap-1.5" aria-label="Filter by tag">
-      <button type="button" aria-pressed={value === null} onClick={() => onChange(null)} className={chip(value === null)}>
+      <button
+        type="button"
+        aria-pressed={value === null}
+        onClick={() => onChange(null)}
+        className={chip(value === null)}
+      >
         All
       </button>
       {tags.map((tag) => (
@@ -381,7 +386,9 @@ function TagEditorRow({
       </div>
       <TagColorSwatches
         value={tag.color}
-        onChange={(color) => color !== tag.color && void onUpdate(tag.id, name.trim() || tag.name, color)}
+        onChange={(color) => {
+          if (color !== tag.color) void onUpdate(tag.id, name.trim() || tag.name, color);
+        }}
       />
     </div>
   );
