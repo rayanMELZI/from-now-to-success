@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.fnts.auth.CurrentUser;
 import com.fnts.task.TaskDtos.DoneRequest;
+import com.fnts.task.TaskDtos.TagRequest;
+import com.fnts.task.TaskDtos.TagResponse;
 import com.fnts.task.TaskDtos.TaskListResponse;
 import com.fnts.task.TaskDtos.TaskRequest;
 import com.fnts.task.TaskDtos.TaskResponse;
@@ -54,6 +56,26 @@ public class TaskController {
                                 @PathVariable Long id,
                                 @Valid @RequestBody DoneRequest request) {
         return taskService.setDone(user.id(), id, request.done());
+    }
+
+    @PostMapping("/tags")
+    @ResponseStatus(HttpStatus.CREATED)
+    public TagResponse addTag(@AuthenticationPrincipal CurrentUser user,
+                              @Valid @RequestBody TagRequest request) {
+        return taskService.addTag(user.id(), request);
+    }
+
+    @PutMapping("/tags/{id}")
+    public TagResponse updateTag(@AuthenticationPrincipal CurrentUser user,
+                                 @PathVariable Long id,
+                                 @Valid @RequestBody TagRequest request) {
+        return taskService.updateTag(user.id(), id, request);
+    }
+
+    @DeleteMapping("/tags/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteTag(@AuthenticationPrincipal CurrentUser user, @PathVariable Long id) {
+        taskService.deleteTag(user.id(), id);
     }
 
     /** Clears every finished task at once. */
