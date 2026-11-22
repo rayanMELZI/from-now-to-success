@@ -12,6 +12,15 @@ import {
   type TaskList,
   type TaskTag,
 } from "@/lib/types";
+import { plainText } from "@/lib/richText";
+import { RichField, RichText } from "@/components/ui/RichText";
+
+/** The longest a stored title may be, formatting marks included (as on the server). */
+export const MAX_TASK_TITLE = 120;
+
+/** A title worth saving: some words, and within the server's limit once formatted. */
+export const titleIsValid = (title: string) =>
+  plainText(title).trim().length > 0 && title.trim().length <= MAX_TASK_TITLE;
 
 /** Same rule as the plan page: dates in the app's language, not the browser's. */
 const DATE_LOCALE = "en-GB";
@@ -244,7 +253,7 @@ export function TaskQuickAdd({
 
   async function submit() {
     const trimmed = title.trim();
-    if (!trimmed || busy) return;
+    if (!titleIsValid(trimmed) || busy) return;
     setBusy(true);
     // A tag deleted meanwhile would be dropped by the server anyway.
     const ok = await onAdd(
@@ -262,18 +271,16 @@ export function TaskQuickAdd({
 
   return (
     <div>
-      <div className="flex gap-2">
-        <input
+      {/* Top-aligned: the formatting bar opens under the field while typing. */}
+      <div className="flex items-start gap-2">
+        <RichField
           value={title}
-          maxLength={120}
+          maxLength={MAX_TASK_TITLE}
           autoFocus={autoFocus}
-          onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void submit();
-          }}
+          onChange={setTitle}
+          onEnter={() => void submit()}
           placeholder="Something to get done…"
-          aria-label="New task"
-          className="field min-w-0 flex-1"
+          ariaLabel="New task"
         />
         {!compact && (
           <input
@@ -296,7 +303,7 @@ export function TaskQuickAdd({
         )}
         <button
           onClick={() => void submit()}
-          disabled={busy || !title.trim()}
+          disabled={busy || !titleIsValid(title)}
           aria-label="Add task"
           className="btn btn-primary shrink-0 px-3"
         >
@@ -324,7 +331,11 @@ export function TaskCheck({
   return (
     <button
       onClick={onToggle}
-      aria-label={task.done ? `Put ${task.title} back on the list` : `Mark ${task.title} done`}
+      aria-label={
+        task.done
+          ? `Put ${plainText(task.title)} back on the list`
+          : `Mark ${plainText(task.title)} done`
+      }
       className={`relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all active:scale-90 ${
         task.done
           ? "border-emerald-500 bg-emerald-500 text-white"
@@ -377,7 +388,7 @@ export function TaskRow({
             task.done ? "text-ink-faint line-through" : "font-medium"
           }`}
         >
-          {task.title}
+          <RichText source={task.title} />
         </div>
         {(task.tags.length > 0 || (task.dueDate && !task.done)) && (
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">

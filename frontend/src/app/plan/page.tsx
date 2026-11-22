@@ -39,6 +39,7 @@ import {
   X,
 } from "lucide-react";
 import { TaskQuickAdd, TaskRow, useTasks } from "@/components/Tasks";
+import { plainText } from "@/lib/richText";
 import { PageHeader, PageShell } from "@/components/ui/Page";
 import { HabitPicker } from "@/components/ui/HabitPicker";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -736,7 +737,8 @@ function PlanPage() {
               .filter((id): id is number => id !== null)}
             canPlan={!selecting}
             onPlan={(task) => {
-              setDraft({ taskId: task.id, title: task.title, nonce: Date.now() });
+              // A plan line is plain text: the task's words, without its formatting.
+              setDraft({ taskId: task.id, title: plainText(task.title), nonce: Date.now() });
               // On a phone the composer sits above the panel, out of sight.
               document
                 .getElementById("plan-composer")
@@ -1429,7 +1431,7 @@ function TasksPanel({
                     <button
                       onClick={() => onPlan(task)}
                       title={planned ? "Already on this day — plan it again" : "Give it a time on the plan"}
-                      aria-label={`Plan ${task.title}`}
+                      aria-label={`Plan ${plainText(task.title)}`}
                       className="btn btn-ghost h-7 min-h-0 shrink-0 px-2 text-xs"
                     >
                       <Plus size={13} />
