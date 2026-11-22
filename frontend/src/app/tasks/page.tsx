@@ -6,6 +6,7 @@ import { RequireAuth, useAuth } from "@/lib/auth";
 import { MAX_TAGS, type TagColor, type Task, type TaskTag } from "@/lib/types";
 import { CircleCheckBig, Pencil, Settings2, Trash2, X } from "lucide-react";
 import { Modal } from "@/components/Modal";
+import { plainText } from "@/lib/richText";
 import { PageHeader, PageShell } from "@/components/ui/Page";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Segmented } from "@/components/ui/Segmented";
@@ -170,19 +171,19 @@ function TasksPage() {
                     selected={task.tags.map((t) => t.id)}
                     onChange={(ids) => void setTags(task, ids)}
                     onCreate={addTag}
-                    label={`Tag ${task.title}`}
+                    label={`Tag ${plainText(task.title)}`}
                     className="btn-icon"
                   />
                   <button
                     onClick={() => setEditingId(task.id)}
-                    aria-label={`Edit ${task.title}`}
+                    aria-label={`Edit ${plainText(task.title)}`}
                     className="btn-icon"
                   >
                     <Pencil size={15} />
                   </button>
                   <button
                     onClick={() => remove(task.id)}
-                    aria-label={`Delete ${task.title}`}
+                    aria-label={`Delete ${plainText(task.title)}`}
                     className="btn-icon hover:text-red-600"
                   >
                     <Trash2 size={15} />
@@ -218,7 +219,7 @@ function TasksPage() {
                   <TaskRow task={task} today={list.today} onToggle={() => toggleDone(task)}>
                     <button
                       onClick={() => remove(task.id)}
-                      aria-label={`Delete ${task.title}`}
+                      aria-label={`Delete ${plainText(task.title)}`}
                       className="btn-icon hover:text-red-600"
                     >
                       <Trash2 size={15} />
