@@ -9,6 +9,7 @@ import { Ban, Flame } from "lucide-react";
 import { PageHeader, PageShell } from "@/components/ui/Page";
 import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 import { RiskBadge } from "@/components/ui/RiskBadge";
+import { RichText } from "@/components/ui/RichText";
 
 const POINTS_PER_LEVEL = 500;
 
@@ -230,7 +231,7 @@ function StatsPage() {
                   >
                     <span className="flex min-w-0 flex-1 items-center gap-1.5">
                       {habit.habitType === "QUIT" && <Ban size={13} className="shrink-0 text-red-500" />}
-                      {habit.name}
+                      <RichText source={habit.name} className="min-w-0 truncate" />
                       {habit.status === "VALID" && (
                         <span className="ml-2 rounded-full bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 text-xs text-emerald-800 dark:text-emerald-300">
                           valid

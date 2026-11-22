@@ -12,6 +12,8 @@ import {
 import { GaugeBar } from "./GaugeBar";
 import { HabitIcon } from "./ui/HabitPicker";
 import { RiskBadge } from "./ui/RiskBadge";
+import { plainText } from "@/lib/richText";
+import { RichText } from "@/components/ui/RichText";
 
 /**
  * The roadmap as a list.
@@ -42,7 +44,7 @@ export function HabitList({
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return habits;
-    return habits.filter((h) => h.name.toLowerCase().includes(q));
+    return habits.filter((h) => plainText(h.name).toLowerCase().includes(q));
   }, [habits, query]);
 
   const sections = SECTIONS.map((section) => ({
@@ -135,7 +137,7 @@ function HabitCard({
         ) : (
           <HabitIcon habit={habit} />
         )}
-        <span className="truncate">{habit.name}</span>
+        <RichText source={habit.name} className="truncate" />
         {risk && <RiskBadge risk={risk} className="ml-auto" />}
       </p>
 

@@ -37,6 +37,8 @@ import {
   Trophy,
   X,
 } from "lucide-react";
+import { plainText } from "@/lib/richText";
+import { RichField, RichText } from "@/components/ui/RichText";
 
 interface MissDraft {
   habitId: number;
@@ -663,7 +665,7 @@ function CheckinPage() {
                     ) : (
                       <Sprout size={13} className="shrink-0 text-emerald-600" />
                     )}
-                    <span className="truncate">{entry.name}</span>
+                    <RichText source={entry.name} className="truncate" />
                   </span>
                   <AnsweredStatus entry={entry} />
                 </li>
@@ -687,10 +689,10 @@ function CheckinPage() {
               {result.level})
             </p>
             {result.becameValid.length > 0 && (
-              <p className="mt-0.5">✓ Now valid: {result.becameValid.join(", ")}</p>
+              <p className="mt-0.5">✓ Now valid: {result.becameValid.map(plainText).join(", ")}</p>
             )}
             {result.unlocked.length > 0 && (
-              <p className="mt-0.5">🔓 Unlocked: {result.unlocked.join(", ")}</p>
+              <p className="mt-0.5">🔓 Unlocked: {result.unlocked.map(plainText).join(", ")}</p>
             )}
           </>
         )}
@@ -811,7 +813,7 @@ function TimerCard({
     <div className="card flex flex-col p-3">
       <p className="flex items-center gap-1.5 font-medium">
         <Ban size={14} className="shrink-0 text-red-500" />
-        <span className="truncate">{entry.name}</span>
+        <RichText source={entry.name} className="truncate" />
       </p>
 
       <p className="mt-1 flex items-baseline gap-1.5 tabular-nums">
@@ -920,19 +922,20 @@ function TimerCard({
             </p>
           )}
 
-          <label className="block space-y-1">
+          <div className="space-y-1">
             <span className="text-xs text-ink-soft">
               What happened? (a reason halves the point loss)
             </span>
-            <textarea
+            <RichField
+              multiline
+              rows={2}
               value={draft.reason}
               maxLength={500}
-              rows={2}
-              onChange={(e) => onDraftChange({ ...draft, reason: e.target.value })}
-              className="field"
+              onChange={(reason) => onDraftChange({ ...draft, reason })}
+              ariaLabel="What happened?"
               placeholder="e.g. stressed after work, someone offered…"
             />
-          </label>
+          </div>
           <div className="flex gap-2">
             <button
               onClick={() => onConfirm(draft)}
@@ -1046,7 +1049,7 @@ function DragHandle({
   return (
     <button
       type="button"
-      aria-label={`Reorder ${entry.name} — drag, or use the arrow keys`}
+      aria-label={`Reorder ${plainText(entry.name)} — drag, or use the arrow keys`}
       title="Drag to reorder"
       onPointerDown={(event) => {
         event.preventDefault();
@@ -1096,7 +1099,7 @@ function HabitHeadline({ entry, risk }: { entry: TodayEntry; risk: RiskLevel | n
         ) : (
           <Sprout size={14} className="shrink-0 text-emerald-600" />
         )}
-        <span className="truncate">{entry.name}</span>
+        <RichText source={entry.name} className="truncate" />
       </p>
       {periodic && (
         <span
@@ -1263,19 +1266,20 @@ function MissDraftPanel({
   return (
     <div className="mt-3 space-y-3 rounded-lg bg-surface-sunken p-3">
       {periodic && <p className="text-sm font-medium">Skip this whole {periodNoun}?</p>}
-      <label className="block space-y-1">
+      <div className="space-y-1">
         <span className="text-xs text-ink-soft">
           What happened? (a reason halves the point loss)
         </span>
-        <textarea
+        <RichField
+          multiline
+          rows={2}
           value={draft.reason}
           maxLength={500}
-          rows={2}
-          onChange={(e) => onChange({ ...draft, reason: e.target.value })}
-          className="field"
+          onChange={(reason) => onChange({ ...draft, reason })}
+          ariaLabel="What happened?"
           placeholder="e.g. traveled all day, was sick…"
         />
-      </label>
+      </div>
 
       <FreezeToggle
         active={draft.freeze}

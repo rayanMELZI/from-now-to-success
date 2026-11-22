@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Ban, Check, Eye, EyeOff, Search, Sprout, TimerReset, X } from "lucide-react";
 import type { Habit } from "@/lib/types";
+import { plainText } from "@/lib/richText";
+import { RichText } from "@/components/ui/RichText";
 
 /** The little icon that says what kind of habit this is, at a glance. */
 export function HabitIcon({ habit, size = 13 }: { habit: Habit; size?: number }) {
@@ -76,7 +78,7 @@ export function HabitPicker({
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return ordered;
-    return ordered.filter((h) => h.name.toLowerCase().includes(q));
+    return ordered.filter((h) => plainText(h.name).toLowerCase().includes(q));
   }, [ordered, query]);
 
   const isMuted = (habit: Habit) => muted?.(habit) ?? false;
@@ -90,8 +92,8 @@ export function HabitPicker({
         aria-pressed={isMuted(habit)}
         aria-label={
           isMuted(habit)
-            ? `Bring ${habit.name} back up the list`
-            : `Set ${habit.name} aside at the bottom of the list`
+            ? `Bring ${plainText(habit.name)} back up the list`
+            : `Set ${plainText(habit.name)} aside at the bottom of the list`
         }
         title={isMuted(habit) ? "Bring it back up the list" : "Set aside at the bottom"}
         className={`flex shrink-0 items-center justify-center self-stretch px-3 text-ink-faint transition-opacity hover:text-ink ${
@@ -141,11 +143,11 @@ export function HabitPicker({
               key={habit.id}
               type="button"
               onClick={() => onToggle(habit)}
-              aria-label={`Remove ${habit.name}`}
+              aria-label={`Remove ${plainText(habit.name)}`}
               className="flex items-center gap-1 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent-ink transition-opacity hover:opacity-80"
             >
               <HabitIcon habit={habit} size={11} />
-              <span className="max-w-40 truncate">{habit.name}</span>
+              <RichText source={habit.name} className="max-w-40 truncate" />
               <X size={11} />
             </button>
           ))}
@@ -232,7 +234,7 @@ export function HabitPicker({
                     {on && <Check size={11} strokeWidth={3.5} />}
                   </span>
                   <HabitIcon habit={habit} />
-                  <span className="min-w-0 flex-1 truncate">{habit.name}</span>
+                  <RichText source={habit.name} className="min-w-0 flex-1 truncate" />
                   {meta?.(habit)}
                 </button>
                 {control}
@@ -271,7 +273,7 @@ function HabitPill({
       } ${dim && !on ? "opacity-50" : ""}`}
     >
       {on ? <Check size={11} strokeWidth={3.5} /> : <HabitIcon habit={habit} size={11} />}
-      <span className="max-w-44 truncate">{habit.name}</span>
+      <RichText source={habit.name} className="max-w-44 truncate" />
       {meta}
     </button>
   );

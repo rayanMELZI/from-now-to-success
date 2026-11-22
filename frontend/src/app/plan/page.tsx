@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { TaskQuickAdd, TaskRow, useTasks } from "@/components/Tasks";
 import { plainText } from "@/lib/richText";
+import { RichField, RichText } from "@/components/ui/RichText";
 import { PageHeader, PageShell } from "@/components/ui/Page";
 import { HabitPicker } from "@/components/ui/HabitPicker";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -457,8 +458,8 @@ function PlanPage() {
       // A habit answered elsewhere since this page loaded earns nothing here;
       // saying "+0 points" would read like the check-in failed.
       result.earnedPoints === 0
-        ? `${name} was already counted for today`
-        : `${name} checked in · ${result.earnedPoints > 0 ? "+" : ""}${result.earnedPoints} points`,
+        ? `${plainText(name)} was already counted for today`
+        : `${plainText(name)} checked in · ${result.earnedPoints > 0 ? "+" : ""}${result.earnedPoints} points`,
     );
     // The "checked in" chip and the header's point total are bookkeeping: the
     // answer is already in and already reported, so they catch up on their own
@@ -737,8 +738,8 @@ function PlanPage() {
               .filter((id): id is number => id !== null)}
             canPlan={!selecting}
             onPlan={(task) => {
-              // A plan line is plain text: the task's words, without its formatting.
-              setDraft({ taskId: task.id, title: plainText(task.title), nonce: Date.now() });
+              // Plan lines take formatting too, so the task comes over as it looks.
+              setDraft({ taskId: task.id, title: task.title, nonce: Date.now() });
               // On a phone the composer sits above the panel, out of sight.
               document
                 .getElementById("plan-composer")
@@ -888,10 +889,10 @@ function HabitChip({ name, quit }: { name: string; quit: boolean }) {
   return (
     <span
       className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-400/15 dark:text-amber-300"
-      title={`From your habit "${name}"`}
+      title={`From your habit "${plainText(name)}"`}
     >
       {quit ? <Ban size={10} /> : <Sparkles size={10} />}
-      {name}
+      <RichText source={name} />
     </span>
   );
 }
@@ -989,7 +990,9 @@ function BlockRow({
           <button
             onClick={onToggleDone}
             disabled={busy || pending}
-            aria-label={block.done ? `Undo ${block.title}` : `Mark ${block.title} done`}
+            aria-label={
+              block.done ? `Undo ${plainText(block.title)}` : `Mark ${plainText(block.title)} done`
+            }
             className={`relative flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-all active:scale-90 ${
               block.done
                 ? "border-emerald-500 bg-emerald-500 text-white"
@@ -1043,7 +1046,7 @@ function BlockRow({
                 block.done ? "text-ink-faint line-through" : ""
               }`}
             >
-              {block.title}
+              <RichText source={block.title} />
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               {block.habitName && (
@@ -1063,7 +1066,7 @@ function BlockRow({
             <div className="flex shrink-0 gap-0.5">
               <button
                 onClick={onEdit}
-                aria-label={`Edit ${block.title}`}
+                aria-label={`Edit ${plainText(block.title)}`}
                 className="btn-icon h-8 w-8"
               >
                 <Pencil size={14} />
@@ -1071,7 +1074,7 @@ function BlockRow({
               <button
                 onClick={onDelete}
                 disabled={busy}
-                aria-label={`Delete ${block.title}`}
+                aria-label={`Delete ${plainText(block.title)}`}
                 className="btn-icon h-8 w-8 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950/40"
               >
                 <Trash2 size={14} />
@@ -1236,7 +1239,8 @@ function BlockFields({
   // neither belongs in a day's plan.
   const pickable = habits.filter((h) => h.status !== "LOCKED" && !h.archivedAt);
   const minute = parseMinute(time);
-  const valid = title.trim().length > 0 && minute !== null;
+  // Some words, and within the server's 120 characters once formatted.
+  const valid = plainText(title).trim().length > 0 && title.trim().length <= 120 && minute !== null;
 
   /** Picking a habit fills the line for you; picking it again unlinks it. */
   function pickHabit(habit: Habit) {
@@ -1284,17 +1288,14 @@ function BlockFields({
         </div>
         <div className="min-w-0 flex-1">
           <span className="field-label mb-0.5">What</span>
-          <input
+          <RichField
             value={title}
             maxLength={120}
-            onChange={(e) => setTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submit();
-              if (e.key === "Escape") onCancel?.();
-            }}
+            onChange={setTitle}
+            onEnter={submit}
+            onEscape={onCancel}
             placeholder="Finished doing what?"
-            aria-label="What is finished by then"
-            className="field"
+            ariaLabel="What is finished by then"
           />
         </div>
       </div>

@@ -31,12 +31,15 @@ cells on the map — from *now* to *success*.
   timeline of your day) and **tasks** (one-off things to get done). Tasks can
   carry coloured **tags** (up to 5 each) to filter or sort the list by, sit in a
   hideable panel beside the plan and be pulled into it; ticking the plan line
-  ticks the task. Task titles can be **formatted**: while typing, a bar under
-  the field (or Ctrl+B / I / U / Shift+X) makes the selected words bold,
-  italic, struck, underlined or coloured — or, with nothing selected, what you
-  type next. Titles are stored with light marks (`**bold**`, `_italic_`,
-  `~~struck~~`, `++underlined++`, `{red:coloured}`), the same as the mobile
-  app, and the marks count towards the 120 characters. Neither touches points.
+  ticks the task. Neither touches points.
+- **Formatted text** everywhere you write: habit names and notes, plan lines,
+  task titles and the reason for a miss. While typing, a bar under the field
+  (or Ctrl+B / I / U / Shift+X) makes the selected words bold, italic, struck,
+  underlined or coloured — or, with nothing selected, what you type next.
+  Notes and reasons take several lines (Ctrl+Enter sends). Text is stored with
+  light marks (`**bold**`, `_italic_`, `~~struck~~`, `++underlined++`,
+  `{red:coloured}`), the same as the mobile app, and the marks count towards
+  each field's length limit.
 - A push notification asks about your day at your chosen hour — only on days
   you haven't finished checking in.
 - The in-app feedback button sends ideas to the developer: each one is

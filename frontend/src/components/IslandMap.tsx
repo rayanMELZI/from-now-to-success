@@ -27,6 +27,8 @@ import {
 } from "lucide-react";
 import { habitRisk, riskNote, type Habit } from "@/lib/types";
 import { useTheme } from "@/lib/theme";
+import { plainText } from "@/lib/richText";
+import { RichText } from "@/components/ui/RichText";
 
 /* ------------------------------------------------------------------ */
 /* Layout                                                              */
@@ -163,7 +165,7 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
 
   return (
     <div
-      title={risk ? `${habit.name} — ${riskNote[risk]}` : undefined}
+      title={risk ? `${plainText(habit.name)} — ${riskNote[risk]}` : undefined}
       className={`relative h-26 w-47.5 overflow-hidden border-2 shadow-sm transition-shadow ${
         selected
           ? "border-amber-500 shadow-lg shadow-amber-200/60"
@@ -209,7 +211,7 @@ function HabitNode({ data }: NodeProps<Node<HabitNodeData>>) {
           {!dimmed && habit.habitType === "QUIT" && (
             <Ban size={12} className="shrink-0 text-red-500" />
           )}
-          <span className="truncate">{habit.name}</span>
+          <RichText source={habit.name} className="truncate" />
         </p>
         {locked ? (
           <p className="text-xs text-stone-400">locked</p>
