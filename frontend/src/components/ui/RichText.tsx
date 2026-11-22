@@ -109,7 +109,16 @@ function runsHtml(runs: Run[]): string {
 }
 
 /** The words in the box, as the browser left them after an edit. */
-const boxText = (box: HTMLElement) => (box.textContent ?? "").replace(/ /g, " ").replace(/[\r\n]/g, "");
+function boxText(box: HTMLElement, multiline: boolean): string {
+  const text = (box.textContent ?? "").replace(/\u00a0/g, " ").replace(/\r\n?/g, "\n");
+  return multiline ? text : text.replace(/\n/g, "");
+}
+
+/**
+ * The markup for the box itself: a last line left empty only shows (and
+ * takes the cursor) with a <br> after it, which adds no words.
+ */
+const boxHtml = (runs: Run[]) => runsHtml(runs) + (runsText(runs).endsWith("\n") ? "<br>" : "");
 
 /** Where a DOM point falls in the box's words. */
 function offsetOf(box: HTMLElement, node: Node, offset: number): number {
@@ -165,7 +174,7 @@ const TOGGLES: { key: ToggleKey; label: string; shortcut: string; Icon: typeof B
 type Snapshot = { runs: Run[]; selection: Selection };
 
 /**
- * A one-line text box whose words can be made bold, italic, struck,
+ * A text box (one line, or several with `multiline`) whose words can be made bold, italic, struck,
  * underlined or coloured: select some text (or just place the cursor, for
  * what comes next) and press a button of the bar shown under it while it has
  * focus, or Ctrl+B / I / U / Shift+X. The value in and out is the stored
@@ -181,6 +190,8 @@ export function RichField({
   autoFocus = false,
   onEnter,
   onEscape,
+  multiline = false,
+  rows = 2,
   className = "",
 }: {
   value: string;
@@ -191,6 +202,10 @@ export function RichField({
   autoFocus?: boolean;
   onEnter?: () => void;
   onEscape?: () => void;
+  /** Enter starts a new line (Ctrl+Enter is then onEnter). */
+  multiline?: boolean;
+  /** The lines a multiline box is tall when empty. */
+  rows?: number;
   className?: string;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
@@ -232,7 +247,7 @@ export function RichField({
   useLayoutEffect(() => {
     const box = boxRef.current;
     if (!box) return;
-    const html = runsHtml(runs);
+    const html = boxHtml(runs);
     if (box.innerHTML === html) return;
     box.innerHTML = html;
     if (document.activeElement === box) placeSelection(box, selRef.current);
@@ -294,44 +309,56 @@ export function RichField({
     [onChange],
   );
 
+  /** What fits in place of [start, end): the words can never be longer than what is stored. */
+  function fit(prevLength: number, start: number, end: number, text: string): string {
+    if (maxLength === undefined) return text;
+    return text.slice(0, Math.max(0, maxLength - (prevLength - (end - start))));
+  }
+
+  /** The style new words take at [start, end) — and the pending one is used up. */
+  function typedStyle(start: number, end: number): RichStyle {
+    const current = runsRef.current;
+    const p = pendingRef.current;
+    pendingRef.current = null;
+    setPending(null);
+    if (p && p.at === start && start === end) return p.style;
+    if (start < end) return styleAt(current, start);
+    return styleAt(current, start > 0 ? start - 1 : 0);
+  }
+
+  /** Puts words in place of the selection ourselves: new lines and pastes. */
+  function insertText(raw: string) {
+    const s = liveSelection();
+    const current = runsRef.current;
+    const text = fit(runsText(current).length, s.start, s.end, raw);
+    if (!text && s.start === s.end) return;
+    const at = s.start + text.length;
+    commit(replaceRange(current, s.start, s.end, text, typedStyle(s.start, s.end)), { start: at, end: at });
+  }
+
   /** Reads what the browser changed in the box and folds it into the runs. */
   function handleInput() {
     const box = boxRef.current;
     if (!box || composing.current) return;
     const current = runsRef.current;
     const prev = runsText(current);
-    const next = boxText(box);
+    const next = boxText(box, multiline);
     if (next === prev) {
       // Same words, other markup (a stray <br>, say): draw it back clean.
-      if (box.innerHTML !== runsHtml(current)) {
-        box.innerHTML = runsHtml(current);
+      if (box.innerHTML !== boxHtml(current)) {
+        box.innerHTML = boxHtml(current);
         placeSelection(box, selRef.current);
       }
       return;
     }
     const caret = readSelection(box);
     const { start, end, inserted } = diffText(prev, next, caret?.end);
-    let text = inserted;
-    if (maxLength !== undefined) {
-      // The words alone can never be longer than what is stored.
-      const room = maxLength - (prev.length - (end - start));
-      text = text.slice(0, Math.max(0, room));
-    }
-    const p = pendingRef.current;
-    const style =
-      p && p.at === start && start === end
-        ? p.style
-        : start < end
-          ? styleAt(current, start)
-          : start > 0
-            ? styleAt(current, start - 1)
-            : styleAt(current, 0);
-    setPending(null);
+    const text = fit(prev.length, start, end, inserted);
     const at = start + text.length;
-    const updated = replaceRange(current, start, end, text, style);
+    const updated = replaceRange(current, start, end, text, typedStyle(start, end));
     if (text !== inserted) {
       // Cut to fit: the box shows more than was kept, so redraw it now.
-      box.innerHTML = runsHtml(updated);
+      box.innerHTML = boxHtml(updated);
       placeSelection(box, { start: at, end: at });
     }
     commit(updated, { start: at, end: at });
@@ -350,9 +377,11 @@ export function RichField({
   // listener: React's onBeforeInput carries no inputType).
   const undoRef = useRef(undo);
   const redoRef = useRef(redo);
+  const insertRef = useRef(insertText);
   useEffect(() => {
     undoRef.current = undo;
     redoRef.current = redo;
+    insertRef.current = insertText;
   });
   useEffect(() => {
     const box = boxRef.current;
@@ -363,11 +392,13 @@ export function RichField({
         e.preventDefault();
         if (type === "historyUndo") undoRef.current();
         if (type === "historyRedo") redoRef.current();
+        // A phone keyboard's return key may come only as this event.
+        if (multiline && (type === "insertParagraph" || type === "insertLineBreak")) insertRef.current("\n");
       }
     };
     box.addEventListener("beforeinput", onBefore);
     return () => box.removeEventListener("beforeinput", onBefore);
-  }, []);
+  }, [multiline]);
 
   const sel = selection;
   const collapsed = sel.start === sel.end;
@@ -407,7 +438,8 @@ export function RichField({
     if (e.nativeEvent.isComposing) return;
     if (e.key === "Enter") {
       e.preventDefault();
-      onEnter?.();
+      if (multiline && !(e.ctrlKey || e.metaKey)) insertText("\n");
+      else onEnter?.();
       return;
     }
     if (e.key === "Escape") {
@@ -434,10 +466,11 @@ export function RichField({
   }
 
   function handlePaste(e: ClipboardEvent<HTMLDivElement>) {
-    // Words only, on one line: whatever formatting they came with is dropped.
+    // Words only (on one line unless multiline): their formatting is dropped.
     e.preventDefault();
-    const text = e.clipboardData.getData("text/plain").replace(/\s*[\r\n]+\s*/g, " ");
-    if (text) document.execCommand("insertText", false, text);
+    const raw = e.clipboardData.getData("text/plain").replace(/\r\n?/g, "\n");
+    const text = multiline ? raw : raw.replace(/\s*\n+\s*/g, " ");
+    if (text) insertText(text);
   }
 
   const stored = serializeRich(runs).length;
@@ -452,7 +485,7 @@ export function RichField({
         role="textbox"
         aria-label={ariaLabel}
         aria-placeholder={placeholder}
-        aria-multiline={false}
+        aria-multiline={multiline}
         data-placeholder={placeholder}
         spellCheck
         onInput={handleInput}
@@ -470,6 +503,7 @@ export function RichField({
           setFocused(false);
           setChoosingColor(false);
         }}
+        style={multiline ? { minHeight: `calc(${rows * 1.5}em + 1rem + 2px)` } : undefined}
         className={`field cursor-text whitespace-pre-wrap break-words empty:before:pointer-events-none empty:before:text-ink-faint empty:before:content-[attr(data-placeholder)] ${className}`}
       />
       {focused && (
