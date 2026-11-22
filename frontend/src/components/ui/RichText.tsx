@@ -265,6 +265,17 @@ export function RichField({
     return () => document.removeEventListener("selectionchange", onChangeSel);
   }, [focused]);
 
+  /**
+   * The selection right now: read from the box, since selectionchange only
+   * arrives a moment after a key has moved the cursor.
+   */
+  function liveSelection(): Selection {
+    const box = boxRef.current;
+    const sel = box && readSelection(box);
+    if (sel) selRef.current = sel;
+    return selRef.current;
+  }
+
   const commit = useCallback(
     (next: Run[], nextSel: Selection, remember = true) => {
       if (remember) {
@@ -329,7 +340,7 @@ export function RichField({
   function restore(from: Snapshot[], to: Snapshot[]) {
     const snap = from.pop();
     if (!snap) return;
-    to.push({ runs: runsRef.current, selection: selRef.current });
+    to.push({ runs: runsRef.current, selection: liveSelection() });
     commit(snap.runs, snap.selection, false);
   }
   const undo = () => restore(undoStack.current, redoStack.current);
@@ -365,7 +376,7 @@ export function RichField({
   const activeColor = collapsed ? caretStyle.color : styleAt(runs, sel.start).color;
 
   function restyle(patch: (style: RichStyle) => RichStyle) {
-    const s = selRef.current;
+    const s = liveSelection();
     if (s.start === s.end) {
       const p = pendingRef.current;
       const base = p && p.at === s.start ? p.style : styleAt(runsRef.current, s.start - 1);
@@ -378,7 +389,7 @@ export function RichField({
   }
 
   const toggle = (key: ToggleKey) => {
-    const s = selRef.current;
+    const s = liveSelection();
     const p = pendingRef.current;
     const on =
       s.start === s.end
