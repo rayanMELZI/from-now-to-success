@@ -382,17 +382,19 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
       </div>
 
       {advancedOpen && (
-        <label id={notesFieldId} className="block space-y-1">
+        <div id={notesFieldId} className="space-y-1">
           <span className="field-label">Notes (optional)</span>
-          <textarea
+          <RichField
+            multiline
+            rows={2}
             maxLength={500}
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={2}
-            className="field"
+            onChange={setDescription}
+            onEnter={() => formRef.current?.requestSubmit()}
+            ariaLabel="Notes (optional)"
             placeholder="Why this habit matters to you…"
           />
-        </label>
+        </div>
       )}
 
       {/* The roadmap IS the prerequisites — this is what makes a habit part
