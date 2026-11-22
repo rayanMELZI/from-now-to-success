@@ -38,7 +38,7 @@ import {
   X,
 } from "lucide-react";
 import { plainText } from "@/lib/richText";
-import { RichText } from "@/components/ui/RichText";
+import { RichField, RichText } from "@/components/ui/RichText";
 
 interface MissDraft {
   habitId: number;
@@ -922,19 +922,20 @@ function TimerCard({
             </p>
           )}
 
-          <label className="block space-y-1">
+          <div className="space-y-1">
             <span className="text-xs text-ink-soft">
               What happened? (a reason halves the point loss)
             </span>
-            <textarea
+            <RichField
+              multiline
+              rows={2}
               value={draft.reason}
               maxLength={500}
-              rows={2}
-              onChange={(e) => onDraftChange({ ...draft, reason: e.target.value })}
-              className="field"
+              onChange={(reason) => onDraftChange({ ...draft, reason })}
+              ariaLabel="What happened?"
               placeholder="e.g. stressed after work, someone offered…"
             />
-          </label>
+          </div>
           <div className="flex gap-2">
             <button
               onClick={() => onConfirm(draft)}
@@ -1265,19 +1266,20 @@ function MissDraftPanel({
   return (
     <div className="mt-3 space-y-3 rounded-lg bg-surface-sunken p-3">
       {periodic && <p className="text-sm font-medium">Skip this whole {periodNoun}?</p>}
-      <label className="block space-y-1">
+      <div className="space-y-1">
         <span className="text-xs text-ink-soft">
           What happened? (a reason halves the point loss)
         </span>
-        <textarea
+        <RichField
+          multiline
+          rows={2}
           value={draft.reason}
           maxLength={500}
-          rows={2}
-          onChange={(e) => onChange({ ...draft, reason: e.target.value })}
-          className="field"
+          onChange={(reason) => onChange({ ...draft, reason })}
+          ariaLabel="What happened?"
           placeholder="e.g. traveled all day, was sick…"
         />
-      </label>
+      </div>
 
       <FreezeToggle
         active={draft.freeze}
