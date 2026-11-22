@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 import {
   GOAL_PRESETS,
   formatDuration,
@@ -13,6 +13,8 @@ import {
 import { Ban, CalendarCheck, ChevronDown, Sprout, TimerReset } from "lucide-react";
 import { Segmented } from "./ui/Segmented";
 import { HabitPicker } from "./ui/HabitPicker";
+import { plainText } from "@/lib/richText";
+import { RichField } from "./ui/RichText";
 
 const DAY_SECONDS = 86400;
 
@@ -81,6 +83,7 @@ interface HabitFormProps {
  * so the common case is a name and two taps.
  */
 export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormProps) {
+  const formRef = useRef<HTMLFormElement>(null);
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [basePoints, setBasePoints] = useState(initial?.basePoints ?? DEFAULT_POINTS);
@@ -121,11 +124,20 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    // The name box is not a native input, so its checks are made here.
+    if (!plainText(name).trim()) {
+      setError("Give the habit a name.");
+      return;
+    }
+    if (name.trim().length > 100 || description.length > 500) {
+      setError("Too long with its formatting — shorten it or remove some styles.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       await onSubmit({
-        name,
+        name: name.trim(),
         description: description || undefined,
         basePoints,
         trackingMode,
@@ -148,7 +160,7 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
       <h2 className="text-lg font-semibold">{initial ? "Edit habit" : "New habit"}</h2>
 
       {error && (
@@ -157,15 +169,16 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
         </p>
       )}
 
-      <label className="block space-y-1">
+      <div className="space-y-1">
         <span className="field-label">Habit name</span>
-        <input
-          required
+        <RichField
           autoFocus
           maxLength={100}
           value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="field py-2.5 text-base"
+          onChange={setName}
+          onEnter={() => formRef.current?.requestSubmit()}
+          ariaLabel="Habit name"
+          className="py-2.5 text-base sm:text-base"
           placeholder={
             timer
               ? "e.g. smoking"
@@ -174,7 +187,7 @@ export function HabitForm({ allHabits, initial, onSubmit, onCancel }: HabitFormP
                 : "e.g. 5 prayers"
           }
         />
-      </label>
+      </div>
 
       {/* Goal, and the way into the rest of the settings, on one line. */}
       <div className="flex items-end gap-3">
