@@ -36,6 +36,8 @@ import {
   TimerReset,
   Trophy,
 } from "lucide-react";
+import { plainText } from "@/lib/richText";
+import { RichText } from "@/components/ui/RichText";
 
 /** Map or list — remembered, because it is a preference, not a mood. */
 type View = "map" | "list";
@@ -133,7 +135,7 @@ function RoadmapPage() {
 
   async function deleteHabit() {
     if (!selected) return;
-    if (!confirm(`Delete "${selected.name}" and all its history?`)) return;
+    if (!confirm(`Delete "${plainText(selected.name)}" and all its history?`)) return;
     await api(`/api/habits/${selected.id}`, { method: "DELETE" });
     setSelected(null);
     setMode("closed");
@@ -146,8 +148,8 @@ function RoadmapPage() {
     const dependents = dependentCount(selected, inUse);
     const branch =
       dependents === 0
-        ? `"${selected.name}"`
-        : `"${selected.name}" and the ${dependents} habit${dependents === 1 ? "" : "s"} that depend on it`;
+        ? `"${plainText(selected.name)}"`
+        : `"${plainText(selected.name)}" and the ${dependents} habit${dependents === 1 ? "" : "s"} that depend on it`;
     if (
       !confirm(
         `Archive ${branch}? They leave the map and the check-in, keep their progress, and come back whenever you restore them.`,
@@ -178,8 +180,8 @@ function RoadmapPage() {
         tone: "success",
         text:
           back > 1
-            ? `"${habit.name}" and ${back - 1} more are back on your roadmap.`
-            : `"${habit.name}" is back on your roadmap.`,
+            ? `"${plainText(habit.name)}" and ${back - 1} more are back on your roadmap.`
+            : `"${plainText(habit.name)}" is back on your roadmap.`,
       });
     } catch (err) {
       setNotice({ tone: "warning", text: err instanceof Error ? err.message : "Could not restore" });
@@ -304,12 +306,12 @@ function RoadmapPage() {
                         }}
                         className="min-w-0 flex-1 text-left"
                       >
-                        <p className="truncate font-medium">{root.name}</p>
+                        <RichText source={root.name} className="block truncate font-medium" />
                         <p className="truncate text-xs text-ink-faint">
                           {members.length > 0
-                            ? `with ${members.map((m) => m.name).join(", ")}`
+                            ? `with ${members.map((m) => plainText(m.name)).join(", ")}`
                             : "on its own"}
-                          {waitingOn && ` · needs "${waitingOn.name}" back first`}
+                          {waitingOn && ` · needs "${plainText(waitingOn.name)}" back first`}
                         </p>
                       </button>
                       <button
@@ -317,7 +319,7 @@ function RoadmapPage() {
                         onClick={() => restoreHabit(root)}
                         disabled={!!waitingOn}
                         className="btn btn-ghost shrink-0 px-3 text-sm"
-                        title={waitingOn ? `Restore "${waitingOn.name}" first` : "Back on the roadmap"}
+                        title={waitingOn ? `Restore "${plainText(waitingOn.name)}" first` : "Back on the roadmap"}
                       >
                         <ArchiveRestore size={14} /> Restore
                       </button>
@@ -364,7 +366,7 @@ function RoadmapPage() {
                 {selected.habitType === "QUIT" && (
                   <Ban size={17} className="text-red-500" />
                 )}
-                {selected.name}
+                <RichText source={selected.name} />
               </h2>
               {selected.description && (
                 <p className="mt-1 text-sm text-ink-soft">{selected.description}</p>

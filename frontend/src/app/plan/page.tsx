@@ -458,8 +458,8 @@ function PlanPage() {
       // A habit answered elsewhere since this page loaded earns nothing here;
       // saying "+0 points" would read like the check-in failed.
       result.earnedPoints === 0
-        ? `${name} was already counted for today`
-        : `${name} checked in · ${result.earnedPoints > 0 ? "+" : ""}${result.earnedPoints} points`,
+        ? `${plainText(name)} was already counted for today`
+        : `${plainText(name)} checked in · ${result.earnedPoints > 0 ? "+" : ""}${result.earnedPoints} points`,
     );
     // The "checked in" chip and the header's point total are bookkeeping: the
     // answer is already in and already reported, so they catch up on their own
@@ -889,10 +889,10 @@ function HabitChip({ name, quit }: { name: string; quit: boolean }) {
   return (
     <span
       className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-400/15 dark:text-amber-300"
-      title={`From your habit "${name}"`}
+      title={`From your habit "${plainText(name)}"`}
     >
       {quit ? <Ban size={10} /> : <Sparkles size={10} />}
-      {name}
+      <RichText source={name} />
     </span>
   );
 }

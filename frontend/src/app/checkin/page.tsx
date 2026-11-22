@@ -37,6 +37,8 @@ import {
   Trophy,
   X,
 } from "lucide-react";
+import { plainText } from "@/lib/richText";
+import { RichText } from "@/components/ui/RichText";
 
 interface MissDraft {
   habitId: number;
@@ -663,7 +665,7 @@ function CheckinPage() {
                     ) : (
                       <Sprout size={13} className="shrink-0 text-emerald-600" />
                     )}
-                    <span className="truncate">{entry.name}</span>
+                    <RichText source={entry.name} className="truncate" />
                   </span>
                   <AnsweredStatus entry={entry} />
                 </li>
@@ -687,10 +689,10 @@ function CheckinPage() {
               {result.level})
             </p>
             {result.becameValid.length > 0 && (
-              <p className="mt-0.5">✓ Now valid: {result.becameValid.join(", ")}</p>
+              <p className="mt-0.5">✓ Now valid: {result.becameValid.map(plainText).join(", ")}</p>
             )}
             {result.unlocked.length > 0 && (
-              <p className="mt-0.5">🔓 Unlocked: {result.unlocked.join(", ")}</p>
+              <p className="mt-0.5">🔓 Unlocked: {result.unlocked.map(plainText).join(", ")}</p>
             )}
           </>
         )}
@@ -811,7 +813,7 @@ function TimerCard({
     <div className="card flex flex-col p-3">
       <p className="flex items-center gap-1.5 font-medium">
         <Ban size={14} className="shrink-0 text-red-500" />
-        <span className="truncate">{entry.name}</span>
+        <RichText source={entry.name} className="truncate" />
       </p>
 
       <p className="mt-1 flex items-baseline gap-1.5 tabular-nums">
@@ -1046,7 +1048,7 @@ function DragHandle({
   return (
     <button
       type="button"
-      aria-label={`Reorder ${entry.name} — drag, or use the arrow keys`}
+      aria-label={`Reorder ${plainText(entry.name)} — drag, or use the arrow keys`}
       title="Drag to reorder"
       onPointerDown={(event) => {
         event.preventDefault();
@@ -1096,7 +1098,7 @@ function HabitHeadline({ entry, risk }: { entry: TodayEntry; risk: RiskLevel | n
         ) : (
           <Sprout size={14} className="shrink-0 text-emerald-600" />
         )}
-        <span className="truncate">{entry.name}</span>
+        <RichText source={entry.name} className="truncate" />
       </p>
       {periodic && (
         <span
