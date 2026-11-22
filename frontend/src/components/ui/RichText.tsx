@@ -541,7 +541,8 @@ export function RichField({
               <ToolButton label="Clear formatting" onPress={clear}>
                 <RemoveFormatting size={15} />
               </ToolButton>
-              <span className="ml-auto pr-1.5 text-[11px] tabular-nums text-ink-faint">
+              {/* Zero basis: the hint gives way (truncated) rather than push a button down. */}
+              <span className="min-w-0 grow basis-0 truncate pr-1.5 text-right text-[11px] tabular-nums text-ink-faint">
                 {collapsed ? "Select text to format it" : `${sel.end - sel.start} selected`}
               </span>
             </>
