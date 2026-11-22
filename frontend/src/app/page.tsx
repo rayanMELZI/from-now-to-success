@@ -369,7 +369,9 @@ function RoadmapPage() {
                 <RichText source={selected.name} />
               </h2>
               {selected.description && (
-                <p className="mt-1 text-sm text-ink-soft">{selected.description}</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm text-ink-soft">
+                  <RichText source={selected.description} />
+                </p>
               )}
             </div>
 
