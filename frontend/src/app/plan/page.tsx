@@ -738,8 +738,8 @@ function PlanPage() {
               .filter((id): id is number => id !== null)}
             canPlan={!selecting}
             onPlan={(task) => {
-              // A plan line is plain text: the task's words, without its formatting.
-              setDraft({ taskId: task.id, title: plainText(task.title), nonce: Date.now() });
+              // Plan lines take formatting too, so the task comes over as it looks.
+              setDraft({ taskId: task.id, title: task.title, nonce: Date.now() });
               // On a phone the composer sits above the panel, out of sight.
               document
                 .getElementById("plan-composer")
