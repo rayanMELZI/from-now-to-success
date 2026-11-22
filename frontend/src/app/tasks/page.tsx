@@ -7,6 +7,7 @@ import { MAX_TAGS, type TagColor, type Task, type TaskTag } from "@/lib/types";
 import { CircleCheckBig, Pencil, Settings2, Trash2, X } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { plainText } from "@/lib/richText";
+import { RichField } from "@/components/ui/RichText";
 import { PageHeader, PageShell } from "@/components/ui/Page";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Segmented } from "@/components/ui/Segmented";
@@ -20,6 +21,8 @@ import {
   TagMenuButton,
   TaskQuickAdd,
   TaskRow,
+  MAX_TASK_TITLE,
+  titleIsValid,
   useTasks,
 } from "@/components/Tasks";
 
@@ -255,7 +258,7 @@ function TaskEditor({
   const [title, setTitle] = useState(task.title);
   const [dueDate, setDueDate] = useState(task.dueDate ?? "");
   const [tagIds, setTagIds] = useState(() => task.tags.map((t) => t.id));
-  const valid = title.trim().length > 0;
+  const valid = titleIsValid(title);
   const save = () =>
     valid &&
     onSave(
@@ -266,18 +269,15 @@ function TaskEditor({
 
   return (
     <div className="space-y-2">
-      <div className="flex gap-2">
-        <input
+      <div className="flex items-start gap-2">
+        <RichField
           value={title}
-          maxLength={120}
+          maxLength={MAX_TASK_TITLE}
           autoFocus
-          onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") save();
-            if (e.key === "Escape") onCancel();
-          }}
-          aria-label="Task"
-          className="field min-w-0 flex-1"
+          onChange={setTitle}
+          onEnter={save}
+          onEscape={onCancel}
+          ariaLabel="Task"
         />
         <input
           type="date"
