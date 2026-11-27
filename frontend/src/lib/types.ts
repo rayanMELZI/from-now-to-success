@@ -225,6 +225,24 @@ export interface PlanDay {
   blocks: PlanBlock[];
 }
 
+/** One line of a preset: a plan line without a date, a tick or a task. */
+export interface PlanPresetLine {
+  /** Minutes since midnight, 0..1439. */
+  endMinute: number;
+  title: string;
+  habitId: number | null;
+  /** The linked habit's current name — it may have been renamed since. */
+  habitName: string | null;
+}
+
+/** A named day template ("Workday", "Gym day") an empty day can start from. */
+export interface PlanPreset {
+  id: number;
+  name: string;
+  /** In the order the user lives them, like a day's plan. */
+  lines: PlanPresetLine[];
+}
+
 /** The answer to a shift: the day as it now stands, and what actually landed. */
 export interface PlanShiftResult {
   /**
