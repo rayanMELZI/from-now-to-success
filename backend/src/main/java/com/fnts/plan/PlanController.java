@@ -20,6 +20,7 @@ import com.fnts.auth.CurrentUser;
 import com.fnts.plan.PlanDtos.BlockRequest;
 import com.fnts.plan.PlanDtos.BlockResponse;
 import com.fnts.plan.PlanDtos.CopyRequest;
+import com.fnts.plan.PlanDtos.DeleteRequest;
 import com.fnts.plan.PlanDtos.DoneRequest;
 import com.fnts.plan.PlanDtos.PlanDayResponse;
 import com.fnts.plan.PlanDtos.ShiftRequest;
@@ -79,6 +80,13 @@ public class PlanController {
     public ShiftResult shift(@AuthenticationPrincipal CurrentUser user,
                              @Valid @RequestBody ShiftRequest request) {
         return planService.shiftBlocks(user.id(), request);
+    }
+
+    /** Removes a picked set of one day's blocks, together. */
+    @PostMapping("/delete")
+    public PlanDayResponse deleteMany(@AuthenticationPrincipal CurrentUser user,
+                                      @Valid @RequestBody DeleteRequest request) {
+        return planService.deleteBlocks(user.id(), request);
     }
 
     /** Seeds an empty day from another day's blocks. */
