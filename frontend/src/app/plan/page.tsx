@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ElementType } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
@@ -1032,7 +1032,7 @@ function BlockRow({
   habits: Habit[];
   entry: TodayEntry | null;
   editing: boolean;
-  /** Shift mode: the whole row becomes one big pick-me button. */
+  /** Select mode: the whole row becomes one big pick-me button. */
   selecting: boolean;
   selected: boolean;
   busy: boolean;
@@ -1054,10 +1054,6 @@ function BlockRow({
   const habit = habits.find((h) => h.id === block.habitId) ?? null;
   const checkedIn =
     entry?.todayStatus === "DONE" || entry?.todayStatus === "DONE_TODAY";
-
-  // In shift mode the card itself is the control, so it has to be a button —
-  // which also means nothing else inside it may be one.
-  const Card: ElementType = selecting ? "button" : "div";
 
   if (editing) {
     return (
@@ -1121,16 +1117,8 @@ function BlockRow({
       </div>
 
       {/* the block itself */}
-      <Card
-        {...(selecting
-          ? {
-              type: "button",
-              onClick: onToggleSelect,
-              "aria-pressed": selected,
-              disabled: busy,
-            }
-          : {})}
-        className={`group min-w-0 flex-1 border px-3 py-2 text-left transition-colors ${
+      <div
+        className={`group relative min-w-0 flex-1 border px-3 py-2 text-left transition-colors ${
           attachedBelow ? "rounded-b-none" : "mb-2 rounded-b-xl"
         } ${
           // -mt-px folds the two borders into one hairline divider
@@ -1145,6 +1133,19 @@ function BlockRow({
           block.done ? "opacity-60" : ""
         }`}
       >
+        {/* In select mode the whole card picks the line: a button laid over
+            it, with the edit and delete buttons stacked above so they stay
+            usable — retiming a line and rewording it are often one job. */}
+        {selecting && (
+          <button
+            type="button"
+            onClick={onToggleSelect}
+            aria-pressed={selected}
+            aria-label={`${selected ? "Unpick" : "Pick"} ${plainText(block.title)}`}
+            disabled={busy}
+            className="absolute inset-0 rounded-[inherit]"
+          />
+        )}
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <p
@@ -1168,28 +1169,26 @@ function BlockRow({
               )}
             </div>
           </div>
-          {!selecting && (
-            <div className="flex shrink-0 gap-0.5">
-              <button
-                onClick={onEdit}
-                aria-label={`Edit ${plainText(block.title)}`}
-                className="btn-icon h-8 w-8"
-              >
-                <Pencil size={14} />
-              </button>
-              <button
-                onClick={onDelete}
-                disabled={busy}
-                aria-label={`Delete ${plainText(block.title)}`}
-                className="btn-icon h-8 w-8 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950/40"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          )}
+          <div className="relative z-10 flex shrink-0 gap-0.5">
+            <button
+              onClick={onEdit}
+              aria-label={`Edit ${plainText(block.title)}`}
+              className="btn-icon h-8 w-8"
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              onClick={onDelete}
+              disabled={busy}
+              aria-label={`Delete ${plainText(block.title)}`}
+              className="btn-icon h-8 w-8 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950/40"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
         </div>
 
-      </Card>
+      </div>
     </div>
   );
 }
