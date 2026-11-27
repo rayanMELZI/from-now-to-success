@@ -32,6 +32,10 @@ cells on the map — from *now* to *success*.
   carry coloured **tags** (up to 5 each) to filter or sort the list by, sit in a
   hideable panel beside the plan and be pulled into it; ticking the plan line
   ticks the task. Neither touches points.
+- **Day presets** for the plan: named templates ("Workday", "Gym day") written
+  line by line or saved from a day you planned. An empty day starts from a
+  preset in one tap — or, as before, from a copy of another day — and stays
+  yours to change. Ticks and task links are never part of a preset.
 - **Formatted text** everywhere you write: habit names and notes, plan lines,
   task titles and the reason for a miss. While typing, a bar under the field
   (or Ctrl+B / I / U / Shift+X) makes the selected words bold, italic, struck,
