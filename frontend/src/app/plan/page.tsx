@@ -13,6 +13,7 @@ import {
   type Habit,
   type PlanBlock,
   type PlanDay,
+  type PlanPreset,
   type PlanShiftResult,
   type Task,
   type TodayEntry,
@@ -29,6 +30,7 @@ import {
   CircleCheckBig,
   ClipboardList,
   Copy,
+  LayoutTemplate,
   ListChecks,
   PanelRightClose,
   PanelRightOpen,
@@ -39,6 +41,7 @@ import {
   X,
 } from "lucide-react";
 import { TaskQuickAdd, TaskRow, useTasks } from "@/components/Tasks";
+import { PresetsDialog, presetSummary } from "@/components/PlanPresets";
 import { plainText } from "@/lib/richText";
 import { RichField, RichText } from "@/components/ui/RichText";
 import { PageHeader, PageShell } from "@/components/ui/Page";
@@ -170,6 +173,8 @@ function PlanPage() {
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [presets, setPresets] = useState<PlanPreset[]>([]);
+  const [presetsOpen, setPresetsOpen] = useState(false);
 
   // The tasks panel: only there when tasks are on, and even then the user's
   // to show or hide. Lazy init reads the choice without a flash.
@@ -209,8 +214,14 @@ function PlanPage() {
     [],
   );
 
+  const loadPresets = useCallback(
+    () => api<PlanPreset[]>("/api/plan/presets").then(setPresets),
+    [],
+  );
+
   useEffect(() => {
     if (!user?.plannerEnabled) return;
+    loadPresets().catch(() => setPresets([]));
     load(null).catch((err: unknown) =>
       setError(err instanceof Error ? err.message : "Could not load your plan"),
     );
@@ -218,7 +229,7 @@ function PlanPage() {
     api<TodayResponse>("/api/checkins/today")
       .then(setToday)
       .catch(() => setToday(null));
-  }, [load, user?.plannerEnabled]);
+  }, [load, loadPresets, user?.plannerEnabled]);
 
   const blocks = useMemo(() => day?.blocks ?? [], [day]);
   const slots = useMemo(() => toSlots(blocks), [blocks]);
@@ -445,6 +456,36 @@ function PlanPage() {
     });
   }
 
+  /** Lays a preset out on the (empty) day being looked at. */
+  async function applyPreset(preset: PlanPreset) {
+    if (!day) return;
+    // Closed first, so a refusal lands in the page's banner, in plain sight.
+    setPresetsOpen(false);
+    const applied = await run(() =>
+      api<PlanDay>(`/api/plan/apply-preset?date=${day.date}`, {
+        method: "POST",
+        body: { presetId: preset.id },
+      }),
+    );
+    if (applied) {
+      setDay(applied);
+      setNotice(`Started from "${preset.name}" — change anything you like`);
+    }
+  }
+
+  /** Keeps the day being looked at as a new preset; true once it is saved. */
+  async function saveDayAsPreset(name: string): Promise<boolean> {
+    if (!day) return false;
+    // Thrown errors are shown by the dialog, which called this.
+    const saved = await api<PlanPreset>("/api/plan/presets/from-day", {
+      method: "POST",
+      body: { name, date: day.date },
+    });
+    await loadPresets();
+    setNotice(`Saved as the preset "${saved.name}"`);
+    return true;
+  }
+
   /**
    * The one bridge to the game. Called from toggleDone, which turns whatever
    * it throws into the page's error banner.
@@ -500,6 +541,14 @@ function PlanPage() {
                 <span className="hidden sm:inline">Tasks</span>
               </button>
             )}
+            <button
+              onClick={() => setPresetsOpen(true)}
+              title="Day presets: start a day from a template, or keep this one as one"
+              className="btn btn-ghost h-9 min-h-0 px-2.5 text-xs"
+            >
+              <LayoutTemplate size={15} />
+              <span className="hidden sm:inline">Presets</span>
+            </button>
             {/* Stepping one day at a time is fine for tomorrow and hopeless
                 for next month — the date field jumps straight there. */}
             <input
@@ -597,6 +646,9 @@ function PlanPage() {
             today={day.today}
             busy={busy}
             onCopy={copyFrom}
+            presets={presets}
+            onApplyPreset={applyPreset}
+            onOpenPresets={() => setPresetsOpen(true)}
           />
         ) : (
           <ol className="mb-6">
@@ -750,6 +802,17 @@ function PlanPage() {
         )}
         </div>
       </div>
+      <PresetsDialog
+        open={presetsOpen}
+        onClose={() => setPresetsOpen(false)}
+        presets={presets}
+        habits={habits}
+        dayHasPlan={blocks.length > 0}
+        busy={busy}
+        onChanged={loadPresets}
+        onApply={applyPreset}
+        onSaveDay={saveDayAsPreset}
+      />
     </PageShell>
   );
 }
@@ -800,6 +863,9 @@ function EmptyDay({
   today,
   busy,
   onCopy,
+  presets,
+  onApplyPreset,
+  onOpenPresets,
 }: {
   /** Every day that has a plan, most recent first. */
   plannedDates: string[];
@@ -808,6 +874,9 @@ function EmptyDay({
   today: string;
   busy: boolean;
   onCopy: (from: string) => void;
+  presets: PlanPreset[];
+  onApplyPreset: (preset: PlanPreset) => void;
+  onOpenPresets: () => void;
 }) {
   // Yesterday is the usual answer, so it is the one already chosen: the most
   // recent day BEFORE this one, falling back to the nearest later day for
@@ -819,6 +888,10 @@ function EmptyDay({
   // The list reloads when the day does; a source that is no longer on it
   // (the day it named just got emptied) must not leave the picker stuck.
   const chosen = plannedDates.includes(source) ? source : (nearest ?? "");
+
+  // Presets keep the order they were made in; the first is the one to hand.
+  const [presetId, setPresetId] = useState<number | null>(null);
+  const preset = presets.find((p) => p.id === presetId) ?? presets[0] ?? null;
 
   return (
     <div className="mb-6 rounded-2xl border border-dashed border-line-strong p-6 text-center">
@@ -835,6 +908,39 @@ function EmptyDay({
         <br />
         (12:20) Write dailies
       </p>
+      {/* A preset is what the day was meant to look like, so it comes first;
+          copying a day that merely happened is the fallback. */}
+      {preset ? (
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+          <button
+            onClick={() => onApplyPreset(preset)}
+            disabled={busy}
+            className="btn btn-primary"
+            title={presetSummary(preset)}
+          >
+            <LayoutTemplate size={14} />
+            Start from a preset
+          </button>
+          <select
+            value={preset.id}
+            onChange={(e) => setPresetId(Number(e.target.value))}
+            disabled={busy}
+            aria-label="Which preset to start from"
+            className="field w-auto py-2 text-xs"
+          >
+            {presets.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} · {presetSummary(p)}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <button onClick={onOpenPresets} className="btn btn-ghost mt-4 text-xs">
+          <LayoutTemplate size={14} />
+          Make a preset for the kinds of day you live
+        </button>
+      )}
       {chosen && (
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
           <button
