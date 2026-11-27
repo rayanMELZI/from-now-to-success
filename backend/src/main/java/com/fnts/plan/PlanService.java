@@ -16,6 +16,7 @@ import com.fnts.habit.Habit;
 import com.fnts.habit.HabitService;
 import com.fnts.plan.PlanDtos.BlockRequest;
 import com.fnts.plan.PlanDtos.BlockResponse;
+import com.fnts.plan.PlanDtos.DeleteRequest;
 import com.fnts.plan.PlanDtos.PlanDayResponse;
 import com.fnts.plan.PlanDtos.ShiftRequest;
 import com.fnts.plan.PlanDtos.ShiftResult;
@@ -94,6 +95,27 @@ public class PlanService {
     @Transactional
     public void deleteBlock(Long userId, Long blockId) {
         blockRepository.delete(getOwned(userId, blockId));
+    }
+
+    /**
+     * Clearing out a handful of picked lines in one go: all of them or none,
+     * and only within one day, so the day that comes back is the one the user
+     * was looking at.
+     */
+    @Transactional
+    public PlanDayResponse deleteBlocks(Long userId, DeleteRequest request) {
+        User user = load(userId);
+        Set<Long> ids = new LinkedHashSet<>(request.blockIds());
+        List<PlanBlock> blocks = blockRepository.findByIdInAndUserId(ids, userId);
+        if (blocks.size() != ids.size()) {
+            throw ApiException.notFound("Plan block not found");
+        }
+        LocalDate date = blocks.getFirst().getPlanDate();
+        if (blocks.stream().anyMatch(block -> !block.getPlanDate().equals(date))) {
+            throw ApiException.badRequest("Those blocks are not all on the same day");
+        }
+        blockRepository.deleteAll(blocks);
+        return day(user, date);
     }
 
     /**

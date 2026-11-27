@@ -73,6 +73,10 @@ public class PlanDtos {
             @NotEmpty @Size(max = MAX_BLOCKS_PER_DAY) List<Long> blockIds,
             @NotNull @Min(-LAST_MINUTE) @Max(LAST_MINUTE) Integer deltaMinutes) {}
 
+    /** Several of one day's blocks, removed together. */
+    public record DeleteRequest(
+            @NotEmpty @Size(max = MAX_BLOCKS_PER_DAY) List<Long> blockIds) {}
+
     public record BlockResponse(
             Long id,
             LocalDate date,

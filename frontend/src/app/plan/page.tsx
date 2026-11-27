@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ElementType } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { RequireAuth, useAuth } from "@/lib/auth";
@@ -38,6 +38,7 @@ import {
   Plus,
   Sparkles,
   Trash2,
+  Undo2,
   X,
 } from "lucide-react";
 import { TaskQuickAdd, TaskRow, useTasks } from "@/components/Tasks";
@@ -175,6 +176,20 @@ function PlanPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [presets, setPresets] = useState<PlanPreset[]>([]);
   const [presetsOpen, setPresetsOpen] = useState(false);
+  // Whether the progress row, home of the Select button, is on screen.
+  const [progressVisible, setProgressVisible] = useState(true);
+  const [progressEl, progressRef] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!progressEl) return;
+    // The sticky nav covers the top of the viewport: a row tucked under it
+    // is as good as gone.
+    const observer = new IntersectionObserver(
+      ([entry]) => setProgressVisible(entry.isIntersecting),
+      { rootMargin: "-64px 0px 0px 0px" },
+    );
+    observer.observe(progressEl);
+    return () => observer.disconnect();
+  }, [progressEl]);
 
   // The tasks panel: only there when tasks are on, and even then the user's
   // to show or hide. Lazy init reads the choice without a flash.
@@ -294,6 +309,11 @@ function PlanPage() {
     );
 
   /** A selection belongs to the day it was made on — leaving the day drops it. */
+  function startSelecting() {
+    setEditingId(null);
+    setSelecting(true);
+  }
+
   function stopSelecting() {
     setSelecting(false);
     setSelectedIds(new Set());
@@ -425,7 +445,7 @@ function PlanPage() {
   }
 
   /**
-   * The whole point of the page's selection mode: you woke up late, the same
+   * What select mode was made for: you woke up late, the same
    * lines still have to happen, they just happen later. Every picked line
    * moves by the same amount, so the day keeps its shape — and the server
    * says how much of the asked-for shift actually fit inside the day.
@@ -443,6 +463,85 @@ function PlanPage() {
       setDay(result.day);
       setNotice(shiftNotice(ids.length, delta, result.appliedMinutes));
     });
+  }
+
+  /** Removes every picked line at once — after one confirmation. */
+  async function deleteSelected() {
+    if (!day) return;
+    const ids = blocks.filter((b) => selectedIds.has(b.id)).map((b) => b.id);
+    if (ids.length === 0) return;
+    if (!confirm(ids.length === 1 ? "Delete the picked line?" : `Delete the ${ids.length} picked lines?`)) {
+      return;
+    }
+    const fresh = await run(() =>
+      api<PlanDay>("/api/plan/delete", { method: "POST", body: { blockIds: ids } }),
+    );
+    if (fresh) {
+      setDay(fresh);
+      setSelectedIds(new Set());
+      setNotice(ids.length === 1 ? "Deleted 1 line" : `Deleted ${ids.length} lines`);
+      if (tasksEnabled && blocks.some((b) => ids.includes(b.id) && b.taskId !== null)) {
+        void tasks.reload();
+      }
+    }
+  }
+
+  /**
+   * Ticks (or unticks) every picked line. Lines already in that state are
+   * left alone, and habits that a tick finishes are checked in together, in
+   * one request — the same as ticking them one by one would do.
+   */
+  async function setSelectedDone(done: boolean) {
+    if (!day) return;
+    const targets = blocks.filter((b) => selectedIds.has(b.id) && b.done !== done);
+    if (targets.length === 0) return;
+    const ok = await run(async () => {
+      const saved = await Promise.all(
+        targets.map((b) =>
+          api<PlanBlock>(`/api/plan/${b.id}/done`, { method: "PUT", body: { done } }),
+        ),
+      );
+      saved.forEach((block) => patchBlock(block.id, block));
+      return true;
+    });
+    if (!ok) {
+      // Some may have landed before the failure: the server has the truth.
+      await load(day.date).catch(() => {});
+      return;
+    }
+    if (tasksEnabled && targets.some((b) => b.taskId !== null)) void tasks.reload();
+
+    const habitIds = done
+      ? [
+          ...new Set(
+            targets
+              .map((b) => entryFor(b.habitId))
+              .filter((e): e is TodayEntry => e?.todayStatus === "PENDING")
+              .map((e) => e.habitId),
+          ),
+        ]
+      : [];
+    const verb = done ? "Marked" : "Unmarked";
+    if (habitIds.length === 0) {
+      setNotice(`${verb} ${targets.length} line${targets.length === 1 ? "" : "s"}`);
+      return;
+    }
+    try {
+      const result = await api<CheckinResult>("/api/checkins", {
+        method: "POST",
+        body: { entries: habitIds.map((habitId) => ({ habitId, done: true })) },
+      });
+      setNotice(
+        `${verb} ${targets.length} line${targets.length === 1 ? "" : "s"} · ${habitIds.length} habit${
+          habitIds.length === 1 ? "" : "s"
+        } checked in · ${result.earnedPoints > 0 ? "+" : ""}${result.earnedPoints} points`,
+      );
+      void Promise.all([api<TodayResponse>("/api/checkins/today"), refreshUser()])
+        .then(([fresh]) => setToday(fresh))
+        .catch(() => {});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not check those habits in");
+    }
   }
 
   async function copyFrom(from: string) {
@@ -584,7 +683,7 @@ function PlanPage() {
       />
 
       {blocks.length > 0 && (
-        <div className="mb-4 flex items-center gap-3">
+        <div ref={progressRef} className="mb-4 flex items-center gap-3">
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-track">
             <div
               className="h-full rounded-full bg-emerald-500 transition-all duration-500"
@@ -605,15 +704,12 @@ function PlanPage() {
           </span>
           {!selecting && (
             <button
-              onClick={() => {
-                setEditingId(null);
-                setSelecting(true);
-              }}
+              onClick={startSelecting}
               className="btn btn-ghost h-8 min-h-0 shrink-0 px-2.5 text-xs"
-              title="Pick lines and move them all earlier or later"
+              title="Pick lines to move them in time, tick them off or delete them together"
             >
               <ListChecks size={14} />
-              <span className="hidden sm:inline">Shift times</span>
+              <span className="hidden sm:inline">Select</span>
             </button>
           )}
         </div>
@@ -738,8 +834,23 @@ function PlanPage() {
           </ol>
         )}
 
+        {/* Once the progress row (and its Select button) has scrolled away,
+            the way into select mode follows along at the foot of the plan. */}
+        {!selecting && blocks.length > 0 && !progressVisible && (
+          <div className="pointer-events-none sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-20 mb-2 flex justify-end sm:bottom-3">
+            <button
+              onClick={startSelecting}
+              className="btn btn-ghost pointer-events-auto h-9 min-h-0 border border-line-strong bg-surface px-3 text-xs shadow-lg"
+              title="Pick lines to move them in time, tick them off or delete them together"
+            >
+              <ListChecks size={15} />
+              Select
+            </button>
+          </div>
+        )}
+
         {selecting && (
-          <ShiftBar
+          <SelectBar
             selectedCount={selectedIds.size}
             totalCount={blocks.length}
             amount={shiftAmount}
@@ -748,12 +859,14 @@ function PlanPage() {
             onSelectAll={() => setSelectedIds(new Set(blocks.map((b) => b.id)))}
             onClear={() => setSelectedIds(new Set())}
             onShift={shiftSelected}
+            onMarkDone={setSelectedDone}
+            onDelete={deleteSelected}
             onDone={stopSelecting}
           />
         )}
         </div>
 
-        {/* Shift mode is about moving what is already there, and its panel
+        {/* Select mode acts on what is already there, and its panel
             floats over the foot of the page — the composer would only sit
             under it with its buttons out of reach. */}
         <div className="lg:sticky lg:top-20 lg:space-y-4">
@@ -1032,7 +1145,7 @@ function BlockRow({
   habits: Habit[];
   entry: TodayEntry | null;
   editing: boolean;
-  /** Shift mode: the whole row becomes one big pick-me button. */
+  /** Select mode: the whole row becomes one big pick-me button. */
   selecting: boolean;
   selected: boolean;
   busy: boolean;
@@ -1055,10 +1168,6 @@ function BlockRow({
   const checkedIn =
     entry?.todayStatus === "DONE" || entry?.todayStatus === "DONE_TODAY";
 
-  // In shift mode the card itself is the control, so it has to be a button —
-  // which also means nothing else inside it may be one.
-  const Card: ElementType = selecting ? "button" : "div";
-
   if (editing) {
     return (
       <div className="flex gap-3 pb-3">
@@ -1078,7 +1187,7 @@ function BlockRow({
 
   return (
     <div className="flex gap-3">
-      {/* rail: the dot doubles as the done switch — or, in shift mode, as the
+      {/* rail: the dot doubles as the done switch — or, in select mode, as the
           tick box the whole card toggles */}
       <div className="flex w-4 shrink-0 flex-col items-center pt-1.5">
         {selecting ? (
@@ -1121,16 +1230,8 @@ function BlockRow({
       </div>
 
       {/* the block itself */}
-      <Card
-        {...(selecting
-          ? {
-              type: "button",
-              onClick: onToggleSelect,
-              "aria-pressed": selected,
-              disabled: busy,
-            }
-          : {})}
-        className={`group min-w-0 flex-1 border px-3 py-2 text-left transition-colors ${
+      <div
+        className={`group relative min-w-0 flex-1 border px-3 py-2 text-left transition-colors ${
           attachedBelow ? "rounded-b-none" : "mb-2 rounded-b-xl"
         } ${
           // -mt-px folds the two borders into one hairline divider
@@ -1145,6 +1246,19 @@ function BlockRow({
           block.done ? "opacity-60" : ""
         }`}
       >
+        {/* In select mode the whole card picks the line: a button laid over
+            it, with the edit and delete buttons stacked above so they stay
+            usable — retiming a line and rewording it are often one job. */}
+        {selecting && (
+          <button
+            type="button"
+            onClick={onToggleSelect}
+            aria-pressed={selected}
+            aria-label={`${selected ? "Unpick" : "Pick"} ${plainText(block.title)}`}
+            disabled={busy}
+            className="absolute inset-0 rounded-[inherit]"
+          />
+        )}
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <p
@@ -1168,37 +1282,36 @@ function BlockRow({
               )}
             </div>
           </div>
-          {!selecting && (
-            <div className="flex shrink-0 gap-0.5">
-              <button
-                onClick={onEdit}
-                aria-label={`Edit ${plainText(block.title)}`}
-                className="btn-icon h-8 w-8"
-              >
-                <Pencil size={14} />
-              </button>
-              <button
-                onClick={onDelete}
-                disabled={busy}
-                aria-label={`Delete ${plainText(block.title)}`}
-                className="btn-icon h-8 w-8 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950/40"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          )}
+          <div className="relative z-10 flex shrink-0 gap-0.5">
+            <button
+              onClick={onEdit}
+              aria-label={`Edit ${plainText(block.title)}`}
+              className="btn-icon h-8 w-8"
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              onClick={onDelete}
+              disabled={busy}
+              aria-label={`Delete ${plainText(block.title)}`}
+              className="btn-icon h-8 w-8 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950/40"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
         </div>
 
-      </Card>
+      </div>
     </div>
   );
 }
 
 /**
- * Shift mode's control panel. It rides the bottom of the screen so picking a
- * line at the foot of a long plan never means scrolling back up to move it.
+ * Select mode's control panel: everything that acts on the picked lines at
+ * once. It rides the bottom of the screen so picking a line at the foot of a
+ * long plan never means scrolling back up to act on it.
  */
-function ShiftBar({
+function SelectBar({
   selectedCount,
   totalCount,
   amount,
@@ -1207,6 +1320,8 @@ function ShiftBar({
   onSelectAll,
   onClear,
   onShift,
+  onMarkDone,
+  onDelete,
   onDone,
 }: {
   selectedCount: number;
@@ -1217,10 +1332,13 @@ function ShiftBar({
   onSelectAll: () => void;
   onClear: () => void;
   onShift: (delta: number) => void;
+  onMarkDone: (done: boolean) => void;
+  onDelete: () => void;
   onDone: () => void;
 }) {
   const valid = amount >= MIN_SHIFT && amount <= MAX_SHIFT;
-  const ready = valid && selectedCount > 0 && !busy;
+  const picked = selectedCount > 0 && !busy;
+  const ready = valid && picked;
 
   return (
     // On phones the tab bar owns the bottom of the screen, so the panel
@@ -1230,7 +1348,7 @@ function ShiftBar({
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold">
             {selectedCount === 0
-              ? "Pick the lines to move"
+              ? "Pick the lines to change"
               : `${selectedCount} of ${totalCount} picked`}
           </span>
           <button
@@ -1240,13 +1358,13 @@ function ShiftBar({
             {selectedCount === totalCount ? "Clear" : "Select all"}
           </button>
           <span className="flex-1" />
-          <button onClick={onDone} className="btn-icon h-7 w-7" aria-label="Leave shift mode">
+          <button onClick={onDone} className="btn-icon h-7 w-7" aria-label="Leave select mode">
             <X size={15} />
           </button>
         </div>
 
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-          <span className="field-label mr-0.5">By</span>
+          <span className="field-label mr-0.5">Move by</span>
           {SHIFT_PRESETS.map((preset) => (
             <button
               key={preset}
@@ -1290,6 +1408,33 @@ function ShiftBar({
           >
             <ArrowDown size={15} />
             Later
+          </button>
+        </div>
+
+        <div className="mt-2 flex flex-wrap gap-2 border-t border-line pt-2">
+          <button
+            onClick={() => onMarkDone(true)}
+            disabled={!picked}
+            className="btn btn-ghost h-8 min-h-0 flex-1 px-2.5 text-xs"
+          >
+            <Check size={14} />
+            Mark done
+          </button>
+          <button
+            onClick={() => onMarkDone(false)}
+            disabled={!picked}
+            className="btn btn-ghost h-8 min-h-0 flex-1 px-2.5 text-xs"
+          >
+            <Undo2 size={14} />
+            Not done
+          </button>
+          <button
+            onClick={onDelete}
+            disabled={!picked}
+            className="btn btn-ghost h-8 min-h-0 flex-1 px-2.5 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/40"
+          >
+            <Trash2 size={14} />
+            Delete picked
           </button>
         </div>
       </div>
@@ -1486,7 +1631,7 @@ function TasksPanel({
   tasks: ReturnType<typeof useTasks>;
   /** Tasks already on this day's plan — drawn back, still pickable. */
   plannedTaskIds: number[];
-  /** Shift mode hides the composer, so there is nowhere to send a task. */
+  /** Select mode hides the composer, so there is nowhere to send a task. */
   canPlan: boolean;
   onPlan: (task: Task) => void;
   onHide: () => void;
