@@ -445,7 +445,7 @@ function PlanPage() {
   }
 
   /**
-   * The whole point of the page's selection mode: you woke up late, the same
+   * What select mode was made for: you woke up late, the same
    * lines still have to happen, they just happen later. Every picked line
    * moves by the same amount, so the day keeps its shape — and the server
    * says how much of the asked-for shift actually fit inside the day.
@@ -866,7 +866,7 @@ function PlanPage() {
         )}
         </div>
 
-        {/* Shift mode is about moving what is already there, and its panel
+        {/* Select mode acts on what is already there, and its panel
             floats over the foot of the page — the composer would only sit
             under it with its buttons out of reach. */}
         <div className="lg:sticky lg:top-20 lg:space-y-4">
@@ -1187,7 +1187,7 @@ function BlockRow({
 
   return (
     <div className="flex gap-3">
-      {/* rail: the dot doubles as the done switch — or, in shift mode, as the
+      {/* rail: the dot doubles as the done switch — or, in select mode, as the
           tick box the whole card toggles */}
       <div className="flex w-4 shrink-0 flex-col items-center pt-1.5">
         {selecting ? (
@@ -1631,7 +1631,7 @@ function TasksPanel({
   tasks: ReturnType<typeof useTasks>;
   /** Tasks already on this day's plan — drawn back, still pickable. */
   plannedTaskIds: number[];
-  /** Shift mode hides the composer, so there is nowhere to send a task. */
+  /** Select mode hides the composer, so there is nowhere to send a task. */
   canPlan: boolean;
   onPlan: (task: Task) => void;
   onHide: () => void;
