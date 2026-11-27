@@ -38,6 +38,7 @@ import {
   Plus,
   Sparkles,
   Trash2,
+  Undo2,
   X,
 } from "lucide-react";
 import { TaskQuickAdd, TaskRow, useTasks } from "@/components/Tasks";
@@ -445,6 +446,85 @@ function PlanPage() {
     });
   }
 
+  /** Removes every picked line at once — after one confirmation. */
+  async function deleteSelected() {
+    if (!day) return;
+    const ids = blocks.filter((b) => selectedIds.has(b.id)).map((b) => b.id);
+    if (ids.length === 0) return;
+    if (!confirm(ids.length === 1 ? "Delete the picked line?" : `Delete the ${ids.length} picked lines?`)) {
+      return;
+    }
+    const fresh = await run(() =>
+      api<PlanDay>("/api/plan/delete", { method: "POST", body: { blockIds: ids } }),
+    );
+    if (fresh) {
+      setDay(fresh);
+      setSelectedIds(new Set());
+      setNotice(ids.length === 1 ? "Deleted 1 line" : `Deleted ${ids.length} lines`);
+      if (tasksEnabled && blocks.some((b) => ids.includes(b.id) && b.taskId !== null)) {
+        void tasks.reload();
+      }
+    }
+  }
+
+  /**
+   * Ticks (or unticks) every picked line. Lines already in that state are
+   * left alone, and habits that a tick finishes are checked in together, in
+   * one request — the same as ticking them one by one would do.
+   */
+  async function setSelectedDone(done: boolean) {
+    if (!day) return;
+    const targets = blocks.filter((b) => selectedIds.has(b.id) && b.done !== done);
+    if (targets.length === 0) return;
+    const ok = await run(async () => {
+      const saved = await Promise.all(
+        targets.map((b) =>
+          api<PlanBlock>(`/api/plan/${b.id}/done`, { method: "PUT", body: { done } }),
+        ),
+      );
+      saved.forEach((block) => patchBlock(block.id, block));
+      return true;
+    });
+    if (!ok) {
+      // Some may have landed before the failure: the server has the truth.
+      await load(day.date).catch(() => {});
+      return;
+    }
+    if (tasksEnabled && targets.some((b) => b.taskId !== null)) void tasks.reload();
+
+    const habitIds = done
+      ? [
+          ...new Set(
+            targets
+              .map((b) => entryFor(b.habitId))
+              .filter((e): e is TodayEntry => e?.todayStatus === "PENDING")
+              .map((e) => e.habitId),
+          ),
+        ]
+      : [];
+    const verb = done ? "Marked" : "Unmarked";
+    if (habitIds.length === 0) {
+      setNotice(`${verb} ${targets.length} line${targets.length === 1 ? "" : "s"}`);
+      return;
+    }
+    try {
+      const result = await api<CheckinResult>("/api/checkins", {
+        method: "POST",
+        body: { entries: habitIds.map((habitId) => ({ habitId, done: true })) },
+      });
+      setNotice(
+        `${verb} ${targets.length} line${targets.length === 1 ? "" : "s"} · ${habitIds.length} habit${
+          habitIds.length === 1 ? "" : "s"
+        } checked in · ${result.earnedPoints > 0 ? "+" : ""}${result.earnedPoints} points`,
+      );
+      void Promise.all([api<TodayResponse>("/api/checkins/today"), refreshUser()])
+        .then(([fresh]) => setToday(fresh))
+        .catch(() => {});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not check those habits in");
+    }
+  }
+
   async function copyFrom(from: string) {
     if (!day) return;
     await run(async () => {
@@ -739,7 +819,7 @@ function PlanPage() {
         )}
 
         {selecting && (
-          <ShiftBar
+          <SelectBar
             selectedCount={selectedIds.size}
             totalCount={blocks.length}
             amount={shiftAmount}
@@ -748,6 +828,8 @@ function PlanPage() {
             onSelectAll={() => setSelectedIds(new Set(blocks.map((b) => b.id)))}
             onClear={() => setSelectedIds(new Set())}
             onShift={shiftSelected}
+            onMarkDone={setSelectedDone}
+            onDelete={deleteSelected}
             onDone={stopSelecting}
           />
         )}
@@ -1194,10 +1276,11 @@ function BlockRow({
 }
 
 /**
- * Shift mode's control panel. It rides the bottom of the screen so picking a
- * line at the foot of a long plan never means scrolling back up to move it.
+ * Select mode's control panel: everything that acts on the picked lines at
+ * once. It rides the bottom of the screen so picking a line at the foot of a
+ * long plan never means scrolling back up to act on it.
  */
-function ShiftBar({
+function SelectBar({
   selectedCount,
   totalCount,
   amount,
@@ -1206,6 +1289,8 @@ function ShiftBar({
   onSelectAll,
   onClear,
   onShift,
+  onMarkDone,
+  onDelete,
   onDone,
 }: {
   selectedCount: number;
@@ -1216,10 +1301,13 @@ function ShiftBar({
   onSelectAll: () => void;
   onClear: () => void;
   onShift: (delta: number) => void;
+  onMarkDone: (done: boolean) => void;
+  onDelete: () => void;
   onDone: () => void;
 }) {
   const valid = amount >= MIN_SHIFT && amount <= MAX_SHIFT;
-  const ready = valid && selectedCount > 0 && !busy;
+  const picked = selectedCount > 0 && !busy;
+  const ready = valid && picked;
 
   return (
     // On phones the tab bar owns the bottom of the screen, so the panel
@@ -1229,7 +1317,7 @@ function ShiftBar({
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold">
             {selectedCount === 0
-              ? "Pick the lines to move"
+              ? "Pick the lines to change"
               : `${selectedCount} of ${totalCount} picked`}
           </span>
           <button
@@ -1239,13 +1327,13 @@ function ShiftBar({
             {selectedCount === totalCount ? "Clear" : "Select all"}
           </button>
           <span className="flex-1" />
-          <button onClick={onDone} className="btn-icon h-7 w-7" aria-label="Leave shift mode">
+          <button onClick={onDone} className="btn-icon h-7 w-7" aria-label="Leave select mode">
             <X size={15} />
           </button>
         </div>
 
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-          <span className="field-label mr-0.5">By</span>
+          <span className="field-label mr-0.5">Move by</span>
           {SHIFT_PRESETS.map((preset) => (
             <button
               key={preset}
@@ -1289,6 +1377,33 @@ function ShiftBar({
           >
             <ArrowDown size={15} />
             Later
+          </button>
+        </div>
+
+        <div className="mt-2 flex flex-wrap gap-2 border-t border-line pt-2">
+          <button
+            onClick={() => onMarkDone(true)}
+            disabled={!picked}
+            className="btn btn-ghost h-8 min-h-0 flex-1 px-2.5 text-xs"
+          >
+            <Check size={14} />
+            Mark done
+          </button>
+          <button
+            onClick={() => onMarkDone(false)}
+            disabled={!picked}
+            className="btn btn-ghost h-8 min-h-0 flex-1 px-2.5 text-xs"
+          >
+            <Undo2 size={14} />
+            Not done
+          </button>
+          <button
+            onClick={onDelete}
+            disabled={!picked}
+            className="btn btn-ghost h-8 min-h-0 flex-1 px-2.5 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/40"
+          >
+            <Trash2 size={14} />
+            Delete picked
           </button>
         </div>
       </div>
