@@ -203,7 +203,7 @@ export function PresetsDialog({
                           {formatMinute(line.endMinute)}
                         </span>
                         <span className="min-w-0 truncate">
-                          <RichText text={line.title} />
+                          <RichText source={line.title} />
                         </span>
                       </li>
                     ))}
