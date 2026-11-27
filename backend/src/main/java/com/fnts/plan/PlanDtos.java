@@ -3,6 +3,7 @@ package com.fnts.plan;
 import java.time.LocalDate;
 import java.util.List;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -18,6 +19,8 @@ public class PlanDtos {
     public static final int MAX_BLOCKS_PER_DAY = 60;
     /** How far back the "copy another day" picker reaches. */
     public static final int MAX_COPY_SOURCES = 60;
+    /** Enough for every kind of day a person lives, few enough to scan at a glance. */
+    public static final int MAX_PRESETS = 30;
 
     public record BlockRequest(
             @NotBlank @Size(max = 120) String title,
@@ -27,6 +30,35 @@ public class PlanDtos {
             Long habitId,
             /** The task this block stands for; null when it was not pulled from the list. */
             Long taskId) {}
+
+    /** One line of a preset, as written in the preset editor or taken from a day. */
+    public record PresetLineRequest(
+            @NotBlank @Size(max = 120) String title,
+            @NotNull @Min(0) @Max(LAST_MINUTE) Integer endMinute,
+            /** The habit this line stands for; null for a plain line. */
+            Long habitId) {}
+
+    /** Creates or replaces a preset: its name and, wholesale, its lines. */
+    public record PresetRequest(
+            @NotBlank @Size(max = 60) String name,
+            @NotEmpty @Size(max = MAX_BLOCKS_PER_DAY) List<@Valid PresetLineRequest> lines) {}
+
+    /** Saves the plan of a day as a new preset. */
+    public record PresetFromDayRequest(
+            @NotBlank @Size(max = 60) String name,
+            @NotNull LocalDate date) {}
+
+    /** Starts an empty day from a preset. */
+    public record ApplyPresetRequest(@NotNull Long presetId) {}
+
+    public record PresetLineResponse(
+            int endMinute,
+            String title,
+            Long habitId,
+            /** The linked habit's current name — it may have been renamed since. */
+            String habitName) {}
+
+    public record PresetResponse(Long id, String name, List<PresetLineResponse> lines) {}
 
     public record DoneRequest(@NotNull Boolean done) {}
 
