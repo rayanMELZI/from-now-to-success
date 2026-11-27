@@ -36,6 +36,10 @@ cells on the map — from *now* to *success*.
   line by line or saved from a day you planned. An empty day starts from a
   preset in one tap — or, as before, from a copy of another day — and stays
   yours to change. Ticks and task links are never part of a preset.
+- **Select** on the plan: pick lines, then move them all earlier or later,
+  tick them off, untick them or delete them together — each line's edit and
+  delete buttons stay at hand meanwhile. Once the progress bar has scrolled
+  away, a floating Select button follows you down the plan.
 - **Formatted text** everywhere you write: habit names and notes, plan lines,
   task titles and the reason for a miss. While typing, a bar under the field
   (or Ctrl+B / I / U / Shift+X) makes the selected words bold, italic, struck,
