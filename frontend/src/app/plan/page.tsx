@@ -176,6 +176,20 @@ function PlanPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [presets, setPresets] = useState<PlanPreset[]>([]);
   const [presetsOpen, setPresetsOpen] = useState(false);
+  // Whether the progress row, home of the Select button, is on screen.
+  const [progressVisible, setProgressVisible] = useState(true);
+  const [progressEl, progressRef] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!progressEl) return;
+    // The sticky nav covers the top of the viewport: a row tucked under it
+    // is as good as gone.
+    const observer = new IntersectionObserver(
+      ([entry]) => setProgressVisible(entry.isIntersecting),
+      { rootMargin: "-64px 0px 0px 0px" },
+    );
+    observer.observe(progressEl);
+    return () => observer.disconnect();
+  }, [progressEl]);
 
   // The tasks panel: only there when tasks are on, and even then the user's
   // to show or hide. Lazy init reads the choice without a flash.
@@ -669,7 +683,7 @@ function PlanPage() {
       />
 
       {blocks.length > 0 && (
-        <div className="mb-4 flex items-center gap-3">
+        <div ref={progressRef} className="mb-4 flex items-center gap-3">
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-track">
             <div
               className="h-full rounded-full bg-emerald-500 transition-all duration-500"
@@ -818,6 +832,21 @@ function PlanPage() {
               </li>
             )}
           </ol>
+        )}
+
+        {/* Once the progress row (and its Select button) has scrolled away,
+            the way into select mode follows along at the foot of the plan. */}
+        {!selecting && blocks.length > 0 && !progressVisible && (
+          <div className="pointer-events-none sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-20 mb-2 flex justify-end sm:bottom-3">
+            <button
+              onClick={startSelecting}
+              className="btn btn-ghost pointer-events-auto h-9 min-h-0 border border-line-strong bg-surface px-3 text-xs shadow-lg"
+              title="Pick lines to move them in time, tick them off or delete them together"
+            >
+              <ListChecks size={15} />
+              Select
+            </button>
+          </div>
         )}
 
         {selecting && (
