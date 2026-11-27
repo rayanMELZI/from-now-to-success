@@ -100,8 +100,6 @@ public class PlanPresetService {
         PlanPreset preset = getOwned(userId, presetId);
         preset.setName(request.name().trim());
         setLines(preset, request.lines(), userId);
-        // Flushed so the new lines have ids, which order the ties.
-        presetRepository.flush();
         return toResponse(preset, user);
     }
 
