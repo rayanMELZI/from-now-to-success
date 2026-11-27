@@ -295,6 +295,11 @@ function PlanPage() {
     );
 
   /** A selection belongs to the day it was made on — leaving the day drops it. */
+  function startSelecting() {
+    setEditingId(null);
+    setSelecting(true);
+  }
+
   function stopSelecting() {
     setSelecting(false);
     setSelectedIds(new Set());
@@ -685,15 +690,12 @@ function PlanPage() {
           </span>
           {!selecting && (
             <button
-              onClick={() => {
-                setEditingId(null);
-                setSelecting(true);
-              }}
+              onClick={startSelecting}
               className="btn btn-ghost h-8 min-h-0 shrink-0 px-2.5 text-xs"
-              title="Pick lines and move them all earlier or later"
+              title="Pick lines to move them in time, tick them off or delete them together"
             >
               <ListChecks size={14} />
-              <span className="hidden sm:inline">Shift times</span>
+              <span className="hidden sm:inline">Select</span>
             </button>
           )}
         </div>
